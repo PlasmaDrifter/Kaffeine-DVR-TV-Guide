@@ -192,6 +192,36 @@ class TVMazeProvider:
 
 class TVPassportProvider:
     USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0"
+    _canonical_urls: Dict[str, str] = {}
+
+    @classmethod
+    def _get_station_base_url(cls, station_id: str) -> str:
+        sid = station_id.strip()
+        if sid in cls._canonical_urls:
+            return cls._canonical_urls[sid]
+
+        url = f"https://www.tvpassport.com/tv-listings/stations/station/{sid}"
+        headers = {"User-Agent": cls.USER_AGENT}
+        req = urllib.request.Request(url, headers=headers)
+        try:
+            class NoRedirect(urllib.request.HTTPRedirectHandler):
+                def redirect_request(self, req, fp, code, msg, hdrs, newurl):
+                    return None
+
+            opener = urllib.request.build_opener(NoRedirect)
+            try:
+                opener.open(req)
+            except urllib.error.HTTPError as e:
+                loc = e.headers.get("Location")
+                if loc:
+                    cls._canonical_urls[sid] = loc.rstrip("/")
+                    return cls._canonical_urls[sid]
+        except Exception as e:
+            print(f"Error resolving canonical URL for station {sid}: {e}")
+
+        fallback = f"https://www.tvpassport.com/tv-listings/stations/station/{sid}"
+        cls._canonical_urls[sid] = fallback
+        return fallback
 
     @classmethod
     def check_health(cls, station_id: Optional[str] = None) -> Dict[str, Any]:
@@ -204,7 +234,8 @@ class TVPassportProvider:
             }
 
         today_str = date.today().strftime("%Y-%m-%d")
-        url = f"https://www.tvpassport.com/tv-listings/stations/station/{station_id.strip()}/{today_str}"
+        base = cls._get_station_base_url(station_id.strip())
+        url = f"{base}/{today_str}"
         headers = {"User-Agent": cls.USER_AGENT}
         req = urllib.request.Request(url, headers=headers)
         
@@ -238,7 +269,8 @@ class TVPassportProvider:
     @classmethod
     def fetch_station(cls, target_date: date, channel_alias: str, station_id: str) -> List[Dict[str, Any]]:
         date_str = target_date.strftime("%Y-%m-%d")
-        url = f"https://www.tvpassport.com/tv-listings/stations/station/{station_id}/{date_str}"
+        base = cls._get_station_base_url(station_id.strip())
+        url = f"{base}/{date_str}"
         headers = {"User-Agent": cls.USER_AGENT}
         req = urllib.request.Request(url, headers=headers)
 
@@ -800,8 +832,19 @@ class GuideService:
         conn = sqlite3.connect(str(self.db_path))
         cur = conn.cursor()
 
-        cutoff = (today - timedelta(days=2)).strftime("%Y-%m-%d")
+        # Prune older guide dates earlier than today
+        cutoff = today.strftime("%Y-%m-%d")
         cur.execute("DELETE FROM guide_programs WHERE airdate < ?", (cutoff,))
+
+        # Purge existing rows for the synced channels and dates to prevent stale entries
+        synced_channels = {p["kaffeine_channel"] for p in all_programs}
+        start_date_str = today.strftime("%Y-%m-%d")
+        end_date_str = (today + timedelta(days=days)).strftime("%Y-%m-%d")
+        for ch in synced_channels:
+            cur.execute(
+                "DELETE FROM guide_programs WHERE kaffeine_channel = ? AND airdate >= ? AND airdate <= ?",
+                (ch, start_date_str, end_date_str)
+            )
 
         for p in all_programs:
             cur.execute("""
@@ -889,3 +932,46 @@ class GuideService:
             return filtered
 
         return rows
+
+    def prune_past_programs(self) -> int:
+        """
+        Deletes past guide entries that have already ended from the local database.
+        Returns the count of purged records.
+        """
+        conn = sqlite3.connect(str(self.db_path))
+        cur = conn.cursor()
+
+        now_dt = datetime.now()
+        today_str = now_dt.strftime("%Y-%m-%d")
+
+        # 1. Delete all programs with an airdate before today
+        cur.execute("DELETE FROM guide_programs WHERE airdate < ?", (today_str,))
+        count = cur.rowcount
+
+        # 2. For today's programs, prune entries whose end time (start_iso + duration) has already elapsed
+        cur.execute("SELECT id, start_iso, duration_iso FROM guide_programs WHERE airdate = ?", (today_str,))
+        today_rows = cur.fetchall()
+
+        ids_to_delete = []
+        for pid, start_iso, dur_iso in today_rows:
+            if not start_iso:
+                continue
+            try:
+                start_dt = datetime.fromisoformat(start_iso)
+                dur_iso_str = dur_iso or "00:30:00"
+                parts = [int(x) for x in dur_iso_str.split(":")]
+                dur = timedelta(hours=parts[0], minutes=parts[1], seconds=parts[2] if len(parts) > 2 else 0)
+                end_dt = start_dt + dur
+                # Give a 15-minute buffer so currently airing / just finished programs remain visible
+                if end_dt + timedelta(minutes=15) < now_dt:
+                    ids_to_delete.append(pid)
+            except Exception:
+                continue
+
+        if ids_to_delete:
+            cur.executemany("DELETE FROM guide_programs WHERE id = ?", [(i,) for i in ids_to_delete])
+            count += len(ids_to_delete)
+
+        conn.commit()
+        conn.close()
+        return count

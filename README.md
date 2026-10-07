@@ -19,6 +19,10 @@ Kaffeine is a powerful digital TV viewer for KDE and Linux desktop environments,
   - **Free Hybrid Mode:** Simultaneously uses TV Passport for any configured local affiliate station IDs while automatically filling in any unmapped channels with TVMaze without duplicate show rows.
   - **Custom XMLTV Feeds:** Supports local files or remote HTTP/HTTPS XMLTV feeds from tools like zap2xml or WebGrab+.
   - **Schedules Direct:** Direct commercial Gracenote EPG integration by postal/zip code.
+- **Dual-Mode TV Guide (Traditional EPG Grid & Searchable List):**
+  - **Traditional Grid Layout:** Displays channels vertically and 48 half-hour time slots across the 24-hour day, with program tiles spanning their duration.
+  - **Genre Color Coding:** Show titles dynamically styled by genre (Sports = Orange, News = Light Blue, Movies = Red, TV Shows = Green).
+  - **Smart Timeline Navigation:** Auto-centers on live programming when viewing Today, rewinds to 12:00 AM Midnight for future dates, with quick "Jump to Now" and "Prime Time (8 PM)" buttons.
 - **Series Auto-Record Rules:** Define keyword-based auto-record rules (e.g., specific sports leagues, talk shows, or series titles) that automatically schedule upcoming episodes as guide data refreshes.
 - **Automated Video Retention & Storage Management:** Prevents recording drives from filling up:
   - **Age Retention:** Automatically deletes recordings older than *N* days (configurable).
@@ -29,7 +33,11 @@ Kaffeine is a powerful digital TV viewer for KDE and Linux desktop environments,
 
 ## Screenshots
 
-| Recordings Schedule (DVR Queue) | Web TV Guide Browser |
+| Traditional EPG Grid TV Guide View |
+|:---:|
+| [![Traditional EPG Grid TV Guide View](docs/screenshots/guide_grid.png)](docs/screenshots/guide_grid.png) |
+
+| Recordings Schedule (DVR Queue) | Web TV Guide Browser (List View) |
 |:---:|:---:|
 | [![Recordings Schedule](docs/screenshots/recordings_schedule.png)](docs/screenshots/recordings_schedule.png) | [![Web TV Guide Browser](docs/screenshots/guide_browser.png)](docs/screenshots/guide_browser.png) |
 

@@ -11,10 +11,12 @@ from PyQt6.QtWidgets import (
     QLineEdit, QComboBox, QTextEdit, QHeaderView, QSplitter,
     QMessageBox, QDialog, QFormLayout, QSpinBox, QCheckBox,
     QProgressBar, QStatusBar, QFrame, QGroupBox, QFileDialog,
-    QScrollArea, QToolButton, QSizePolicy
+    QScrollArea, QToolButton, QSizePolicy, QAbstractSpinBox, QSlider,
+    QStackedWidget, QButtonGroup, QStyledItemDelegate, QStyleOptionViewItem,
+    QStyle
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QSettings, QByteArray
-from PyQt6.QtGui import QColor, QFont, QIcon
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QSettings, QByteArray, QEvent, QObject, QPoint, QPointF, QRect
+from PyQt6.QtGui import QColor, QFont, QIcon, QWheelEvent, QPainter
 
 try:
     from .config import ConfigManager, DEFAULT_CHANNEL_MAP
@@ -254,6 +256,183 @@ class CollapsibleSection(QWidget):
             parent = parent.parentWidget()
         if scroll_area:
             scroll_area.ensureWidgetVisible(self.content_area, 0, 15)
+
+
+class NoWheelEventFilter(QObject):
+    """
+    Prevents mouse wheel scrolling from unintentionally modifying values in
+    QSpinBox, QComboBox, and QSlider input controls while scrolling pages.
+    If the widget is inside a QScrollArea, the wheel event is passed to the
+    enclosing scroll area viewport so the page scrolls smoothly instead.
+    """
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.Wheel:
+            if isinstance(obj, (QComboBox, QAbstractSpinBox, QSlider)):
+                # If combo popup dropdown is open, allow scrolling through options
+                if isinstance(obj, QComboBox) and obj.view() and obj.view().isVisible():
+                    return False
+
+                # Pass the wheel event to any enclosing QScrollArea viewport
+                parent = obj.parentWidget()
+                while parent and not isinstance(parent, QScrollArea):
+                    parent = parent.parentWidget()
+
+                if parent and isinstance(parent, QScrollArea):
+                    parent_vp = parent.viewport()
+                    mapped_pos = obj.mapTo(parent_vp, event.position().toPoint())
+                    forwarded_event = QWheelEvent(
+                        QPointF(mapped_pos),
+                        event.globalPosition(),
+                        event.pixelDelta(),
+                        event.angleDelta(),
+                        event.buttons(),
+                        event.modifiers(),
+                        event.phase(),
+                        event.inverted()
+                    )
+                    QApplication.sendEvent(parent_vp, forwarded_event)
+                return True
+        return super().eventFilter(obj, event)
+
+
+def classify_guide_category(prog: Dict[str, Any]) -> str:
+    """
+    Classifies a program into 'sports', 'news', 'movies', or 'tvshows'.
+    Color mapping:
+    - Sports: Orange (#ffa028)
+    - News: Blue (#4fc3f7)
+    - Movies: Red (#ff5c5c)
+    - TV Shows: Green (#66bb6a)
+    """
+    title = (prog.get("show_title") or "").strip()
+    title_lower = title.lower()
+    ep = (prog.get("episode_title") or "").strip()
+    ep_lower = ep.lower()
+    summary = (prog.get("summary") or "").lower()
+
+    # 1. Sports: sporting leagues, games, matches, and athletic events
+    sports_kw = [
+        "football", "nfl", "ncaa", "basketball", "nba", "wnba", "baseball", "mlb",
+        "hockey", "nhl", "soccer", "premier league", "nascar", "racing", "pga",
+        "golf", "tennis", "wrestling", "wwe", "ufc", "boxing", "sportswrap",
+        "sports stars", "sports legends", "gametime", "kickoff", "postgame", "pregame",
+        "scoreboard", "flag football", "college football", "college basketball",
+        "usl championship", "volleyball", "championship wrestling", "tailgate",
+        "sports tonight"
+    ]
+    if any(k in title_lower for k in sports_kw):
+        return "sports"
+    if any(k in ep_lower for k in ["premier league", "nfl", "mlb", "nba", " vs. ", " at "]) and (
+        "football" in summary or "game" in summary or "soccer" in summary or "basketball" in summary or "baseball" in summary
+    ):
+        return "sports"
+
+    # 2. News: news broadcasts, morning news, evening news, journalism, and current affairs
+    news_kw = [
+        "news", "newschannel", "eyewitness", "action news", "today", "good morning",
+        "cbs mornings", "gma", "nightly news", "world news", "evening news", "meet the press",
+        "face the nation", "this week", "60 minutes", "20/20", "dateline", "frontline",
+        "pbs newshour", "sunrise", "roundup", "fox news", "cnn", "msnbc",
+        "weather", "briefing", "state of the union", "morning express", "early today",
+        "morning joe", "morning edition", "all things considered", "first look",
+        "newsbeat", "newswatch", "newsnight", "inside edition"
+    ]
+    if any(k in title_lower for k in news_kw):
+        return "news"
+
+    # 3. Movies: title starts with 'Movie', or explicit film indicators
+    if (
+        title_lower == "movie"
+        or title_lower.startswith("movie:")
+        or title_lower.startswith("film:")
+        or title_lower.endswith(" (movie)")
+        or "feature film" in summary
+        or " motion picture" in summary
+    ):
+        return "movies"
+    if ("directed by" in summary or "stars as" in summary) and prog.get("runtime_mins", 0) >= 75 and not prog.get("season"):
+        return "movies"
+
+    # 4. TV Shows / Series / Daytime
+    return "tvshows"
+
+
+class ProgramTileDelegate(QStyledItemDelegate):
+    """
+    Custom item delegate for rendering traditional EPG grid program tiles.
+    - Flawlessly aligns multi-line text flush to the left edge with uniform padding.
+    - Colors show titles: Sports = Orange (#ffa028), News = Blue (#4fc3f7), Movies = Red (#ff5c5c), TV Shows = Green (#66bb6a).
+    - Subtext displays time range and episode title with high legibility.
+    """
+    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index):
+        prog = index.data(Qt.ItemDataRole.UserRole)
+        if not prog:
+            super().paint(painter, option, index)
+            return
+
+        painter.save()
+        rect = option.rect
+
+        # Background fill & subtle border
+        is_selected = bool(option.state & QStyle.StateFlag.State_Selected)
+        if is_selected:
+            bg_color = QColor("#2b3e4f")
+            border_color = QColor("#55a84c")
+        else:
+            bg_color = index.data(Qt.ItemDataRole.BackgroundRole) or QColor("#222838")
+            border_color = QColor("#333c4e")
+
+        painter.fillRect(rect, bg_color)
+        painter.setPen(border_color)
+        painter.drawRect(rect.adjusted(0, 0, -1, -1))
+
+        # Uniform padding inside box
+        pad_left = 10
+        pad_top = 8
+        pad_right = 10
+        inner_width = max(10, rect.width() - pad_left - pad_right)
+
+        # Title Color coding: sports=orange, news=blue, movies=red, tvshows=green
+        cat = prog.get("_category") or classify_guide_category(prog)
+        if cat == "sports":
+            title_color = QColor("#ffa028")  # Vibrant Orange
+        elif cat == "news":
+            title_color = QColor("#4fc3f7")  # Vibrant Light Blue
+        elif cat == "movies":
+            title_color = QColor("#ff5c5c")  # Vibrant Red
+        else:
+            title_color = QColor("#66bb6a")  # Vibrant Green
+
+        show_title = prog.get("show_title", "")
+        time_range = prog.get("_time_range", "")
+        ep_title = prog.get("episode_title", "")
+
+        # Line 1: Show Title (bold, color-coded)
+        font_title = QFont(option.font)
+        font_title.setBold(True)
+        font_title.setPointSize(10)
+        painter.setFont(font_title)
+        painter.setPen(title_color)
+
+        fm_title = painter.fontMetrics()
+        elided_title = fm_title.elidedText(show_title, Qt.TextElideMode.ElideRight, inner_width)
+        line1_rect = QRect(rect.left() + pad_left, rect.top() + pad_top, inner_width, fm_title.height())
+        painter.drawText(line1_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, elided_title)
+
+        # Line 2: Time Range & Episode Title (crisply aligned with exact same pad_left margin)
+        font_sub = QFont(option.font)
+        font_sub.setBold(False)
+        font_sub.setPointSize(9)
+        painter.setFont(font_sub)
+        painter.setPen(QColor("#a4b0c2"))
+
+        fm_sub = painter.fontMetrics()
+        subtext = f"{time_range} • {ep_title}" if ep_title else time_range
+        elided_sub = fm_sub.elidedText(subtext, Qt.TextElideMode.ElideRight, inner_width)
+        line2_rect = QRect(rect.left() + pad_left, rect.top() + pad_top + fm_title.height() + 4, inner_width, fm_sub.height())
+        painter.drawText(line2_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, elided_sub)
+
+        painter.restore()
 
 
 class FirstRunWelcomeDialog(QDialog):
@@ -534,6 +713,33 @@ QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
 QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
     background: none;
 }
+
+/* EPG Grid Table Styles */
+QTableWidget#guideGridTable {
+    background-color: #161922;
+    gridline-color: #2b3242;
+    border: 1px solid #363c4e;
+    border-radius: 4px;
+    font-size: 12px;
+}
+QTableWidget#guideGridTable QHeaderView::section:horizontal {
+    background-color: #1e2330;
+    color: #9cb0c6;
+    font-weight: bold;
+    font-size: 11px;
+    padding: 6px;
+    border: 1px solid #2b3242;
+    border-top: none;
+}
+QTableWidget#guideGridTable QHeaderView::section:vertical {
+    background-color: #1e2330;
+    color: #ffffff;
+    font-weight: bold;
+    font-size: 12px;
+    padding: 6px 10px;
+    border: 1px solid #2b3242;
+    border-left: none;
+}
 """
 
 
@@ -563,6 +769,14 @@ class MainWindow(QMainWindow):
         self.setup_timers()
         self.refresh_all()
 
+        # Ensure mouse wheel scrolling on setting input widgets (spinboxes, combos)
+        # doesn't accidentally mutate values while scrolling through settings pages
+        app = QApplication.instance()
+        if app and not getattr(app, "_wheel_filter_installed", False):
+            self._wheel_filter = NoWheelEventFilter(app)
+            app.installEventFilter(self._wheel_filter)
+            app._wheel_filter_installed = True
+
         # Check for first-run setup wizard for new users
         QTimer.singleShot(600, self.check_first_run)
 
@@ -585,6 +799,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.create_rules_tab(), "Auto-Record Rules")
         self.tabs.addTab(self.create_settings_tab(), "Settings")
         self.tabs.addTab(self.create_help_tab(), "Help and Information")
+        self.tabs.currentChanged.connect(self._on_main_tab_changed)
         main_layout.addWidget(self.tabs)
 
         # Status Bar
@@ -618,6 +833,13 @@ class MainWindow(QMainWindow):
         banner.addWidget(self.sync_guide_btn)
 
         banner.addStretch()
+
+        # Upper-right corner auto-save notification indicator
+        self.save_indicator_lbl = QLabel("Changes save automatically")
+        self.save_indicator_lbl.setStyleSheet(
+            "color: #8c98aa; font-size: 11px; padding: 4px 10px; border-radius: 4px; border: 1px solid #333a46; background-color: #1e222a;"
+        )
+        banner.addWidget(self.save_indicator_lbl)
         return banner
 
     # ------------------ TAB 1: RECORDINGS ------------------
@@ -668,11 +890,58 @@ class MainWindow(QMainWindow):
         widget = QWidget()
         layout = QVBoxLayout(widget)
 
-        # Filter bar
+        # Filter & View Mode Bar
         filter_bar = QHBoxLayout()
+
+        # View Mode Toggle: Grid View vs List View
+        self.guide_view_group = QButtonGroup(self)
+        self.grid_view_btn = QPushButton("Grid View")
+        self.grid_view_btn.setCheckable(True)
+        self.list_view_btn = QPushButton("List View")
+        self.list_view_btn.setCheckable(True)
+        self.guide_view_group.addButton(self.grid_view_btn, 0)
+        self.guide_view_group.addButton(self.list_view_btn, 1)
+
+        # Style toggle buttons
+        btn_style = (
+            "QPushButton { padding: 4px 12px; font-weight: bold; border: 1px solid #3d4659; border-radius: 4px; background-color: #212635; color: #a4b0c2; }"
+            "QPushButton:checked { background-color: #2b3d2c; border: 1.5px solid #55a84c; color: #ffffff; }"
+        )
+        self.grid_view_btn.setStyleSheet(btn_style)
+        self.list_view_btn.setStyleSheet(btn_style)
+
+        # Default to Grid View
+        saved_view = self.settings.value("guide_view_mode", "grid")
+        if saved_view == "list":
+            self.list_view_btn.setChecked(True)
+        else:
+            self.grid_view_btn.setChecked(True)
+
+        self.grid_view_btn.clicked.connect(self._on_guide_view_toggled)
+        self.list_view_btn.clicked.connect(self._on_guide_view_toggled)
+
+        filter_bar.addWidget(QLabel("View:"))
+        filter_bar.addWidget(self.grid_view_btn)
+        filter_bar.addWidget(self.list_view_btn)
+        filter_bar.addSpacing(12)
+
+        # Quick Time Jump Controls (useful in Grid View)
+        self.jump_now_btn = QPushButton("Jump to Now")
+        self.jump_now_btn.setToolTip("Scroll guide grid to current time")
+        self.jump_now_btn.setStyleSheet("padding: 4px 10px; font-size: 11px;")
+        self.jump_now_btn.clicked.connect(self.jump_guide_to_now)
+        filter_bar.addWidget(self.jump_now_btn)
+
+        self.jump_prime_btn = QPushButton("Prime Time (8 PM)")
+        self.jump_prime_btn.setToolTip("Scroll guide grid to 8:00 PM evening prime time")
+        self.jump_prime_btn.setStyleSheet("padding: 4px 10px; font-size: 11px;")
+        self.jump_prime_btn.clicked.connect(self.jump_guide_to_primetime)
+        filter_bar.addWidget(self.jump_prime_btn)
+        filter_bar.addSpacing(14)
+
         filter_bar.addWidget(QLabel("Search:"))
         self.guide_search_input = QLineEdit()
-        self.guide_search_input.setPlaceholderText("Filter by show title, episode, or description...")
+        self.guide_search_input.setPlaceholderText("Filter shows...")
         self.guide_search_input.textChanged.connect(self.filter_guide)
         filter_bar.addWidget(self.guide_search_input)
 
@@ -686,12 +955,12 @@ class MainWindow(QMainWindow):
 
         filter_bar.addWidget(QLabel("Date:"))
         self.guide_date_combo = QComboBox()
-        self.guide_date_combo.addItem("All Upcoming", None)
         today = date.today()
         for i in range(14):
             d = today + timedelta(days=i)
             label = "Today" if i == 0 else ("Tomorrow" if i == 1 else d.strftime("%a, %b %d"))
             self.guide_date_combo.addItem(label, d.strftime("%Y-%m-%d"))
+        self.guide_date_combo.addItem("All Upcoming", None)
         self.guide_date_combo.currentIndexChanged.connect(self.filter_guide)
         filter_bar.addWidget(self.guide_date_combo)
 
@@ -699,7 +968,29 @@ class MainWindow(QMainWindow):
 
         splitter = QSplitter(Qt.Orientation.Vertical)
 
-        # Guide table
+        # Guide Views Container (Stacked: 0 = Grid View, 1 = List View)
+        self.guide_stack = QStackedWidget()
+
+        # 1. Traditional EPG Grid Table
+        self.guide_grid_table = QTableWidget()
+        self.guide_grid_table.setObjectName("guideGridTable")
+        self.guide_grid_table.setColumnCount(48)
+        grid_headers = []
+        for h in range(24):
+            for m in (0, 30):
+                grid_headers.append(f"{h%12 or 12}:{m:02d} {'AM' if h < 12 else 'PM'}")
+        self.guide_grid_table.setHorizontalHeaderLabels(grid_headers)
+        self.guide_grid_table.horizontalHeader().setDefaultSectionSize(165)
+        self.guide_grid_table.horizontalHeader().setHighlightSections(False)
+        self.guide_grid_table.verticalHeader().setDefaultSectionSize(62)
+        self.guide_grid_table.verticalHeader().setHighlightSections(False)
+        self.guide_grid_table.setItemDelegate(ProgramTileDelegate(self.guide_grid_table))
+        self.guide_grid_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.guide_grid_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self.guide_grid_table.cellClicked.connect(self.on_grid_cell_clicked)
+        self.guide_stack.addWidget(self.guide_grid_table)
+
+        # 2. Existing Detailed List Table
         self.guide_table = QTableWidget()
         self.guide_table.setColumnCount(5)
         self.guide_table.setHorizontalHeaderLabels(["Start Time", "Channel", "Show Title", "Episode Title", "Duration"])
@@ -711,7 +1002,13 @@ class MainWindow(QMainWindow):
         self.guide_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.guide_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.guide_table.itemSelectionChanged.connect(self.on_guide_selection_changed)
-        splitter.addWidget(self.guide_table)
+        self.guide_stack.addWidget(self.guide_table)
+
+        # Set initial stack page
+        self.guide_stack.setCurrentIndex(1 if saved_view == "list" else 0)
+        self._update_time_jump_buttons_visibility()
+
+        splitter.addWidget(self.guide_stack)
 
         # Detail Panel
         detail_widget = QWidget()
@@ -1097,6 +1394,12 @@ class MainWindow(QMainWindow):
         form.addRow("Notifications:", self.notify_check)
         form.addRow("", notify_lbl)
 
+        self.lead_time_spin.valueChanged.connect(self._auto_save_automation_settings)
+        self.interval_spin.valueChanged.connect(self._auto_save_automation_settings)
+        self.days_spin.valueChanged.connect(self._auto_save_automation_settings)
+        self.launch_mode_combo.currentIndexChanged.connect(self._auto_save_automation_settings)
+        self.notify_check.stateChanged.connect(self._auto_save_automation_settings)
+
         layout.addLayout(form)
         layout.addSpacing(10)
 
@@ -1112,12 +1415,14 @@ class MainWindow(QMainWindow):
         storage_form = QFormLayout()
         self.cleanup_enable_check = QCheckBox("Enable Automatic Video Cleanup")
         self.cleanup_enable_check.setChecked(self.config_mgr.auto_cleanup_enabled)
+        self.cleanup_enable_check.stateChanged.connect(self._auto_save_automation_settings)
         storage_form.addRow("Auto-Cleanup:", self.cleanup_enable_check)
 
         self.retention_days_spin = QSpinBox()
         self.retention_days_spin.setRange(0, 365)
         self.retention_days_spin.setValue(self.config_mgr.retention_days)
         self.retention_days_spin.setSuffix(" days")
+        self.retention_days_spin.valueChanged.connect(self._auto_save_automation_settings)
         retention_lbl = QLabel("Delete recordings older than this age. Set to 0 to disable age-based pruning.")
         retention_lbl.setStyleSheet("color: #6c757d; font-size: 11px;")
         storage_form.addRow("Retention Window:", self.retention_days_spin)
@@ -1128,6 +1433,7 @@ class MainWindow(QMainWindow):
         self.min_free_spin.setSingleStep(5)
         self.min_free_spin.setValue(self.config_mgr.min_free_disk_gb)
         self.min_free_spin.setSuffix(" GB")
+        self.min_free_spin.valueChanged.connect(self._auto_save_automation_settings)
         free_lbl = QLabel("If free disk space drops below this limit, oldest unprotected recordings are purged first.")
         free_lbl.setStyleSheet("color: #6c757d; font-size: 11px;")
         storage_form.addRow("Minimum Free Space:", self.min_free_spin)
@@ -1139,6 +1445,7 @@ class MainWindow(QMainWindow):
         self.custom_folder_input = QLineEdit()
         self.custom_folder_input.setText(self.config_mgr.custom_recording_folder)
         self.custom_folder_input.setPlaceholderText(f"Auto-detected from Kaffeine: {detected_folder}")
+        self.custom_folder_input.textChanged.connect(self._auto_save_automation_settings)
         folder_row.addWidget(self.custom_folder_input)
         self.browse_folder_btn = QPushButton("Browse...")
         self.browse_folder_btn.clicked.connect(self.browse_custom_recording_folder)
@@ -1214,17 +1521,21 @@ class MainWindow(QMainWindow):
         title_layout = QVBoxLayout(title_box)
         title_layout.setContentsMargins(0, 0, 0, 0)
         h1 = QLabel("<b>Kaffeine DVR and TV Guide - Help and Reference Guide</b>")
-        h1.setStyleSheet("font-size: 17px; color: #ffffff;")
+        h1.setStyleSheet("font-size: 20px; font-weight: bold; color: #ffffff;")
         h1_sub = QLabel(
             "Overview of features, automatic scheduling, power management, and TV guide configuration."
         )
-        h1_sub.setStyleSheet("color: #9eb0c6; font-size: 13px;")
+        h1_sub.setStyleSheet("color: #a0b2c6; font-size: 14px;")
         title_layout.addWidget(h1)
         title_layout.addWidget(h1_sub)
         layout.addWidget(title_box)
 
+        group_style = "QGroupBox { font-size: 15px; font-weight: bold; margin-top: 6px; padding-top: 14px; } QGroupBox::title { subcontrol-origin: margin; left: 8px; padding: 0 4px; }"
+        body_style = "color: #d8e2ee; font-size: 14px; line-height: 1.6;"
+
         # Section 1: Core Concept and Why this App Exists
         concept_box = QGroupBox("1. How Kaffeine DVR Scheduling Works (Safe Reboots and Shutdowns)")
+        concept_box.setStyleSheet(group_style)
         concept_layout = QVBoxLayout(concept_box)
         concept_text = QLabel(
             "• <b>The Problem with Native Kaffeine Timers:</b> Whenever timers are active directly inside Kaffeine, "
@@ -1237,12 +1548,13 @@ class MainWindow(QMainWindow):
             "• <b>Safe Power Operations:</b> You can reboot or power off your computer at any time without Kaffeine freezing or blocking systemd."
         )
         concept_text.setWordWrap(True)
-        concept_text.setStyleSheet("color: #cdd7e5; font-size: 13px; line-height: 1.6;")
+        concept_text.setStyleSheet(body_style)
         concept_layout.addWidget(concept_text)
         layout.addWidget(concept_box)
 
         # Section 2: Guide Sources & Coverage
         sources_box = QGroupBox("2. TV Guide Coverage and Providers")
+        sources_box.setStyleSheet(group_style)
         sources_layout = QVBoxLayout(sources_box)
         sources_text = QLabel(
             "• <b>National Broadcast Networks (TVMaze API - Zero Configuration Required):</b><br>"
@@ -1266,12 +1578,13 @@ class MainWindow(QMainWindow):
         sources_text.setWordWrap(True)
         sources_text.setOpenExternalLinks(True)
         sources_text.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
-        sources_text.setStyleSheet("color: #cdd7e5; font-size: 13px; line-height: 1.6;")
+        sources_text.setStyleSheet(body_style)
         sources_layout.addWidget(sources_text)
         layout.addWidget(sources_box)
 
         # Section 3: Step-by-Step Feature Walkthrough
         guide_box = QGroupBox("3. Feature Walkthrough")
+        guide_box.setStyleSheet(group_style)
         guide_layout = QVBoxLayout(guide_box)
         guide_text = QLabel(
             "• <b>Recordings Schedule Tab:</b><br>"
@@ -1290,12 +1603,13 @@ class MainWindow(QMainWindow):
             "&nbsp;&nbsp;&nbsp;&nbsp;<b>Automation & DVR:</b> Configure lead time (default: 5 min), taskbar minimization, and persistent desktop notifications."
         )
         guide_text.setWordWrap(True)
-        guide_text.setStyleSheet("color: #cdd7e5; font-size: 13px; line-height: 1.6;")
+        guide_text.setStyleSheet(body_style)
         guide_layout.addWidget(guide_text)
         layout.addWidget(guide_box)
 
         # Section 4: Background Service and System Commands
         services_box = QGroupBox("4. Unified Background Service and Commands")
+        services_box.setStyleSheet(group_style)
         services_layout = QVBoxLayout(services_box)
         services_text = QLabel(
             "• <b>Unified Background Daemon:</b><br>"
@@ -1319,7 +1633,7 @@ class MainWindow(QMainWindow):
             "&nbsp;&nbsp;&nbsp;&nbsp;<code>journalctl --user -u kaffeine-dvr-watcher.service -f</code> : Follow live daemon logs."
         )
         services_text.setWordWrap(True)
-        services_text.setStyleSheet("color: #cdd7e5; font-size: 13px; line-height: 1.6;")
+        services_text.setStyleSheet(body_style)
         services_layout.addWidget(services_text)
         layout.addWidget(services_box)
 
@@ -1334,6 +1648,7 @@ class MainWindow(QMainWindow):
         prov_name = self.provider_combo.currentText()
         self.test_all_sources_health(silent=True)
         self.status_bar.showMessage(f"Active guide provider set to: {prov_name}", 4000)
+        self.flash_save_indicator("Active Provider Saved")
         QMessageBox.information(self, "Saved", f"Active guide provider switched to:\n{prov_name}")
 
     def test_all_sources_health(self, silent: bool = False):
@@ -1501,6 +1816,7 @@ class MainWindow(QMainWindow):
 
         # Automatically sync guide in background so listings for the new channel are downloaded immediately
         QTimer.singleShot(400, self.sync_guide)
+        self.flash_save_indicator("Station IDs Saved")
 
         QMessageBox.information(
             self, "Saved & Syncing",
@@ -1521,6 +1837,7 @@ class MainWindow(QMainWindow):
         self.guide_service.set_channel_map(new_map)
         self.update_tvpassport_notice()
         self.refresh_channel_dropdowns()
+        self.flash_save_indicator("Lineup Saved")
         QMessageBox.information(self, "Saved", "Channel mapping saved successfully.")
         self.filter_guide()
 
@@ -1589,7 +1906,34 @@ class MainWindow(QMainWindow):
         if confirm == QMessageBox.StandardButton.Yes:
             self.import_channels_from_kaffeine(silent=False)
 
-    def save_automation_settings(self):
+    def flash_save_indicator(self, text: str = "Settings Saved"):
+        """Displays a saved confirmation in the top-right corner, then returns to idle."""
+        if not hasattr(self, "save_indicator_lbl"):
+            return
+        self.save_indicator_lbl.setText(f"✓ {text}")
+        self.save_indicator_lbl.setStyleSheet(
+            "color: #78c48a; font-size: 11px; padding: 4px 10px; "
+            "border-radius: 4px; border: 1px solid #2f5636; background-color: #1a271c;"
+        )
+        if hasattr(self, "_save_indicator_timer") and self._save_indicator_timer:
+            self._save_indicator_timer.stop()
+        self._save_indicator_timer = QTimer(self)
+        self._save_indicator_timer.setSingleShot(True)
+        self._save_indicator_timer.timeout.connect(self._reset_save_indicator)
+        self._save_indicator_timer.start(1400)
+
+    def _reset_save_indicator(self):
+        if hasattr(self, "save_indicator_lbl"):
+            self.save_indicator_lbl.setText("Changes save automatically")
+            self.save_indicator_lbl.setStyleSheet(
+                "color: #8c98aa; font-size: 11px; padding: 4px 10px; "
+                "border-radius: 4px; border: 1px solid #333a46; background-color: #1e222a;"
+            )
+
+    def _auto_save_automation_settings(self):
+        """Silently persist automation and storage retention settings whenever any control is changed."""
+        if not hasattr(self, "lead_time_spin") or not hasattr(self, "cleanup_enable_check"):
+            return
         self.config_mgr.lead_time_mins = self.lead_time_spin.value()
         self.config_mgr.watcher_interval_seconds = self.interval_spin.value()
         self.config_mgr.guide_days_ahead = self.days_spin.value()
@@ -1603,6 +1947,10 @@ class MainWindow(QMainWindow):
         self.config_mgr.custom_recording_folder = self.custom_folder_input.text().strip()
 
         self.update_storage_status_ui()
+        self.flash_save_indicator("Settings Saved")
+
+    def save_automation_settings(self):
+        self._auto_save_automation_settings()
         QMessageBox.information(self, "Saved", "Automation and storage settings saved successfully.")
 
     def browse_custom_recording_folder(self):
@@ -1913,15 +2261,81 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 QMessageBox.critical(self, "Scheduling Error", str(e))
 
+    def _on_main_tab_changed(self, index: int):
+        # When switching to the TV Guide Browser tab (index 1)
+        if index == 1:
+            sel_date = self.guide_date_combo.currentData()
+            today_str = date.today().strftime("%Y-%m-%d")
+            if sel_date == today_str or sel_date is None:
+                QTimer.singleShot(60, self.jump_guide_to_now)
+            else:
+                QTimer.singleShot(60, self.jump_guide_to_start)
+
+    def _update_time_jump_buttons_visibility(self):
+        is_grid = self.guide_stack.currentIndex() == 0
+        self.jump_now_btn.setVisible(is_grid)
+        self.jump_prime_btn.setVisible(is_grid)
+
+    def _on_guide_view_toggled(self):
+        if self.grid_view_btn.isChecked():
+            self.guide_stack.setCurrentIndex(0)
+            self.settings.setValue("guide_view_mode", "grid")
+        else:
+            self.guide_stack.setCurrentIndex(1)
+            self.settings.setValue("guide_view_mode", "list")
+        self._update_time_jump_buttons_visibility()
+        self.filter_guide()
+
+    def _scroll_grid_to_slot(self, slot: int, center: bool = True):
+        bar = self.guide_grid_table.horizontalScrollBar()
+        if not center or slot <= 0:
+            bar.setValue(max(0, min(bar.maximum(), slot)))
+            return
+
+        vp_width = self.guide_grid_table.viewport().width()
+        col_width = self.guide_grid_table.horizontalHeader().defaultSectionSize() or 165
+        cols_visible = max(1, vp_width // col_width)
+        target_col = max(0, slot - (cols_visible // 2))
+        bar.setValue(min(bar.maximum(), target_col))
+
+    def jump_guide_to_now(self):
+        now = datetime.now()
+        slot = max(0, min(47, (now.hour * 60 + now.minute) // 30))
+        self._scroll_grid_to_slot(slot, center=True)
+
+    def jump_guide_to_start(self):
+        self._scroll_grid_to_slot(0, center=False)
+
+    def jump_guide_to_primetime(self):
+        # 8:00 PM is 20:00 -> slot 40
+        self._scroll_grid_to_slot(40, center=True)
+
     def filter_guide(self):
+        # Automatically prune already elapsed past entries from SQLite database
+        try:
+            self.guide_service.prune_past_programs()
+        except Exception:
+            pass
+
         query = self.guide_search_input.text().strip()
         channel = self.guide_channel_combo.currentText()
         airdate = self.guide_date_combo.currentData()
+        
+        # When viewing the grid for a specific date, display full 24-hour day schedule
+        # In list mode or when "All Upcoming" is selected, trim ended programs
+        trim_ended = (self.guide_stack.currentIndex() == 1 or airdate is None)
         programs = self.guide_service.search_programs(
-            query=query, channel=channel, airdate=airdate, trim_ended=True
+            query=query, channel=channel, airdate=airdate, trim_ended=trim_ended
         )
 
         self.current_guide_items = programs
+
+        if self.guide_stack.currentIndex() == 0:
+            self._populate_grid_guide(programs, airdate)
+        else:
+            self._populate_list_guide(programs)
+
+    def _populate_list_guide(self, programs: List[Dict[str, Any]]):
         self.guide_table.setRowCount(len(programs))
         for row, p in enumerate(programs):
             self.guide_table.setItem(row, 0, QTableWidgetItem(p.get("start_time_local", "")))
@@ -1930,14 +2344,141 @@ class MainWindow(QMainWindow):
             self.guide_table.setItem(row, 3, QTableWidgetItem(p.get("episode_title", "")))
             self.guide_table.setItem(row, 4, QTableWidgetItem(p.get("duration_iso", "")))
 
-    def on_guide_selection_changed(self):
-        row = self.guide_table.currentRow()
-        if row < 0 or row >= len(getattr(self, "current_guide_items", [])):
+    def _populate_grid_guide(self, programs: List[Dict[str, Any]], airdate: Optional[str]):
+        # Clear existing spans and items
+        self.guide_grid_table.clearSpans()
+        self.guide_grid_table.clearContents()
+
+        # Determine channels to display
+        filter_ch = self.guide_channel_combo.currentText()
+        if filter_ch and filter_ch != "All":
+            channels = [filter_ch]
+        else:
+            channels = sorted(list(set(self.config_mgr.channel_map.values())))
+            # Also include any channel present in programs
+            for p in programs:
+                ch_name = p.get("kaffeine_channel")
+                if ch_name and ch_name not in channels:
+                    channels.append(ch_name)
+            channels.sort()
+
+        self.grid_channels = channels
+        self.guide_grid_table.setRowCount(len(channels))
+        self.guide_grid_table.setVerticalHeaderLabels(channels)
+
+        # Parse airdate or default to today
+        target_date_str = airdate or date.today().strftime("%Y-%m-%d")
+
+        # Color palette for tiles
+        tile_bg = QColor("#222838")
+        tile_bg_alt = QColor("#1e2332")
+        tile_text_color = QColor("#ffffff")
+
+        for row_idx, ch in enumerate(channels):
+            ch_progs = [p for p in programs if p.get("kaffeine_channel") == ch]
+            ch_progs.sort(key=lambda x: x.get("start_iso", ""))
+
+            current_col = 0
+            for idx, p in enumerate(ch_progs):
+                start_iso = p.get("start_iso")
+                if not start_iso:
+                    continue
+                try:
+                    dt = datetime.fromisoformat(start_iso)
+                except Exception:
+                    continue
+
+                dur_iso = p.get("duration_iso") or "00:30:00"
+                try:
+                    parts = [int(x) for x in dur_iso.split(":")]
+                    dur = timedelta(hours=parts[0], minutes=parts[1], seconds=parts[2] if len(parts) > 2 else 0)
+                except Exception:
+                    dur = timedelta(minutes=30)
+                end_dt = dt + dur
+
+                start_col = (dt.hour * 60 + dt.minute) // 30
+                if start_col < current_col:
+                    start_col = current_col
+                if start_col >= 48:
+                    break
+
+                # Determine nominal end slot
+                if idx + 1 < len(ch_progs):
+                    try:
+                        next_dt = datetime.fromisoformat(ch_progs[idx + 1].get("start_iso", ""))
+                        next_start_col = (next_dt.hour * 60 + next_dt.minute) // 30
+                    except Exception:
+                        next_start_col = 48
+                    nominal_end_col = (end_dt.hour * 60 + end_dt.minute + 29) // 30 if end_dt.date() == dt.date() else 48
+                    end_col = max(start_col + 1, min(next_start_col, nominal_end_col))
+                else:
+                    nominal_end_col = (end_dt.hour * 60 + end_dt.minute + 29) // 30 if end_dt.date() == dt.date() else 48
+                    end_col = max(start_col + 1, min(48, nominal_end_col))
+
+                span = max(1, end_col - start_col)
+
+                # Format time range and categorize
+                show_title = p.get("show_title", "")
+                ep_title = p.get("episode_title", "")
+                start_fmt = dt.strftime("%I:%M %p").lstrip("0")
+                end_fmt = end_dt.strftime("%I:%M %p").lstrip("0")
+                time_range = f"{start_fmt} - {end_fmt}"
+
+                # Annotate program metadata for delegate renderer
+                p_copy = dict(p)
+                p_copy["_time_range"] = time_range
+                p_copy["_category"] = classify_guide_category(p)
+
+                item = QTableWidgetItem(show_title)
+                item.setData(Qt.ItemDataRole.UserRole, p_copy)
+                
+                # Visual styling
+                item.setBackground(tile_bg if (idx % 2 == 0) else tile_bg_alt)
+                item.setForeground(tile_text_color)
+
+                self.guide_grid_table.setItem(row_idx, start_col, item)
+
+                # For spanned columns, fill with ghost items referencing program data so clicking anywhere works
+                for c in range(start_col + 1, start_col + span):
+                    ghost = QTableWidgetItem()
+                    ghost.setData(Qt.ItemDataRole.UserRole, p_copy)
+                    ghost.setBackground(tile_bg if (idx % 2 == 0) else tile_bg_alt)
+                    self.guide_grid_table.setItem(row_idx, c, ghost)
+
+                if span > 1:
+                    self.guide_grid_table.setSpan(row_idx, start_col, 1, span)
+
+                current_col = start_col + span
+
+        # Auto-scroll based on selected date:
+        # If viewing today, center on the current time slot
+        # If viewing a future date, reset to the first midnight slot (0)
+        if target_date_str == date.today().strftime("%Y-%m-%d"):
+            QTimer.singleShot(60, self.jump_guide_to_now)
+        else:
+            QTimer.singleShot(60, self.jump_guide_to_start)
+
+    def on_grid_cell_clicked(self, row: int, col: int):
+        item = self.guide_grid_table.item(row, col)
+        if not item:
+            # Check previous columns in case of span
+            for c in range(col - 1, -1, -1):
+                it = self.guide_grid_table.item(row, c)
+                if it and it.data(Qt.ItemDataRole.UserRole):
+                    item = it
+                    break
+
+        if not item or not item.data(Qt.ItemDataRole.UserRole):
             self.guide_detail_title.setText("Select a program to view details")
             self.guide_detail_text.clear()
+            self.selected_grid_program = None
             return
 
-        prog = self.current_guide_items[row]
+        prog = item.data(Qt.ItemDataRole.UserRole)
+        self.selected_grid_program = prog
+        self._display_program_details(prog)
+
+    def _display_program_details(self, prog: Dict[str, Any]):
         title = prog.get("show_title", "")
         ep = prog.get("episode_title", "")
         channel = prog.get("kaffeine_channel", "")
@@ -1956,13 +2497,31 @@ class MainWindow(QMainWindow):
         self.guide_detail_title.setText(header_str)
         self.guide_detail_text.setText(summary)
 
-    def record_selected_guide_item(self):
+    def on_guide_selection_changed(self):
         row = self.guide_table.currentRow()
         if row < 0 or row >= len(getattr(self, "current_guide_items", [])):
-            QMessageBox.warning(self, "Selection Required", "Please select a program from the guide table.")
+            self.guide_detail_title.setText("Select a program to view details")
+            self.guide_detail_text.clear()
             return
 
         prog = self.current_guide_items[row]
+        self._display_program_details(prog)
+
+    def _get_active_selected_program(self) -> Optional[Dict[str, Any]]:
+        if self.guide_stack.currentIndex() == 0:
+            return getattr(self, "selected_grid_program", None)
+        else:
+            row = self.guide_table.currentRow()
+            if row >= 0 and row < len(getattr(self, "current_guide_items", [])):
+                return self.current_guide_items[row]
+        return None
+
+    def record_selected_guide_item(self):
+        prog = self._get_active_selected_program()
+        if not prog:
+            QMessageBox.warning(self, "Selection Required", "Please select a program from the guide.")
+            return
+
         show = prog.get("show_title", "")
         ep = prog.get("episode_title", "")
         rec_title = f"{show} - {ep}" if ep else show
@@ -1985,12 +2544,11 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Error Queueing Recording", str(e))
 
     def add_rule_from_selected_guide_item(self):
-        row = self.guide_table.currentRow()
-        if row < 0 or row >= len(getattr(self, "current_guide_items", [])):
+        prog = self._get_active_selected_program()
+        if not prog:
             QMessageBox.warning(self, "Selection Required", "Please select a program first.")
             return
 
-        prog = self.current_guide_items[row]
         show_title = prog.get("show_title", "")
         ch = prog.get("kaffeine_channel", "All")
         self.rules_engine.add_rule(show_title, ch)
@@ -2089,11 +2647,14 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         self.settings.setValue("geometry", self.saveGeometry())
+        self._auto_save_automation_settings()
         super().closeEvent(event)
 
 
 def main():
     app = QApplication(sys.argv)
+    wheel_filter = NoWheelEventFilter(app)
+    app.installEventFilter(wheel_filter)
     app.setApplicationName("kaffeine-dvr")
     app.setApplicationDisplayName("Kaffeine DVR & TV Guide")
     app.setDesktopFileName("kaffeine-dvr")
