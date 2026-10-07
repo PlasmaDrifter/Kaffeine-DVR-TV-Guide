@@ -23,6 +23,18 @@ class KaffeineDbusClient:
             res = subprocess.run(["pgrep", "-x", "kaffeine"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             return res.returncode == 0
 
+    def _get_display_env(self) -> Dict[str, str]:
+        """Ensure WAYLAND_DISPLAY and DISPLAY exist when launched from background services."""
+        env = os.environ.copy()
+        if not env.get("WAYLAND_DISPLAY") and not env.get("DISPLAY"):
+            runtime_dir = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
+            wayland_sockets = list(Path(runtime_dir).glob("wayland-*"))
+            if wayland_sockets:
+                env["WAYLAND_DISPLAY"] = wayland_sockets[0].name
+            if not env.get("DISPLAY"):
+                env["DISPLAY"] = ":0"
+        return env
+
     def launch_kaffeine(self, mode: str = "taskbar", minimized: Optional[bool] = None) -> bool:
         """
         Start Kaffeine with the specified launch mode:
@@ -35,11 +47,19 @@ class KaffeineDbusClient:
         if minimized is not None:
             mode = "taskbar" if minimized else "normal"
         try:
+            env = self._get_display_env()
             cmd = ["kaffeine", "-m"] if mode == "tray" else ["kaffeine"]
-            subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             if mode == "taskbar":
                 import threading
                 threading.Thread(target=self._minimize_window_async, daemon=True).start()
+
+            # Wait up to 5 seconds for Kaffeine to register on D-Bus
+            import time
+            for _ in range(20):
+                time.sleep(0.25)
+                if self.is_running():
+                    return True
             return True
         except Exception as e:
             print(f"Error launching kaffeine: {e}")
