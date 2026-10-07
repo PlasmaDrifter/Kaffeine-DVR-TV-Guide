@@ -23,6 +23,18 @@ Kaffeine is a powerful digital TV viewer for KDE and Linux desktop environments,
 
 ---
 
+## Screenshots
+
+| Recordings Schedule (DVR Queue) | Web TV Guide Browser |
+|:---:|:---:|
+| [![Recordings Schedule](docs/screenshots/recordings_schedule.png)](docs/screenshots/recordings_schedule.png) | [![Web TV Guide Browser](docs/screenshots/guide_browser.png)](docs/screenshots/guide_browser.png) |
+
+| Guide Sources and Health Monitor | Automation and DVR Settings |
+|:---:|:---:|
+| [![Guide Sources and Health Monitor](docs/screenshots/guide_sources_health.png)](docs/screenshots/guide_sources_health.png) | [![Automation and DVR Settings](docs/screenshots/automation_dvr.png)](docs/screenshots/automation_dvr.png) |
+
+---
+
 ## Architecture and Workflow
 
 ```
@@ -39,13 +51,13 @@ Kaffeine is a powerful digital TV viewer for KDE and Linux desktop environments,
                | (Queued DVR Recording Timers) |
                +-------------------------------+
                                |
-                               v (Monitored every 120s)
+                               v (Monitored every 120s, Configurable)
                +-------------------------------+
                |   kaffeine-dvr-watcher daemon |
                |     (systemd --user service)  |
                +-------------------------------+
                                |
-                (5 mins before showtime: JIT)
+                (5 mins before showtime: JIT, Configurable)
                                v
             +------------------------------------+
             | Kaffeine Media Player (D-Bus MPRIS)|
@@ -53,6 +65,10 @@ Kaffeine is a powerful digital TV viewer for KDE and Linux desktop environments,
             |  - ScheduleProgram called via D-Bus|
             +------------------------------------+
 ```
+
+> **Note on Timing & Flexibility:**
+> - **Poll Interval (Default: 120s):** How often the background watcher checks the queue database. This is fully configurable via the settings dialog or CLI `--interval` flag.
+> - **Just-In-Time Lead Time (Default: 5 mins):** How early Kaffeine is launched and scheduled before broadcast start. This allows Kaffeine ample time to initialize tuner hardware and buffer without missing the start of a program, and can be customized anywhere from 1 to 60 minutes in the DVR Settings tab.
 
 ---
 
