@@ -25,9 +25,19 @@ class QueueManager:
                 lead_time_mins INTEGER DEFAULT 5,
                 status TEXT DEFAULT 'QUEUED',
                 kaffeine_key INTEGER,
-                created_at TEXT
+                created_at TEXT,
+                protected INTEGER DEFAULT 0,
+                file_path TEXT
             )
         """)
+        # Safe migration for existing databases
+        cur.execute("PRAGMA table_info(recording_queue)")
+        existing_cols = {col[1] for col in cur.fetchall()}
+        if "protected" not in existing_cols:
+            cur.execute("ALTER TABLE recording_queue ADD COLUMN protected INTEGER DEFAULT 0")
+        if "file_path" not in existing_cols:
+            cur.execute("ALTER TABLE recording_queue ADD COLUMN file_path TEXT")
+
         cur.execute("CREATE INDEX IF NOT EXISTS idx_queue_status ON recording_queue(status)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_queue_start ON recording_queue(start_iso)")
         conn.commit()
@@ -156,5 +166,45 @@ class QueueManager:
             except Exception:
                 pass
 
+        conn.commit()
+        conn.close()
+
+    def toggle_protected(self, queue_id: int) -> bool:
+        """Toggles the protected status of a recording."""
+        conn = sqlite3.connect(str(self.db_path))
+        cur = conn.cursor()
+        cur.execute("SELECT protected FROM recording_queue WHERE id = ?", (queue_id,))
+        row = cur.fetchone()
+        if not row:
+            conn.close()
+            return False
+        new_val = 0 if row[0] else 1
+        cur.execute("UPDATE recording_queue SET protected = ? WHERE id = ?", (new_val, queue_id))
+        conn.commit()
+        conn.close()
+        return bool(new_val)
+
+    def get_protected_paths(self) -> set:
+        """Returns set of file_path strings that are protected."""
+        conn = sqlite3.connect(str(self.db_path))
+        cur = conn.cursor()
+        cur.execute("SELECT file_path FROM recording_queue WHERE protected = 1 AND file_path IS NOT NULL")
+        paths = {row[0] for row in cur.fetchall() if row[0]}
+        conn.close()
+        return paths
+
+    def mark_file_purged(self, file_path_str: str):
+        """Marks queue entry status as PURGED when file is auto-deleted."""
+        conn = sqlite3.connect(str(self.db_path))
+        cur = conn.cursor()
+        cur.execute("UPDATE recording_queue SET status = 'PURGED' WHERE file_path = ?", (file_path_str,))
+        conn.commit()
+        conn.close()
+
+    def set_recording_file(self, queue_id: int, file_path_str: str):
+        """Links recorded file path to queue item."""
+        conn = sqlite3.connect(str(self.db_path))
+        cur = conn.cursor()
+        cur.execute("UPDATE recording_queue SET file_path = ? WHERE id = ?", (file_path_str, queue_id))
         conn.commit()
         conn.close()

@@ -20,6 +20,10 @@ Kaffeine is a powerful digital TV viewer for KDE and Linux desktop environments,
   - **Custom XMLTV Feeds:** Supports local files or remote HTTP/HTTPS XMLTV feeds from tools like zap2xml or WebGrab+.
   - **Schedules Direct:** Direct commercial Gracenote EPG integration by postal/zip code.
 - **Series Auto-Record Rules:** Define keyword-based auto-record rules (e.g., specific sports leagues, talk shows, or series titles) that automatically schedule upcoming episodes as guide data refreshes.
+- **Automated Video Retention & Storage Management:** Prevents recording drives from filling up:
+  - **Age Retention:** Automatically deletes recordings older than *N* days (configurable).
+  - **Low-Disk Auto-Purge:** If available disk space drops below a safety threshold (e.g., 25 GB), automatically purges the oldest unprotected recordings first.
+  - **Active Recording & Sidecar Safety:** Never deletes files actively being written, cleans up associated sidecars (`.txt`, `.log`), and allows users to flag favorite recordings as "Protected / Keep Forever".
 
 ---
 

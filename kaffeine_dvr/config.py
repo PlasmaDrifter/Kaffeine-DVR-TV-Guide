@@ -50,6 +50,14 @@ class ConfigManager:
                         data["enable_desktop_notifications"] = True
                     if "first_run_completed" not in data:
                         data["first_run_completed"] = False
+                    if "auto_cleanup_enabled" not in data:
+                        data["auto_cleanup_enabled"] = False
+                    if "retention_days" not in data:
+                        data["retention_days"] = 14
+                    if "min_free_disk_gb" not in data:
+                        data["min_free_disk_gb"] = 25
+                    if "custom_recording_folder" not in data:
+                        data["custom_recording_folder"] = ""
                     return data
             except Exception:
                 pass
@@ -73,7 +81,11 @@ class ConfigManager:
                 "lineup": ""
             },
             "tvpassport_stations": {},
-            "first_run_completed": False
+            "first_run_completed": False,
+            "auto_cleanup_enabled": False,
+            "retention_days": 14,
+            "min_free_disk_gb": 25,
+            "custom_recording_folder": ""
         }
         self._save(default_data)
         return default_data
@@ -209,6 +221,42 @@ class ConfigManager:
     @first_run_completed.setter
     def first_run_completed(self, val: bool):
         self.data["first_run_completed"] = val
+        self.save()
+
+    @property
+    def auto_cleanup_enabled(self) -> bool:
+        return self.data.get("auto_cleanup_enabled", False)
+
+    @auto_cleanup_enabled.setter
+    def auto_cleanup_enabled(self, val: bool):
+        self.data["auto_cleanup_enabled"] = val
+        self.save()
+
+    @property
+    def retention_days(self) -> int:
+        return self.data.get("retention_days", 14)
+
+    @retention_days.setter
+    def retention_days(self, val: int):
+        self.data["retention_days"] = val
+        self.save()
+
+    @property
+    def min_free_disk_gb(self) -> int:
+        return self.data.get("min_free_disk_gb", 25)
+
+    @min_free_disk_gb.setter
+    def min_free_disk_gb(self, val: int):
+        self.data["min_free_disk_gb"] = val
+        self.save()
+
+    @property
+    def custom_recording_folder(self) -> str:
+        return self.data.get("custom_recording_folder", "")
+
+    @custom_recording_folder.setter
+    def custom_recording_folder(self, val: str):
+        self.data["custom_recording_folder"] = val
         self.save()
 
     def get_scanned_kaffeine_channels(self) -> List[Dict[str, Any]]:

@@ -5,6 +5,7 @@ from typing import Optional
 from .dbus_client import KaffeineDbusClient
 from .queue_manager import QueueManager
 from .config import ConfigManager
+from .storage_manager import StorageManager
 
 def send_desktop_notification(title: str, channel: str, start_display: str):
     """
@@ -31,6 +32,7 @@ class Watcher:
     def __init__(self, dbus_client: Optional[KaffeineDbusClient] = None, queue_mgr: Optional[QueueManager] = None):
         self.dbus_client = dbus_client or KaffeineDbusClient()
         self.queue_mgr = queue_mgr or QueueManager()
+        self.storage_mgr = StorageManager(queue_mgr=self.queue_mgr)
         self.running = True
         self.last_sync_time = 0.0
 
@@ -68,6 +70,19 @@ class Watcher:
 
         # Update in-progress and completed statuses
         self.queue_mgr.update_statuses([])
+
+        # Run storage retention & auto-cleanup if enabled
+        try:
+            cleanup_res = self.storage_mgr.run_cleanup_cycle()
+            if cleanup_res.get("deleted_count", 0) > 0:
+                now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                print(
+                    f"[{now_str}] Auto-Cleanup completed: Purged {cleanup_res['deleted_count']} recording(s), "
+                    f"freed {cleanup_res['freed_gb']} GB in {cleanup_res['folder']}."
+                )
+        except Exception as e:
+            print(f"Error during storage cleanup cycle: {e}")
+
         return armed_count
 
     def check_periodic_sync(self):

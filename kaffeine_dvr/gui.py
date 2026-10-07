@@ -23,6 +23,7 @@ try:
     from .rules_engine import RulesEngine
     from .queue_manager import QueueManager
     from .watcher import Watcher
+    from .storage_manager import StorageManager
 except (ImportError, ValueError):
     from kaffeine_dvr.config import ConfigManager, DEFAULT_CHANNEL_MAP
     from kaffeine_dvr.dbus_client import KaffeineDbusClient
@@ -30,6 +31,7 @@ except (ImportError, ValueError):
     from kaffeine_dvr.rules_engine import RulesEngine
     from kaffeine_dvr.queue_manager import QueueManager
     from kaffeine_dvr.watcher import Watcher
+    from kaffeine_dvr.storage_manager import StorageManager
 
 
 class SyncWorker(QThread):
@@ -534,6 +536,7 @@ class MainWindow(QMainWindow):
         self.guide_service = GuideService(channel_map=self.config_mgr.channel_map, config_mgr=self.config_mgr)
         self.rules_engine = RulesEngine(self.config_mgr, self.dbus_client, self.guide_service)
         self.watcher = Watcher(self.dbus_client, self.queue_mgr)
+        self.storage_mgr = StorageManager(self.config_mgr, self.queue_mgr)
 
         self.init_ui()
         self.setup_timers()
@@ -616,18 +619,23 @@ class MainWindow(QMainWindow):
         self.cancel_rec_btn.clicked.connect(self.cancel_selected_recording)
         ctrl_bar.addWidget(self.cancel_rec_btn)
 
+        self.protect_rec_btn = QPushButton("Protect / Keep Forever")
+        self.protect_rec_btn.clicked.connect(self.toggle_protect_selected_recording)
+        ctrl_bar.addWidget(self.protect_rec_btn)
+
         ctrl_bar.addStretch()
         layout.addLayout(ctrl_bar)
 
         # Recordings Table
         self.rec_table = QTableWidget()
-        self.rec_table.setColumnCount(5)
-        self.rec_table.setHorizontalHeaderLabels(["Title", "Schedule", "Channel", "Duration", "Status"])
+        self.rec_table.setColumnCount(6)
+        self.rec_table.setHorizontalHeaderLabels(["Title", "Schedule", "Channel", "Duration", "Status", "Retain"])
         self.rec_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.rec_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         self.rec_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         self.rec_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
         self.rec_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        self.rec_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
         self.rec_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.rec_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         layout.addWidget(self.rec_table)
@@ -1066,11 +1074,75 @@ class MainWindow(QMainWindow):
         form.addRow("Notifications:", self.notify_check)
         form.addRow("", notify_lbl)
 
-        save_auto_btn = QPushButton("Save Automation Settings")
-        save_auto_btn.clicked.connect(self.save_automation_settings)
-        form.addRow(save_auto_btn)
-
         layout.addLayout(form)
+        layout.addSpacing(10)
+
+        # Storage & Auto-Cleanup Section
+        storage_box = QGroupBox("Storage & Video Retention (Auto-Delete Old Recordings)")
+        storage_layout = QVBoxLayout(storage_box)
+
+        # Disk space status display
+        self.storage_status_lbl = QLabel("Checking storage space...")
+        self.storage_status_lbl.setStyleSheet("font-weight: bold; font-size: 12px; color: #55a84c;")
+        storage_layout.addWidget(self.storage_status_lbl)
+
+        storage_form = QFormLayout()
+        self.cleanup_enable_check = QCheckBox("Enable Automatic Video Cleanup")
+        self.cleanup_enable_check.setChecked(self.config_mgr.auto_cleanup_enabled)
+        storage_form.addRow("Auto-Cleanup:", self.cleanup_enable_check)
+
+        self.retention_days_spin = QSpinBox()
+        self.retention_days_spin.setRange(0, 365)
+        self.retention_days_spin.setValue(self.config_mgr.retention_days)
+        self.retention_days_spin.setSuffix(" days")
+        retention_lbl = QLabel("Delete recordings older than this age. Set to 0 to disable age-based pruning.")
+        retention_lbl.setStyleSheet("color: #6c757d; font-size: 11px;")
+        storage_form.addRow("Retention Window:", self.retention_days_spin)
+        storage_form.addRow("", retention_lbl)
+
+        self.min_free_spin = QSpinBox()
+        self.min_free_spin.setRange(0, 1000)
+        self.min_free_spin.setSingleStep(5)
+        self.min_free_spin.setValue(self.config_mgr.min_free_disk_gb)
+        self.min_free_spin.setSuffix(" GB")
+        free_lbl = QLabel("If free disk space drops below this limit, oldest unprotected recordings are purged first.")
+        free_lbl.setStyleSheet("color: #6c757d; font-size: 11px;")
+        storage_form.addRow("Minimum Free Space:", self.min_free_spin)
+        storage_form.addRow("", free_lbl)
+
+        # Custom recording folder override
+        folder_row = QHBoxLayout()
+        self.custom_folder_input = QLineEdit()
+        self.custom_folder_input.setText(self.config_mgr.custom_recording_folder)
+        self.custom_folder_input.setPlaceholderText("Auto-detect from ~/.config/kaffeinerc (or ~/Videos)")
+        folder_row.addWidget(self.custom_folder_input)
+        self.browse_folder_btn = QPushButton("Browse...")
+        self.browse_folder_btn.clicked.connect(self.browse_custom_recording_folder)
+        folder_row.addWidget(self.browse_folder_btn)
+        storage_form.addRow("Recording Folder:", folder_row)
+
+        storage_layout.addLayout(storage_form)
+
+        # Storage Action Buttons
+        storage_btn_row = QHBoxLayout()
+        self.run_cleanup_btn = QPushButton("Run Retention Cleanup Now")
+        self.run_cleanup_btn.clicked.connect(self.run_manual_cleanup)
+        storage_btn_row.addWidget(self.run_cleanup_btn)
+
+        self.refresh_storage_btn = QPushButton("Refresh Disk Usage")
+        self.refresh_storage_btn.clicked.connect(self.update_storage_status_ui)
+        storage_btn_row.addWidget(self.refresh_storage_btn)
+        storage_btn_row.addStretch()
+        storage_layout.addLayout(storage_btn_row)
+
+        layout.addWidget(storage_box)
+        layout.addSpacing(10)
+
+        # Save Settings Button
+        save_auto_btn = QPushButton("Save Automation & Storage Settings")
+        save_auto_btn.setStyleSheet("font-weight: bold; padding: 6px;")
+        save_auto_btn.clicked.connect(self.save_automation_settings)
+        layout.addWidget(save_auto_btn)
         layout.addSpacing(15)
 
         # Service Management Section
@@ -1498,7 +1570,63 @@ class MainWindow(QMainWindow):
         self.config_mgr.guide_days_ahead = self.days_spin.value()
         self.config_mgr.launch_mode = self.launch_mode_combo.currentData()
         self.config_mgr.enable_desktop_notifications = self.notify_check.isChecked()
-        QMessageBox.information(self, "Saved", "Automation settings saved successfully.")
+
+        # Storage & Retention settings
+        self.config_mgr.auto_cleanup_enabled = self.cleanup_enable_check.isChecked()
+        self.config_mgr.retention_days = self.retention_days_spin.value()
+        self.config_mgr.min_free_disk_gb = self.min_free_spin.value()
+        self.config_mgr.custom_recording_folder = self.custom_folder_input.text().strip()
+
+        self.update_storage_status_ui()
+        QMessageBox.information(self, "Saved", "Automation and storage settings saved successfully.")
+
+    def browse_custom_recording_folder(self):
+        current = self.custom_folder_input.text().strip() or str(self.storage_mgr.get_recording_folder())
+        chosen = QFileDialog.getExistingDirectory(self, "Select DVR Recording Folder", current)
+        if chosen:
+            self.custom_folder_input.setText(chosen)
+            self.update_storage_status_ui()
+
+    def update_storage_status_ui(self):
+        folder_str = self.custom_folder_input.text().strip() if hasattr(self, "custom_folder_input") else ""
+        target_path = Path(folder_str) if folder_str else self.storage_mgr.get_recording_folder()
+        usage = self.storage_mgr.get_disk_usage(target_path)
+        if hasattr(self, "storage_status_lbl"):
+            free_gb = usage["free_gb"]
+            total_gb = usage["total_gb"]
+            pct = usage["free_percent"]
+            folder = usage["folder"]
+            color = "#55a84c" if free_gb > 25 else "#e06c75"
+            self.storage_status_lbl.setText(
+                f"Directory: {folder}\nFree Disk Space: {free_gb} GB / {total_gb} GB ({pct}% free)"
+            )
+            self.storage_status_lbl.setStyleSheet(f"font-weight: bold; font-size: 11px; color: {color};")
+
+    def run_manual_cleanup(self):
+        # Apply current settings to manager first
+        self.config_mgr.auto_cleanup_enabled = True
+        self.config_mgr.retention_days = self.retention_days_spin.value()
+        self.config_mgr.min_free_disk_gb = self.min_free_spin.value()
+        self.config_mgr.custom_recording_folder = self.custom_folder_input.text().strip()
+
+        res = self.storage_mgr.run_cleanup_cycle()
+        self.update_storage_status_ui()
+        self.refresh_recordings()
+
+        cnt = res.get("deleted_count", 0)
+        freed = res.get("freed_gb", 0.0)
+        target = res.get("folder", "")
+        if cnt > 0:
+            deleted_list = "\n".join(f"• {f}" for f in res.get("deleted_files", []))
+            QMessageBox.information(
+                self, "Retention Cleanup Completed",
+                f"Successfully deleted {cnt} recording(s), reclaiming {freed} GB in:\n{target}\n\nDeleted files:\n{deleted_list}"
+            )
+        else:
+            QMessageBox.information(
+                self, "Retention Cleanup",
+                f"No old recordings met the purge criteria in:\n{target}\n\nFree space remains within configured limits."
+            )
 
     def update_service_status_ui(self):
         try:
@@ -1568,6 +1696,7 @@ class MainWindow(QMainWindow):
     def refresh_all(self):
         self.update_status_badges()
         self.update_service_status_ui()
+        self.update_storage_status_ui()
         self.refresh_channel_dropdowns()
         self.refresh_recordings()
         self.filter_guide()
@@ -1687,10 +1816,38 @@ class MainWindow(QMainWindow):
             elif status == "COMPLETED":
                 status_display = "Completed"
                 color = "#6c757d"
+            elif status == "PURGED":
+                status_display = "Purged (Auto-Deleted)"
+                color = "#8c98aa"
 
             status_item = QTableWidgetItem(status_display)
             status_item.setForeground(QColor(color))
             self.rec_table.setItem(row, 4, status_item)
+
+            is_prot = bool(rec.get("protected", 0))
+            prot_item = QTableWidgetItem("Protected" if is_prot else "Auto")
+            prot_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            if is_prot:
+                prot_item.setForeground(QColor("#28a745"))
+                prot_item.setFont(QFont("", -1, QFont.Weight.Bold))
+                prot_item.setToolTip("Protected: Will never be automatically deleted by retention rules.")
+            else:
+                prot_item.setForeground(QColor("#a0aec0"))
+                prot_item.setToolTip("Standard: Subject to auto-cleanup retention rules.")
+            self.rec_table.setItem(row, 5, prot_item)
+
+    def toggle_protect_selected_recording(self):
+        row = self.rec_table.currentRow()
+        if row < 0:
+            QMessageBox.warning(self, "Selection Required", "Please select a recording to toggle protection.")
+            return
+
+        qid = self.rec_table.item(row, 0).data(Qt.ItemDataRole.UserRole)
+        rec_title = self.rec_table.item(row, 0).text()
+        new_state = self.queue_mgr.toggle_protected(int(qid))
+        state_str = "Protected (Keep Forever)" if new_state else "Standard (Auto-cleanup eligible)"
+        self.status_bar.showMessage(f"'{rec_title}' is now {state_str}.", 4000)
+        self.refresh_recordings()
 
     def cancel_selected_recording(self):
         row = self.rec_table.currentRow()
