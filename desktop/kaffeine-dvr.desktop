@@ -1,0 +1,12 @@
+[Desktop Entry]
+Categories=AudioVideo;TV;Recorder;
+Comment=Modern TV Guide & DVR Recording Manager for Kaffeine
+Exec=kaffeine-dvr
+GenericName=TV Guide & Recording Manager
+Icon=kaffeine
+Keywords=tv;dvr;kaffeine;record;guide;epg;
+Name=Kaffeine DVR & TV Guide
+StartupNotify=true
+StartupWMClass=kaffeine-dvr
+Terminal=false
+Type=Application

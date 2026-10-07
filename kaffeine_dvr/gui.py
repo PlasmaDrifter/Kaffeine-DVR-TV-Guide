@@ -1,0 +1,1921 @@
+import sys
+import os
+import subprocess
+from datetime import datetime, date, timedelta
+from pathlib import Path
+from typing import Optional, List, Dict, Any
+
+from PyQt6.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QTabWidget, QLabel, QPushButton, QTableWidget, QTableWidgetItem,
+    QLineEdit, QComboBox, QTextEdit, QHeaderView, QSplitter,
+    QMessageBox, QDialog, QFormLayout, QSpinBox, QCheckBox,
+    QProgressBar, QStatusBar, QFrame, QGroupBox, QFileDialog,
+    QScrollArea, QToolButton, QSizePolicy
+)
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
+from PyQt6.QtGui import QColor, QFont, QIcon
+
+try:
+    from .config import ConfigManager, DEFAULT_CHANNEL_MAP
+    from .dbus_client import KaffeineDbusClient
+    from .guide_service import GuideService
+    from .rules_engine import RulesEngine
+    from .queue_manager import QueueManager
+    from .watcher import Watcher
+except (ImportError, ValueError):
+    from kaffeine_dvr.config import ConfigManager, DEFAULT_CHANNEL_MAP
+    from kaffeine_dvr.dbus_client import KaffeineDbusClient
+    from kaffeine_dvr.guide_service import GuideService
+    from kaffeine_dvr.rules_engine import RulesEngine
+    from kaffeine_dvr.queue_manager import QueueManager
+    from kaffeine_dvr.watcher import Watcher
+
+
+class SyncWorker(QThread):
+    progress = pyqtSignal(str)
+    finished = pyqtSignal(int, str)
+
+    def __init__(self, guide_service: GuideService, days: int):
+        super().__init__()
+        self.guide_service = guide_service
+        self.days = days
+
+    def run(self):
+        try:
+            count = self.guide_service.sync_guide(
+                days=self.days,
+                progress_callback=lambda msg: self.progress.emit(msg)
+            )
+            self.finished.emit(count, "")
+        except Exception as e:
+            self.finished.emit(0, str(e))
+
+
+class RulesWorker(QThread):
+    progress = pyqtSignal(str)
+    finished = pyqtSignal(list, str)
+
+    def __init__(self, rules_engine: RulesEngine):
+        super().__init__()
+        self.rules_engine = rules_engine
+
+    def run(self):
+        try:
+            scheduled = self.rules_engine.evaluate_and_schedule(
+                progress_callback=lambda msg: self.progress.emit(msg)
+            )
+            self.finished.emit(scheduled, "")
+        except Exception as e:
+            self.finished.emit([], str(e))
+
+
+class HealthCheckWorker(QThread):
+    finished = pyqtSignal(dict)
+
+    def __init__(self, guide_service: GuideService):
+        super().__init__()
+        self.guide_service = guide_service
+
+    def run(self):
+        try:
+            results = self.guide_service.check_all_sources_health()
+            self.finished.emit(results)
+        except Exception as e:
+            self.finished.emit({})
+
+
+class ManualRecordDialog(QDialog):
+    def __init__(self, channels: List[str], parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Schedule Manual Recording")
+        self.setMinimumWidth(400)
+        layout = QFormLayout(self)
+
+        self.title_input = QLineEdit()
+        self.channel_combo = QComboBox()
+        self.channel_combo.addItems(channels)
+        
+        now = datetime.now()
+        self.start_input = QLineEdit(now.strftime("%Y-%m-%dT%H:%M:00"))
+        self.duration_input = QLineEdit("01:00:00")
+
+        layout.addRow("Title:", self.title_input)
+        layout.addRow("Channel:", self.channel_combo)
+        layout.addRow("Start (ISO):", self.start_input)
+        layout.addRow("Duration (HH:MM:SS):", self.duration_input)
+
+        btn_box = QHBoxLayout()
+        self.ok_btn = QPushButton("Schedule")
+        self.cancel_btn = QPushButton("Cancel")
+        self.ok_btn.clicked.connect(self.accept)
+        self.cancel_btn.clicked.connect(self.reject)
+        btn_box.addWidget(self.ok_btn)
+        btn_box.addWidget(self.cancel_btn)
+        layout.addRow(btn_box)
+
+
+class AddRuleDialog(QDialog):
+    def __init__(self, channels: List[str], parent=None, default_title: str = ""):
+        super().__init__(parent)
+        self.setWindowTitle("Add Auto-Record Rule")
+        self.setMinimumWidth(380)
+        layout = QFormLayout(self)
+
+        self.keyword_input = QLineEdit(default_title)
+        self.channel_combo = QComboBox()
+        self.channel_combo.addItem("All")
+        self.channel_combo.addItems(channels)
+
+        layout.addRow("Show Keyword / Title:", self.keyword_input)
+        layout.addRow("Channel:", self.channel_combo)
+
+        btn_box = QHBoxLayout()
+        self.ok_btn = QPushButton("Save Rule")
+        self.cancel_btn = QPushButton("Cancel")
+        self.ok_btn.clicked.connect(self.accept)
+        self.cancel_btn.clicked.connect(self.reject)
+        btn_box.addWidget(self.ok_btn)
+        btn_box.addWidget(self.cancel_btn)
+        layout.addRow(btn_box)
+
+
+class EditRuleDialog(QDialog):
+    def __init__(self, channels: List[str], rule_id: str, keyword: str, channel: str, enabled: bool, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Edit Auto-Record Rule")
+        self.setMinimumWidth(380)
+        layout = QFormLayout(self)
+
+        self.rule_id_lbl = QLabel(f"<b>{rule_id}</b>")
+        self.keyword_input = QLineEdit(keyword)
+        self.channel_combo = QComboBox()
+        self.channel_combo.addItem("All")
+        self.channel_combo.addItems(channels)
+        idx = self.channel_combo.findText(channel)
+        if idx >= 0:
+            self.channel_combo.setCurrentIndex(idx)
+        else:
+            self.channel_combo.setCurrentText(channel)
+
+        self.enabled_check = QCheckBox("Enable Rule")
+        self.enabled_check.setChecked(enabled)
+
+        layout.addRow("Rule ID:", self.rule_id_lbl)
+        layout.addRow("Show Keyword / Title:", self.keyword_input)
+        layout.addRow("Channel:", self.channel_combo)
+        layout.addRow("Status:", self.enabled_check)
+
+        btn_box = QHBoxLayout()
+        self.ok_btn = QPushButton("Update Rule")
+        self.cancel_btn = QPushButton("Cancel")
+        self.ok_btn.clicked.connect(self.accept)
+        self.cancel_btn.clicked.connect(self.reject)
+        btn_box.addWidget(self.ok_btn)
+        btn_box.addWidget(self.cancel_btn)
+        layout.addRow(btn_box)
+
+
+class CollapsibleSection(QWidget):
+    def __init__(self, title: str = "", initially_expanded: bool = False, parent=None):
+        super().__init__(parent)
+        self.main_layout = QVBoxLayout(self)
+        self.main_layout.setContentsMargins(0, 4, 0, 4)
+        self.main_layout.setSpacing(4)
+
+        self.header_layout = QHBoxLayout()
+        self.header_layout.setContentsMargins(0, 0, 0, 0)
+        self.header_layout.setSpacing(8)
+
+        self.toggle_btn = QToolButton()
+        self.toggle_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self.toggle_btn.setStyleSheet(
+            "QToolButton { "
+            "  border: 1px solid #333a4c; "
+            "  border-radius: 5px; "
+            "  background-color: #1e2333; "
+            "  color: #d3dae3; "
+            "  font-weight: bold; "
+            "  font-size: 12px; "
+            "  padding: 8px 12px; "
+            "  text-align: left; "
+            "} "
+            "QToolButton:hover { "
+            "  background-color: #262c3f; "
+            "  border-color: #55a84c; "
+            "  color: #ffffff; "
+            "}"
+        )
+        self.toggle_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.toggle_btn.setArrowType(Qt.ArrowType.DownArrow if initially_expanded else Qt.ArrowType.RightArrow)
+        self.toggle_btn.setText("  " + title)
+        self.toggle_btn.setCheckable(True)
+        self.toggle_btn.setChecked(initially_expanded)
+        self.toggle_btn.clicked.connect(self.on_toggled)
+        self.header_layout.addWidget(self.toggle_btn)
+        self.main_layout.addLayout(self.header_layout)
+
+        self.content_area = QFrame()
+        self.content_area.setFrameShape(QFrame.Shape.StyledPanel)
+        self.content_area.setStyleSheet(
+            "QFrame#collapsibleContent { "
+            "  border: 1px solid #2a3142; "
+            "  border-radius: 5px; "
+            "  background-color: #1a1e2b; "
+            "  padding: 8px; "
+            "}"
+        )
+        self.content_area.setObjectName("collapsibleContent")
+        self.content_area.setVisible(initially_expanded)
+        self.main_layout.addWidget(self.content_area)
+
+    def addHeaderWidget(self, widget: QWidget):
+        self.header_layout.addWidget(widget)
+
+    def setContentLayout(self, layout):
+        self.content_area.setLayout(layout)
+
+    def on_toggled(self, checked: bool):
+        self.toggle_btn.setArrowType(Qt.ArrowType.DownArrow if checked else Qt.ArrowType.RightArrow)
+        self.content_area.setVisible(checked)
+        if checked:
+            # Let the layout recalculate geometry, then ensure content is fully visible in parent scroll area
+            QTimer.singleShot(60, self.scroll_into_view)
+
+    def scroll_into_view(self):
+        parent = self.parentWidget()
+        scroll_area = None
+        while parent:
+            if isinstance(parent, QScrollArea):
+                scroll_area = parent
+                break
+            parent = parent.parentWidget()
+        if scroll_area:
+            scroll_area.ensureWidgetVisible(self.content_area, 0, 15)
+
+
+class FirstRunWelcomeDialog(QDialog):
+    def __init__(self, config_mgr: ConfigManager, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Welcome to Kaffeine DVR & TV Guide")
+        self.setMinimumWidth(560)
+        self.config_mgr = config_mgr
+
+        layout = QVBoxLayout(self)
+
+        title_lbl = QLabel("<b>Welcome to Kaffeine DVR & Web TV Guide</b>")
+        title_lbl.setStyleSheet("font-size: 15px;")
+        layout.addWidget(title_lbl)
+
+        desc_lbl = QLabel(
+            "This application enables online TV guide browsing and DVR scheduling for Kaffeine\n"
+            "without blocking system restarts or shutdowns."
+        )
+        desc_lbl.setStyleSheet("color: #6c757d; font-size: 12px;")
+        layout.addWidget(desc_lbl)
+        layout.addSpacing(10)
+
+        # Environment box
+        env_box = QGroupBox("Detected System Environment")
+        env_layout = QFormLayout(env_box)
+
+        local_dt = datetime.now().astimezone()
+        tz_name = local_dt.tzname() or "Local"
+        tz_offset = local_dt.strftime("%z")
+        tz_str = f"{tz_name} (UTC{tz_offset[:3]}:{tz_offset[3:]})"
+
+        env_layout.addRow("System Timezone:", QLabel(f"<b>{tz_str}</b>"))
+        tz_note = QLabel("Showtimes and recording timers automatically align with this local timezone.")
+        tz_note.setWordWrap(True)
+        tz_note.setStyleSheet("color: #6c757d; font-size: 11px;")
+        env_layout.addRow("", tz_note)
+
+        kaffeine_channels = self.config_mgr.get_scanned_kaffeine_channels()
+        if kaffeine_channels:
+            ch_status = f"{len(kaffeine_channels)} scanned channels found in Kaffeine"
+        else:
+            ch_status = "No scanned channels found yet (Kaffeine scan not performed)"
+        env_layout.addRow("Kaffeine Tuner:", QLabel(f"<b>{ch_status}</b>"))
+        layout.addWidget(env_box)
+
+        layout.addSpacing(10)
+
+        # TV Guide and Regional Channel Coverage Explanation
+        guide_info_box = QGroupBox("TV Guide Coverage and Providers")
+        guide_info_layout = QVBoxLayout(guide_info_box)
+
+        guide_info_text = QLabel(
+            "<b>How Guide Data Works:</b><br>"
+            "• <b>National Networks (TVMaze API):</b> Major networks (FOX, CBS, NBC, ABC, PBS, CW) are fetched via free cloud API. "
+            "<i>Note:</i> TVMaze only carries national prime-time feeds; local news, daytime syndicated shows, and midday programming are not listed in TVMaze. "
+            "To get complete 24/7 schedules with local daytime programming, configure their station IDs under TV Passport.<br><br>"
+            "• <b>Local / Regional Channels & 24/7 Affiliates (TV Passport):</b> Full 24/7 schedules (including daytime news and talk shows) and local independent subchannels can be added using:<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;1. <b>TV Passport:</b> Look up your local affiliate station ID on <a href='https://www.tvpassport.com' style='color: #64b5f6; font-weight: bold;'>tvpassport.com</a> "
+            "and enter <code>ChannelName = StationID</code> in <i>Settings &gt; Guide Sources &gt; TV Passport</i>.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;2. <b>Custom XMLTV feed:</b> Connect a local XMLTV file or remote URL (e.g. zap2xml, WebGrab+).<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;3. <b>Schedules Direct:</b> Connect paid official Gracenote listings by ZIP/postal code.<br><br>"
+            "• <b>Using Both Sources Together:</b> Having both TVMaze and TV Passport active is fully supported. Under Hybrid mode, the application seamlessly uses TV Passport for any configured stations while filling in any remaining national networks with TVMaze without duplicates.<br><br>"
+            "• <b>International Coverage:</b> Non-US users can connect any standard XMLTV source or Schedules Direct account."
+        )
+        guide_info_text.setWordWrap(True)
+        guide_info_text.setOpenExternalLinks(True)
+        guide_info_text.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
+        guide_info_text.setStyleSheet("color: #b0bac8; font-size: 11px; line-height: 1.4;")
+        guide_info_layout.addWidget(guide_info_text)
+
+        # Check for unconfigured regional channels
+        unconfigured_regional = self.config_mgr.get_unconfigured_regional_channels()
+        if unconfigured_regional:
+            ch_list_str = ", ".join(unconfigured_regional)
+            notice_lbl = QLabel(
+                f"<div style='border: 1px solid #c8832a; border-radius: 4px; background-color: #2b2214; padding: 6px 10px; color: #ffc107; font-size: 11px;'>"
+                f"<b>Notice:</b> The following scanned channel(s) are local/regional and not covered by national feeds: "
+                f"<b>{ch_list_str}</b>.<br>"
+                f"You can configure their free station ID under <b>Settings &gt; Guide Sources &gt; TV Passport</b> after startup.</div>"
+            )
+            notice_lbl.setWordWrap(True)
+            guide_info_layout.addWidget(notice_lbl)
+
+        layout.addWidget(guide_info_box)
+
+        layout.addSpacing(10)
+        options_box = QGroupBox("Initial Setup Options")
+        options_layout = QVBoxLayout(options_box)
+
+        self.import_check = QCheckBox("Import detected channels from Kaffeine into lineup")
+        self.import_check.setChecked(bool(kaffeine_channels))
+        if not kaffeine_channels:
+            self.import_check.setEnabled(False)
+        options_layout.addWidget(self.import_check)
+
+        self.sync_check = QCheckBox("Perform initial TV guide sync (download next 7 days)")
+        self.sync_check.setChecked(True)
+        options_layout.addWidget(self.sync_check)
+
+        self.service_check = QCheckBox("Enable & start background recording dispatcher service (systemd)")
+        self.service_check.setChecked(True)
+        options_layout.addWidget(self.service_check)
+        layout.addWidget(options_box)
+
+        layout.addSpacing(15)
+        btn_box = QHBoxLayout()
+        self.start_btn = QPushButton("Start Kaffeine DVR")
+        self.start_btn.setStyleSheet("font-weight: bold; padding: 6px 18px;")
+        self.start_btn.clicked.connect(self.accept)
+        btn_box.addStretch()
+        btn_box.addWidget(self.start_btn)
+        layout.addLayout(btn_box)
+
+
+def get_app_icon() -> QIcon:
+    for name in ["kaffeine", "org.kde.kaffeine", "video-television", "media-playback-start"]:
+        icon = QIcon.fromTheme(name)
+        if not icon.isNull():
+            return icon
+    return QIcon()
+
+
+APP_STYLESHEET = """
+/* Top-Level Main Tabs */
+QTabWidget#mainTabs::pane {
+    border: 1px solid #363c4e;
+    border-radius: 6px;
+    background-color: #1a1e2b;
+    top: -1px;
+}
+QTabWidget#mainTabs > QTabBar::tab {
+    background-color: #212635;
+    border: 1px solid #383e50;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    padding: 9px 22px;
+    margin-right: 6px;
+    color: #a4b0c2;
+    font-size: 13px;
+    font-weight: 500;
+}
+QTabWidget#mainTabs > QTabBar::tab:selected {
+    background-color: #2b3345;
+    border: 1.5px solid #55a84c;
+    border-bottom: 3px solid #55a84c;
+    color: #ffffff;
+    font-weight: bold;
+}
+QTabWidget#mainTabs > QTabBar::tab:hover:!selected {
+    background-color: #282f40;
+    border-color: #4c566e;
+    color: #ffffff;
+}
+
+/* Settings Sub-Categories Tabs */
+QTabWidget#settingsSubTabs::pane {
+    border: 1px solid #2e3444;
+    border-radius: 6px;
+    background-color: #171a26;
+    padding: 8px;
+    top: -1px;
+}
+QTabWidget#settingsSubTabs > QTabBar::tab {
+    background-color: #202534;
+    border: 1px solid #383f52;
+    border-radius: 6px;
+    padding: 8px 20px;
+    margin-right: 8px;
+    margin-bottom: 6px;
+    color: #a0acbd;
+    font-size: 12px;
+    font-weight: 500;
+}
+QTabWidget#settingsSubTabs > QTabBar::tab:selected {
+    background-color: #2e374b;
+    border: 1.5px solid #55a84c;
+    color: #ffffff;
+    font-weight: bold;
+}
+QTabWidget#settingsSubTabs > QTabBar::tab:hover:!selected {
+    background-color: #282f42;
+    border-color: #4a546e;
+    color: #ffffff;
+}
+
+/* Scroll area background inside settings */
+QScrollArea, QScrollArea > QWidget, QScrollArea > QWidget > QWidget {
+    background-color: #171a26;
+    border: none;
+}
+
+/* Group Boxes */
+QGroupBox {
+    border: 1px solid #333a4c;
+    border-radius: 6px;
+    margin-top: 14px;
+    padding-top: 14px;
+    font-weight: bold;
+    font-size: 13px;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    padding: 0 8px;
+    color: #d3dae3;
+    font-size: 13px;
+}
+
+/* High-Visibility Custom Scrollbars */
+QScrollBar:vertical {
+    border: 1px solid #2a3040;
+    background: #141722;
+    width: 14px;
+    margin: 0px;
+    border-radius: 7px;
+}
+QScrollBar::handle:vertical {
+    background: #4a5568;
+    min-height: 28px;
+    border-radius: 6px;
+    border: 1px solid #5a667d;
+}
+QScrollBar::handle:vertical:hover {
+    background: #55a84c;
+    border: 1px solid #68c75e;
+}
+QScrollBar::handle:vertical:pressed {
+    background: #43873c;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0px;
+    background: none;
+}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+    background: none;
+}
+
+QScrollBar:horizontal {
+    border: 1px solid #2a3040;
+    background: #141722;
+    height: 14px;
+    margin: 0px;
+    border-radius: 7px;
+}
+QScrollBar::handle:horizontal {
+    background: #4a5568;
+    min-width: 28px;
+    border-radius: 6px;
+    border: 1px solid #5a667d;
+}
+QScrollBar::handle:horizontal:hover {
+    background: #55a84c;
+    border: 1px solid #68c75e;
+}
+QScrollBar::handle:horizontal:pressed {
+    background: #43873c;
+}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    width: 0px;
+    background: none;
+}
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
+    background: none;
+}
+"""
+
+
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Kaffeine DVR & Web TV Guide")
+        self.setWindowIcon(get_app_icon())
+        self.resize(1100, 750)
+        self.setStyleSheet(APP_STYLESHEET)
+
+        self.config_mgr = ConfigManager()
+        self.dbus_client = KaffeineDbusClient()
+        self.queue_mgr = QueueManager()
+        self.guide_service = GuideService(channel_map=self.config_mgr.channel_map, config_mgr=self.config_mgr)
+        self.rules_engine = RulesEngine(self.config_mgr, self.dbus_client, self.guide_service)
+        self.watcher = Watcher(self.dbus_client, self.queue_mgr)
+
+        self.init_ui()
+        self.setup_timers()
+        self.refresh_all()
+
+        # Check for first-run setup wizard for new users
+        QTimer.singleShot(600, self.check_first_run)
+
+        # Run health check quietly on startup to populate settings dashboard
+        QTimer.singleShot(1500, lambda: self.test_all_sources_health(silent=True))
+
+    def init_ui(self):
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        main_layout = QVBoxLayout(central_widget)
+
+        # Status Banner
+        main_layout.addLayout(self.create_status_banner())
+
+        # Main Tabs
+        self.tabs = QTabWidget()
+        self.tabs.setObjectName("mainTabs")
+        self.tabs.addTab(self.create_recordings_tab(), "Recordings Schedule")
+        self.tabs.addTab(self.create_guide_tab(), "Web TV Guide Browser")
+        self.tabs.addTab(self.create_rules_tab(), "Auto-Record Rules")
+        self.tabs.addTab(self.create_settings_tab(), "Settings")
+        self.tabs.addTab(self.create_help_tab(), "Help and Information")
+        main_layout.addWidget(self.tabs)
+
+        # Status Bar
+        self.status_bar = QStatusBar()
+        self.setStatusBar(self.status_bar)
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setMaximumWidth(200)
+        self.progress_bar.setVisible(False)
+        self.status_bar.addPermanentWidget(self.progress_bar)
+
+    def create_status_banner(self) -> QHBoxLayout:
+        banner = QHBoxLayout()
+
+        # Kaffeine status badge
+        self.kaffeine_status_lbl = QLabel("Checking Kaffeine...")
+        self.kaffeine_status_lbl.setStyleSheet("font-weight: bold; padding: 4px 8px; border-radius: 4px;")
+        banner.addWidget(self.kaffeine_status_lbl)
+
+        self.launch_kaffeine_btn = QPushButton("Launch Kaffeine")
+        self.launch_kaffeine_btn.clicked.connect(self.launch_kaffeine)
+        banner.addWidget(self.launch_kaffeine_btn)
+
+        banner.addSpacing(20)
+
+        # Guide status badge
+        self.guide_status_lbl = QLabel("TV Guide Status: Unknown")
+        banner.addWidget(self.guide_status_lbl)
+
+        self.sync_guide_btn = QPushButton("Sync Guide Now")
+        self.sync_guide_btn.clicked.connect(self.sync_guide)
+        banner.addWidget(self.sync_guide_btn)
+
+        banner.addStretch()
+        return banner
+
+    # ------------------ TAB 1: RECORDINGS ------------------
+    def create_recordings_tab(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        # Controls bar
+        ctrl_bar = QHBoxLayout()
+        self.refresh_rec_btn = QPushButton("Refresh Schedule")
+        self.refresh_rec_btn.clicked.connect(self.refresh_recordings)
+        ctrl_bar.addWidget(self.refresh_rec_btn)
+
+        self.add_rec_btn = QPushButton("Add Manual Recording")
+        self.add_rec_btn.clicked.connect(self.add_manual_recording)
+        ctrl_bar.addWidget(self.add_rec_btn)
+
+        self.cancel_rec_btn = QPushButton("Cancel Selected Recording")
+        self.cancel_rec_btn.setStyleSheet("color: #d9534f;")
+        self.cancel_rec_btn.clicked.connect(self.cancel_selected_recording)
+        ctrl_bar.addWidget(self.cancel_rec_btn)
+
+        ctrl_bar.addStretch()
+        layout.addLayout(ctrl_bar)
+
+        # Recordings Table
+        self.rec_table = QTableWidget()
+        self.rec_table.setColumnCount(5)
+        self.rec_table.setHorizontalHeaderLabels(["Title", "Schedule", "Channel", "Duration", "Status"])
+        self.rec_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.rec_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.rec_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self.rec_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        self.rec_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        self.rec_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.rec_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        layout.addWidget(self.rec_table)
+
+        return widget
+
+    # ------------------ TAB 2: TV GUIDE BROWSER ------------------
+    def create_guide_tab(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        # Filter bar
+        filter_bar = QHBoxLayout()
+        filter_bar.addWidget(QLabel("Search:"))
+        self.guide_search_input = QLineEdit()
+        self.guide_search_input.setPlaceholderText("Filter by show title, episode, or description...")
+        self.guide_search_input.textChanged.connect(self.filter_guide)
+        filter_bar.addWidget(self.guide_search_input)
+
+        filter_bar.addWidget(QLabel("Channel:"))
+        self.guide_channel_combo = QComboBox()
+        self.guide_channel_combo.addItem("All")
+        channels = sorted(list(set(self.config_mgr.channel_map.values())))
+        self.guide_channel_combo.addItems(channels)
+        self.guide_channel_combo.currentIndexChanged.connect(self.filter_guide)
+        filter_bar.addWidget(self.guide_channel_combo)
+
+        filter_bar.addWidget(QLabel("Date:"))
+        self.guide_date_combo = QComboBox()
+        self.guide_date_combo.addItem("All Upcoming", None)
+        today = date.today()
+        for i in range(14):
+            d = today + timedelta(days=i)
+            label = "Today" if i == 0 else ("Tomorrow" if i == 1 else d.strftime("%a, %b %d"))
+            self.guide_date_combo.addItem(label, d.strftime("%Y-%m-%d"))
+        self.guide_date_combo.currentIndexChanged.connect(self.filter_guide)
+        filter_bar.addWidget(self.guide_date_combo)
+
+        layout.addLayout(filter_bar)
+
+        splitter = QSplitter(Qt.Orientation.Vertical)
+
+        # Guide table
+        self.guide_table = QTableWidget()
+        self.guide_table.setColumnCount(5)
+        self.guide_table.setHorizontalHeaderLabels(["Start Time", "Channel", "Show Title", "Episode Title", "Duration"])
+        self.guide_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self.guide_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.guide_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        self.guide_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        self.guide_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        self.guide_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.guide_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.guide_table.itemSelectionChanged.connect(self.on_guide_selection_changed)
+        splitter.addWidget(self.guide_table)
+
+        # Detail Panel
+        detail_widget = QWidget()
+        detail_layout = QVBoxLayout(detail_widget)
+        self.guide_detail_title = QLabel("Select a program to view details")
+        self.guide_detail_title.setStyleSheet("font-weight: bold; font-size: 14px;")
+        detail_layout.addWidget(self.guide_detail_title)
+
+        self.guide_detail_text = QTextEdit()
+        self.guide_detail_text.setReadOnly(True)
+        detail_layout.addWidget(self.guide_detail_text)
+
+        action_bar = QHBoxLayout()
+        self.record_guide_btn = QPushButton("Record This Program")
+        self.record_guide_btn.setStyleSheet("font-weight: bold;")
+        self.record_guide_btn.clicked.connect(self.record_selected_guide_item)
+        action_bar.addWidget(self.record_guide_btn)
+
+        self.add_rule_guide_btn = QPushButton("Auto-Record This Series")
+        self.add_rule_guide_btn.clicked.connect(self.add_rule_from_selected_guide_item)
+        action_bar.addWidget(self.add_rule_guide_btn)
+
+        action_bar.addStretch()
+        detail_layout.addLayout(action_bar)
+        splitter.addWidget(detail_widget)
+
+        splitter.setSizes([450, 150])
+        layout.addWidget(splitter)
+        return widget
+
+    # ------------------ TAB 3: AUTO-RECORD RULES ------------------
+    def create_rules_tab(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        ctrl_bar = QHBoxLayout()
+        self.add_rule_btn = QPushButton("Add New Rule")
+        self.add_rule_btn.clicked.connect(self.add_rule_dialog)
+        ctrl_bar.addWidget(self.add_rule_btn)
+
+        self.edit_rule_btn = QPushButton("Edit Rule")
+        self.edit_rule_btn.clicked.connect(self.edit_rule_dialog)
+        ctrl_bar.addWidget(self.edit_rule_btn)
+
+        self.remove_rule_btn = QPushButton("Remove Selected Rule")
+        self.remove_rule_btn.clicked.connect(self.remove_selected_rule)
+        ctrl_bar.addWidget(self.remove_rule_btn)
+
+        self.run_rules_btn = QPushButton("Run Rules and Schedule Now")
+        self.run_rules_btn.clicked.connect(self.run_rules)
+        ctrl_bar.addWidget(self.run_rules_btn)
+
+        ctrl_bar.addStretch()
+        layout.addLayout(ctrl_bar)
+
+        self.rules_table = QTableWidget()
+        self.rules_table.setColumnCount(4)
+        self.rules_table.setHorizontalHeaderLabels(["ID", "Title / Keyword", "Channel", "Enabled"])
+        self.rules_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.rules_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.rules_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.rules_table.itemDoubleClicked.connect(lambda item: self.edit_rule_dialog())
+        layout.addWidget(self.rules_table)
+
+        return widget
+
+    # ------------------ TAB 4: SETTINGS (SUB-CATEGORIZED) ------------------
+    def create_settings_tab(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        self.settings_subtabs = QTabWidget()
+        self.settings_subtabs.setObjectName("settingsSubTabs")
+        self.settings_subtabs.addTab(self.create_settings_guide_tab(), "Guide Sources and Health")
+        self.settings_subtabs.addTab(self.create_settings_channels_tab(), "Channels Lineup")
+        self.settings_subtabs.addTab(self.create_settings_automation_tab(), "Automation and DVR")
+        layout.addWidget(self.settings_subtabs)
+
+        return widget
+
+    # Subcategory 1: Guide Sources and Health
+    def create_settings_guide_tab(self) -> QWidget:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        container = QWidget()
+        layout = QVBoxLayout(container)
+
+        # 1. Active Provider Selector
+        prov_box = QGroupBox("Active Guide Provider")
+        prov_layout = QHBoxLayout(prov_box)
+        prov_layout.addWidget(QLabel("Primary Guide Engine:"))
+
+        self.provider_combo = QComboBox()
+        self.provider_combo.addItem("Free Hybrid (TVMaze National + TV Passport Regional)", "hybrid")
+        self.provider_combo.addItem("TV Passport (Web Station Directory)", "tvpassport")
+        self.provider_combo.addItem("Custom XMLTV Feed (Local File or Remote URL)", "xmltv")
+        self.provider_combo.addItem("Schedules Direct (Paid Official Gracenote API)", "schedules_direct")
+
+        # Set current provider index
+        curr_prov = self.config_mgr.guide_provider
+        idx = self.provider_combo.findData(curr_prov)
+        if idx >= 0:
+            self.provider_combo.setCurrentIndex(idx)
+        prov_layout.addWidget(self.provider_combo)
+
+        save_prov_btn = QPushButton("Save Active Provider")
+        save_prov_btn.clicked.connect(self.save_active_provider)
+        prov_layout.addWidget(save_prov_btn)
+        prov_layout.addStretch()
+        layout.addWidget(prov_box)
+
+        # 2. Live Health Monitor
+        health_box = QGroupBox("Guide Sources Health and Connectivity Monitor")
+        health_layout = QVBoxLayout(health_box)
+
+        monitor_desc = QLabel(
+            "Live monitoring of configured TV guide backends. Check status codes, latency, and program contributions."
+        )
+        monitor_desc.setStyleSheet("color: #6c757d; font-size: 11px;")
+        health_layout.addWidget(monitor_desc)
+
+        self.health_table = QTableWidget()
+        self.health_table.setColumnCount(6)
+        self.health_table.setHorizontalHeaderLabels([
+            "Source Name", "Type", "Status", "Latency", "Cached Programs", "Diagnostic Details"
+        ])
+        self.health_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self.health_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.health_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self.health_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        self.health_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        self.health_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
+        self.health_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.health_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.health_table.verticalHeader().setVisible(False)
+        self.health_table.setMinimumHeight(175)
+        self.health_table.cellDoubleClicked.connect(lambda r, c: self.test_all_sources_health(silent=False))
+        health_layout.addWidget(self.health_table)
+
+        btn_row = QHBoxLayout()
+        self.test_health_btn = QPushButton("Test All Sources Now")
+        self.test_health_btn.clicked.connect(lambda: self.test_all_sources_health(silent=False))
+        btn_row.addWidget(self.test_health_btn)
+        btn_row.addStretch()
+        health_layout.addLayout(btn_row)
+        layout.addWidget(health_box)
+
+        # 3. Source Configurations (Collapsible Sections)
+        # Collapsible 1: TV Passport Custom Stations (Above Custom XMLTV)
+        self.pass_collapsible = CollapsibleSection("TV Passport Regional Over-The-Air Stations", initially_expanded=False)
+
+        # Header warning banner visible even when section is collapsed
+        self.passport_header_warning = QLabel()
+        self.passport_header_warning.setStyleSheet(
+            "QLabel { "
+            "  background-color: #3b2810; "
+            "  color: #ffc107; "
+            "  border: 1px solid #d4882c; "
+            "  border-radius: 4px; "
+            "  padding: 4px 10px; "
+            "  font-size: 11px; "
+            "  font-weight: bold; "
+            "}"
+        )
+        self.passport_header_warning.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.passport_header_warning.setToolTip("Click to open and configure TV Passport station IDs")
+        self.passport_header_warning.mousePressEvent = lambda ev: self.pass_collapsible.toggle_btn.click()
+        self.passport_header_warning.setVisible(False)
+        self.pass_collapsible.addHeaderWidget(self.passport_header_warning)
+
+        pass_content = QWidget()
+        pass_layout = QVBoxLayout(pass_content)
+
+        pass_instructions = QLabel(
+            "<b>24/7 Broadcast Station & Affiliate Guide (TV Passport):</b><br>"
+            "TV Passport provides complete 24/7 listings with local affiliate morning-to-night syndicated programming. "
+            "Having both TV Passport and TVMaze active together is completely supported: "
+            "under Free Hybrid mode, adding a station ID here will automatically supersede national TVMaze data for that specific channel, "
+            "giving you full local affiliate listings while TVMaze continues providing automatic national listings for any unmapped channels without duplicates.<br><br>"
+            "<b>Instructions:</b><br>"
+            "1. Visit <a href='https://www.tvpassport.com' style='color: #64b5f6; font-weight: bold;'>tvpassport.com</a> in your browser and search for your station or city.<br>"
+            "2. Select your channel to open its listings page. Look at the web address (URL):<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;<code>https://www.tvpassport.com/tv-listings/stations/station/<b>1812</b>/2026-10-07</code><br>"
+            "3. The number right after <code>/station/</code> is your station ID (e.g. <b>1812</b>).<br>"
+            "4. Enter one mapping per line below using the format: <b>KaffeineChannelName = StationID</b> (e.g. <code>NBC = 1812</code> or <code>CW = 11611</code>).<br><br>"
+            "<b>Automatic Sync:</b> When you click <i>Save Station IDs</i>, Kaffeine DVR immediately syncs guide listings in the background without needing a manual sync."
+        )
+        pass_instructions.setWordWrap(True)
+        pass_instructions.setOpenExternalLinks(True)
+        pass_instructions.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
+        pass_instructions.setStyleSheet("color: #b0bac8; font-size: 11px; line-height: 1.4;")
+        pass_layout.addWidget(pass_instructions)
+
+        self.passport_notice = QLabel()
+        self.passport_notice.setWordWrap(True)
+        self.passport_notice.setOpenExternalLinks(True)
+        self.passport_notice.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
+        pass_layout.addWidget(self.passport_notice)
+        self.update_tvpassport_notice()
+
+        self.passport_stations_text = QTextEdit()
+        self.passport_stations_text.setPlaceholderText("Example:\nNBC = 1812\nABC = 4163\nFox = 1809")
+        stations_lines = [f"{k} = {v}" for k, v in self.config_mgr.tvpassport_stations.items()]
+        self.passport_stations_text.setPlainText("\n".join(stations_lines))
+        self.passport_stations_text.setMinimumHeight(200)
+        pass_layout.addWidget(self.passport_stations_text)
+
+        save_pass_btn = QPushButton("Save Station IDs")
+        save_pass_btn.clicked.connect(self.save_tvpassport_settings)
+        pass_layout.addWidget(save_pass_btn)
+        self.pass_collapsible.setContentLayout(pass_layout)
+        layout.addWidget(self.pass_collapsible)
+
+        # Collapsible 2: XMLTV
+        self.xml_collapsible = CollapsibleSection("Custom XMLTV Provider (Manual / Alternative Feed)", initially_expanded=False)
+        xml_content = QWidget()
+        xml_layout = QFormLayout(xml_content)
+        xml_desc = QLabel("Supports local XMLTV files (e.g. from zap2xml or WebGrab+) or remote HTTP/HTTPS XMLTV URLs.")
+        xml_desc.setStyleSheet("color: #6c757d; font-size: 11px;")
+        xml_layout.addRow(xml_desc)
+
+        file_row = QHBoxLayout()
+        self.xmltv_input = QLineEdit(self.config_mgr.xmltv_path_or_url)
+        self.xmltv_input.setPlaceholderText("Path to .xml / .xmltv file or URL (http://...)")
+        file_row.addWidget(self.xmltv_input)
+
+        browse_btn = QPushButton("Browse...")
+        browse_btn.clicked.connect(self.browse_xmltv_file)
+        file_row.addWidget(browse_btn)
+
+        test_xml_btn = QPushButton("Test XMLTV Feed")
+        test_xml_btn.clicked.connect(self.test_xmltv_feed)
+        file_row.addWidget(test_xml_btn)
+        xml_layout.addRow("Feed Path / URL:", file_row)
+
+        save_xml_btn = QPushButton("Save XMLTV Setting")
+        save_xml_btn.clicked.connect(self.save_xmltv_settings)
+        xml_layout.addRow(save_xml_btn)
+        self.xml_collapsible.setContentLayout(xml_layout)
+        layout.addWidget(self.xml_collapsible)
+
+        # Collapsible 3: Schedules Direct
+        self.sd_collapsible = CollapsibleSection("Schedules Direct (Paid Official Gracenote API)", initially_expanded=False)
+        sd_content = QWidget()
+        sd_layout = QFormLayout(sd_content)
+        sd_desc = QLabel("Official non-profit EPG service (~$35/year) providing direct Gracenote listings with high reliability.")
+        sd_desc.setStyleSheet("color: #6c757d; font-size: 11px;")
+        sd_layout.addRow(sd_desc)
+
+        sd_data = self.config_mgr.schedules_direct
+        self.sd_user_input = QLineEdit(sd_data.get("username", ""))
+        self.sd_pass_input = QLineEdit(sd_data.get("password", ""))
+        self.sd_pass_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.sd_lineup_input = QLineEdit(sd_data.get("lineup", ""))
+        self.sd_lineup_input.setPlaceholderText("Lineup ID or Postal Code (e.g. USA-OTA-85364)")
+
+        sd_layout.addRow("Username:", self.sd_user_input)
+        sd_layout.addRow("Password:", self.sd_pass_input)
+        sd_layout.addRow("Lineup / Zip:", self.sd_lineup_input)
+
+        sd_btn_row = QHBoxLayout()
+        verify_sd_btn = QPushButton("Verify Account Login")
+        verify_sd_btn.clicked.connect(self.verify_sd_account)
+        sd_btn_row.addWidget(verify_sd_btn)
+
+        save_sd_btn = QPushButton("Save Schedules Direct Credentials")
+        save_sd_btn.clicked.connect(self.save_sd_settings)
+        sd_btn_row.addWidget(save_sd_btn)
+        sd_btn_row.addStretch()
+        sd_layout.addRow(sd_btn_row)
+        self.sd_collapsible.setContentLayout(sd_layout)
+        layout.addWidget(self.sd_collapsible)
+
+        layout.addStretch()
+        scroll.setWidget(container)
+        return scroll
+
+    # Subcategory 2: Channels Lineup
+    def create_settings_channels_tab(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        layout.addWidget(QLabel("<b>Kaffeine Channel & Guide Network Lineup</b>:"))
+        desc = QLabel(
+            "Map external guide broadcast network names to the exact channel names tuned in your Kaffeine channel scan.\n"
+            "Format: Guide Network Name = Kaffeine Channel Name (e.g. FOX = Fox, The CW = CW6)"
+        )
+        desc.setStyleSheet("color: #6c757d; font-size: 11px;")
+        layout.addWidget(desc)
+
+        self.mapping_text = QTextEdit()
+        mapping_str = "\n".join([f"{k} = {v}" for k, v in self.config_mgr.channel_map.items()])
+        self.mapping_text.setPlainText(mapping_str)
+        self.mapping_text.setMinimumHeight(200)
+        layout.addWidget(self.mapping_text)
+
+        btn_row = QHBoxLayout()
+        import_kaffeine_btn = QPushButton("Import Channels from Kaffeine")
+        import_kaffeine_btn.clicked.connect(lambda: self.import_channels_from_kaffeine(silent=False))
+        btn_row.addWidget(import_kaffeine_btn)
+
+        save_mapping_btn = QPushButton("Save Channel Lineup")
+        save_mapping_btn.clicked.connect(self.save_channel_mapping)
+        btn_row.addWidget(save_mapping_btn)
+
+        reset_mapping_btn = QPushButton("Reset to Antenna Defaults")
+        reset_mapping_btn.clicked.connect(self.reset_channel_mapping_defaults)
+        btn_row.addWidget(reset_mapping_btn)
+
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
+
+        layout.addStretch()
+        return widget
+
+    # Subcategory 3: Automation & DVR
+    def create_settings_automation_tab(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        layout.addWidget(QLabel("<b>DVR Automation & Polling Frequencies</b>:"))
+        form = QFormLayout()
+
+        self.lead_time_spin = QSpinBox()
+        self.lead_time_spin.setRange(1, 60)
+        self.lead_time_spin.setValue(self.config_mgr.lead_time_mins)
+        self.lead_time_spin.setSuffix(" minutes")
+        lead_time_lbl = QLabel(
+            "Minutes before show start time to auto-launch Kaffeine and arm recording timer.\n"
+            "Keeping this low (e.g. 5m) prevents Kaffeine from blocking system reboots and shutdowns."
+        )
+        lead_time_lbl.setStyleSheet("color: #6c757d; font-size: 11px;")
+        form.addRow("Just-In-Time Lead Time:", self.lead_time_spin)
+        form.addRow("", lead_time_lbl)
+
+        self.interval_spin = QSpinBox()
+        self.interval_spin.setRange(30, 600)
+        self.interval_spin.setSingleStep(30)
+        self.interval_spin.setValue(self.config_mgr.watcher_interval_seconds)
+        self.interval_spin.setSuffix(" seconds")
+        interval_lbl = QLabel("How often the background watcher service checks the DVR queue for upcoming shows.")
+        interval_lbl.setStyleSheet("color: #6c757d; font-size: 11px;")
+        form.addRow("Watcher Polling Frequency:", self.interval_spin)
+        form.addRow("", interval_lbl)
+
+        self.days_spin = QSpinBox()
+        self.days_spin.setRange(1, 14)
+        self.days_spin.setValue(self.config_mgr.guide_days_ahead)
+        self.days_spin.setSuffix(" days")
+        days_lbl = QLabel("How many future days to query and cache in the local SQLite guide database.")
+        days_lbl.setStyleSheet("color: #6c757d; font-size: 11px;")
+        form.addRow("Guide Cache Horizon:", self.days_spin)
+        form.addRow("", days_lbl)
+
+        self.launch_mode_combo = QComboBox()
+        self.launch_mode_combo.addItem("Minimized to Taskbar (Panel)", "taskbar")
+        self.launch_mode_combo.addItem("Minimize to System Tray (-m minimal mode)", "tray")
+        self.launch_mode_combo.addItem("Normal Window (Visible on desktop)", "normal")
+        cur_mode = self.config_mgr.launch_mode
+        mode_idx = self.launch_mode_combo.findData(cur_mode)
+        if mode_idx >= 0:
+            self.launch_mode_combo.setCurrentIndex(mode_idx)
+
+        launch_mode_lbl = QLabel(
+            "Controls how Kaffeine starts when armed for recording:\n"
+            "• Minimized to Taskbar: Quietly minimizes to your panel taskbar without touching the tray.\n"
+            "• Minimize to System Tray: Starts in minimal mode (-m) and docks into the KDE tray (if enabled in Kaffeine).\n"
+            "• Normal Window: Opens as an active visible window on your desktop."
+        )
+        launch_mode_lbl.setStyleSheet("color: #8c98aa; font-size: 11px;")
+        form.addRow("Window Launch Mode:", self.launch_mode_combo)
+        form.addRow("", launch_mode_lbl)
+
+        self.notify_check = QCheckBox("Show Persistent Desktop Notification on Record Launch")
+        self.notify_check.setChecked(self.config_mgr.enable_desktop_notifications)
+        notify_lbl = QLabel(
+            "Sends a desktop notification via notify-send when Kaffeine is launched and armed for a scheduled show.\n"
+            "The notification persists in your notification center until explicitly dismissed."
+        )
+        notify_lbl.setStyleSheet("color: #6c757d; font-size: 11px;")
+        form.addRow("Notifications:", self.notify_check)
+        form.addRow("", notify_lbl)
+
+        save_auto_btn = QPushButton("Save Automation Settings")
+        save_auto_btn.clicked.connect(self.save_automation_settings)
+        form.addRow(save_auto_btn)
+
+        layout.addLayout(form)
+        layout.addSpacing(15)
+
+        # Service Management Section
+        service_box = QGroupBox("Unified Background Service (kaffeine-dvr-watcher.service)")
+        service_layout = QVBoxLayout(service_box)
+        
+        self.service_status_lbl = QLabel("Checking service status...")
+        self.service_status_lbl.setStyleSheet("font-weight: bold; font-size: 12px;")
+        service_layout.addWidget(self.service_status_lbl)
+
+        svc_desc = QLabel(
+            "The background daemon dispatches recordings just-in-time and synchronizes guide data periodically.\n"
+            "It runs under systemd user mode and persists automatically across system reboots."
+        )
+        svc_desc.setStyleSheet("color: #8c98aa; font-size: 11px;")
+        service_layout.addWidget(svc_desc)
+
+        svc_btn_row = QHBoxLayout()
+        self.start_svc_btn = QPushButton("Start & Enable Service")
+        self.start_svc_btn.clicked.connect(self.start_background_service)
+        svc_btn_row.addWidget(self.start_svc_btn)
+
+        self.restart_svc_btn = QPushButton("Restart Service")
+        self.restart_svc_btn.clicked.connect(self.restart_background_service)
+        svc_btn_row.addWidget(self.restart_svc_btn)
+        svc_btn_row.addStretch()
+        service_layout.addLayout(svc_btn_row)
+
+        layout.addWidget(service_box)
+        layout.addStretch()
+        return widget
+
+    # ------------------ TAB 5: HELP AND INFORMATION ------------------
+    def create_help_tab(self) -> QWidget:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setSpacing(14)
+
+        # Header Title
+        title_box = QWidget()
+        title_layout = QVBoxLayout(title_box)
+        title_layout.setContentsMargins(0, 0, 0, 0)
+        h1 = QLabel("<b>Kaffeine DVR and TV Guide - Help and Reference Guide</b>")
+        h1.setStyleSheet("font-size: 17px; color: #ffffff;")
+        h1_sub = QLabel(
+            "Overview of features, automatic scheduling, power management, and TV guide configuration."
+        )
+        h1_sub.setStyleSheet("color: #9eb0c6; font-size: 13px;")
+        title_layout.addWidget(h1)
+        title_layout.addWidget(h1_sub)
+        layout.addWidget(title_box)
+
+        # Section 1: Core Concept and Why this App Exists
+        concept_box = QGroupBox("1. How Kaffeine DVR Scheduling Works (Safe Reboots and Shutdowns)")
+        concept_layout = QVBoxLayout(concept_box)
+        concept_text = QLabel(
+            "• <b>The Problem with Native Kaffeine Timers:</b> Whenever timers are active directly inside Kaffeine, "
+            "Kaffeine inhibits Linux system restarts and shutdowns to prevent losing recordings.<br><br>"
+            "• <b>Just-In-Time (JIT) Dispatching:</b> This application stores upcoming recordings in an external queue "
+            "(<code>recordings_queue.sqlite</code>) rather than inside Kaffeine immediately. Kaffeine remains clean with 0 active timers.<br><br>"
+            "• <b>Unified Background Watcher Daemon:</b> A single background service (<code>kaffeine-dvr-watcher.service</code>) handles both queue monitoring and periodic TV guide synchronizations. "
+            "When a show is about to start (e.g. 5 minutes before showtime), it automatically launches Kaffeine minimized to your taskbar "
+            "and arms the recording via D-Bus Just-In-Time.<br><br>"
+            "• <b>Safe Power Operations:</b> You can reboot or power off your computer at any time without Kaffeine freezing or blocking systemd."
+        )
+        concept_text.setWordWrap(True)
+        concept_text.setStyleSheet("color: #cdd7e5; font-size: 13px; line-height: 1.6;")
+        concept_layout.addWidget(concept_text)
+        layout.addWidget(concept_box)
+
+        # Section 2: Guide Sources & Coverage
+        sources_box = QGroupBox("2. TV Guide Coverage and Providers")
+        sources_layout = QVBoxLayout(sources_box)
+        sources_text = QLabel(
+            "• <b>National Broadcast Networks (Free & Automatic):</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;Networks like <b>FOX, CBS, NBC, ABC, and The CW</b> are synchronized automatically through the free TVMaze API. "
+            "No account or manual key is required. <b>Note:</b> TVMaze only catalogs national network feeds. "
+            "Local news, daytime syndicated shows, and midday programming are not listed in TVMaze; to obtain complete 24/7 schedules with local programming, "
+            "add your local station IDs under TV Passport.<br><br>"
+            "• <b>Local / Regional Independent Subchannels & 24/7 Affiliates:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;Channels without national feeds (e.g. independent stations) or national channels where you want complete 24/7 local affiliate schedules can be configured in <i>Settings &gt; Guide Sources &gt; TV Passport</i> using:<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;1. <b>TV Passport:</b> Look up your station on <a href='https://www.tvpassport.com' style='color: #64b5f6; font-weight: bold;'>tvpassport.com</a>, "
+            "copy the numeric station ID from the URL, and enter <code>ChannelName = StationID</code>.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;<b>No manual sync required:</b> Clicking <i>Save Station IDs</i> automatically verifies the station and triggers background guide synchronization immediately.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;2. <b>Custom XMLTV Feed:</b> Connect a local XMLTV file or remote URL (generated by zap2xml, WebGrab+, etc.).<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;3. <b>Schedules Direct (Paid):</b> Connect official Gracenote listings by entering your Postal/Zip code.<br><br>"
+            "• <b>Running Both Sources Together (Hybrid Mode):</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;Having both TVMaze and TV Passport active simultaneously is completely supported and recommended. "
+            "Under the default <i>Free Hybrid</i> mode, TV Passport automatically takes precedence for any channels configured with station IDs to provide 24/7 continuous local affiliate schedules, "
+            "while TVMaze automatically fills in guide data for any other national channels without duplicate show rows.<br><br>"
+            "• <b>International Coverage:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;Non-US users can connect any standard XMLTV source (local file or web URL) or Schedules Direct account for full EPG listings."
+        )
+        sources_text.setWordWrap(True)
+        sources_text.setOpenExternalLinks(True)
+        sources_text.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
+        sources_text.setStyleSheet("color: #cdd7e5; font-size: 13px; line-height: 1.6;")
+        sources_layout.addWidget(sources_text)
+        layout.addWidget(sources_box)
+
+        # Section 3: Step-by-Step Feature Walkthrough
+        guide_box = QGroupBox("3. Feature Walkthrough")
+        guide_layout = QVBoxLayout(guide_box)
+        guide_text = QLabel(
+            "• <b>Recordings Schedule Tab:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;View all upcoming queued recordings, their scheduled start time, duration, and status. "
+            "You can manually add one-off recordings or cancel scheduled shows here.<br><br>"
+            "• <b>Web TV Guide Browser Tab:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;Browse cached 7-day TV listings by date and channel. Filter by show title, view episode summaries, "
+            "and click <i>Record This Program</i> or <i>Auto-Record This Series</i> directly from the listings.<br><br>"
+            "• <b>Auto-Record Rules Tab:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;Create series recording rules (e.g. record any show titled <i>'NBA Basketball'</i> or <i>'News'</i>). "
+            "The system checks the guide periodically and automatically schedules any newly matching episodes. Use <i>Edit Rule</i> "
+            "or double-click any row to update rule keywords, channel filters, or enable/disable them.<br><br>"
+            "• <b>Settings Tab:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;<b>Guide Sources & Health:</b> Monitor provider status codes and latency in real time.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;<b>Channels Lineup:</b> Import your scanned digital TV channels directly from Kaffeine with one click.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;<b>Automation & DVR:</b> Configure lead time (default: 5 min), taskbar minimization, and persistent desktop notifications."
+        )
+        guide_text.setWordWrap(True)
+        guide_text.setStyleSheet("color: #cdd7e5; font-size: 13px; line-height: 1.6;")
+        guide_layout.addWidget(guide_text)
+        layout.addWidget(guide_box)
+
+        # Section 4: Background Service and System Commands
+        services_box = QGroupBox("4. Unified Background Service and Commands")
+        services_layout = QVBoxLayout(services_box)
+        services_text = QLabel(
+            "• <b>Unified Background Daemon:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;<code>kaffeine-dvr-watcher.service</code> : Single unified background daemon that monitors the recording queue "
+            "and periodically synchronizes guide data (default every 6 hours).<br><br>"
+            "• <b>Configurable Window Launch Modes:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;In <i>Settings &gt; Automation &amp; DVR</i>, you can choose how Kaffeine opens when armed for recording:<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;1. <b>Minimized to Taskbar (Default):</b> Minimizes quietly to your KDE taskbar panel via <code>kdotool</code> (or <code>xdotool</code>). "
+            "Preserves menus and toolbars, avoids system tray clutter, and never affects manual launches from your pinned icon.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;2. <b>Minimize to System Tray:</b> Starts with the <code>-m</code> flag (minimal mode) to dock into the KDE system tray (if enabled in Kaffeine).<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;3. <b>Normal Window:</b> Opens as a standard visible window on your desktop.<br><br>"
+            "• <b>Command Line Tool:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;<code>kaffeine-dvr --status</code> : Print provider health, cache counts, and Kaffeine status.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;<code>kaffeine-dvr --list</code>   : List all scheduled recordings in the DVR queue.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;<code>kaffeine-dvr --sync</code>   : Force an immediate TV guide download.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;<code>kaffeine-dvr --rules</code>  : Evaluate series auto-record rules immediately.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;<code>kaffeine-dvr --watch</code>  : Run the watcher dispatcher in foreground debug mode.<br><br>"
+            "• <b>Managing the Background Service:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;<code>systemctl --user status kaffeine-dvr-watcher.service</code> : Check daemon running state.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;<code>systemctl --user restart kaffeine-dvr-watcher.service</code> : Restart the background daemon.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;<code>journalctl --user -u kaffeine-dvr-watcher.service -f</code> : Follow live daemon logs."
+        )
+        services_text.setWordWrap(True)
+        services_text.setStyleSheet("color: #cdd7e5; font-size: 13px; line-height: 1.6;")
+        services_layout.addWidget(services_text)
+        layout.addWidget(services_box)
+
+        layout.addStretch()
+        scroll.setWidget(container)
+        return scroll
+
+    # ------------------ SETTINGS ACTIONS ------------------
+    def save_active_provider(self):
+        new_prov = self.provider_combo.currentData()
+        self.config_mgr.guide_provider = new_prov
+        prov_name = self.provider_combo.currentText()
+        self.test_all_sources_health(silent=True)
+        self.status_bar.showMessage(f"Active guide provider set to: {prov_name}", 4000)
+        QMessageBox.information(self, "Saved", f"Active guide provider switched to:\n{prov_name}")
+
+    def test_all_sources_health(self, silent: bool = False):
+        if not silent:
+            self.test_health_btn.setEnabled(False)
+            self.status_bar.showMessage("Testing connection and latency for all guide sources...")
+
+        self.health_worker = HealthCheckWorker(self.guide_service)
+        self.health_worker.finished.connect(lambda res: self.on_health_check_finished(res, silent))
+        self.health_worker.start()
+
+    def on_health_check_finished(self, results: Dict[str, Any], silent: bool):
+        self.test_health_btn.setEnabled(True)
+        if not results:
+            if not silent:
+                self.status_bar.showMessage("Health check failed.", 4000)
+            return
+
+        self.health_table.setRowCount(len(results))
+        for row, (key, data) in enumerate(results.items()):
+            name = data.get("name", key)
+            ptype = data.get("provider_type", "API")
+            status = data.get("status", "Unknown")
+            latency = data.get("latency_ms", 0)
+            cached = data.get("cached_shows", 0)
+            details = data.get("details", "")
+
+            # Latency display
+            lat_str = f"{latency} ms" if latency > 0 else "-"
+
+            # Status item with color styling
+            status_item = QTableWidgetItem(status)
+            status_item.setFont(QFont("", -1, QFont.Weight.Bold))
+            if status == "Online":
+                status_item.setForeground(QColor("#28a745"))
+            elif status == "Degraded":
+                status_item.setForeground(QColor("#fd7e14"))
+            elif status == "Unconfigured":
+                status_item.setForeground(QColor("#6c757d"))
+            else:
+                status_item.setForeground(QColor("#dc3545"))
+
+            self.health_table.setItem(row, 0, QTableWidgetItem(name))
+            self.health_table.setItem(row, 1, QTableWidgetItem(ptype))
+            self.health_table.setItem(row, 2, status_item)
+            self.health_table.setItem(row, 3, QTableWidgetItem(lat_str))
+            self.health_table.setItem(row, 4, QTableWidgetItem(f"{cached} shows"))
+            self.health_table.setItem(row, 5, QTableWidgetItem(details))
+
+        self.health_table.resizeRowsToContents()
+        total_rows_h = sum(self.health_table.rowHeight(r) for r in range(self.health_table.rowCount()))
+        header_h = self.health_table.horizontalHeader().height()
+        needed_h = header_h + total_rows_h + 12
+        if needed_h > 180:
+            self.health_table.setMinimumHeight(needed_h)
+
+        if not silent:
+            self.status_bar.showMessage("Source health check completed.", 4000)
+
+    def browse_xmltv_file(self):
+        start_dir = str(Path.home())
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select XMLTV File", start_dir, "XML Files (*.xml *.xmltv);;All Files (*)"
+        )
+        if path:
+            self.xmltv_input.setText(path)
+
+    def test_xmltv_feed(self):
+        target = self.xmltv_input.text().strip()
+        if not target:
+            QMessageBox.warning(self, "Input Required", "Please enter a local file path or remote URL for XMLTV.")
+            return
+
+        self.status_bar.showMessage("Testing XMLTV source...")
+        ok, details = self.guide_service.test_xmltv_source(target)
+        if ok:
+            self.test_all_sources_health(silent=True)
+            QMessageBox.information(self, "XMLTV Valid", f"XMLTV source is accessible and valid:\n\n{details}")
+        else:
+            QMessageBox.critical(self, "XMLTV Error", f"Unable to read XMLTV source:\n\n{details}")
+        self.status_bar.showMessage("XMLTV check completed.", 3000)
+
+    def save_xmltv_settings(self):
+        path = self.xmltv_input.text().strip()
+        self.config_mgr.xmltv_path_or_url = path
+        self.test_all_sources_health(silent=True)
+        QMessageBox.information(self, "Saved", "XMLTV setting saved successfully.")
+
+    def verify_sd_account(self):
+        u = self.sd_user_input.text().strip()
+        p = self.sd_pass_input.text().strip()
+        if not u or not p:
+            QMessageBox.warning(self, "Input Required", "Please enter both username and password.")
+            return
+
+        self.status_bar.showMessage("Contacting Schedules Direct...")
+        ok, details = self.guide_service.test_schedules_direct_login(u, p)
+        if ok:
+            self.test_all_sources_health(silent=True)
+            QMessageBox.information(self, "Authentication Successful", f"Schedules Direct account verified:\n\n{details}")
+        else:
+            QMessageBox.critical(self, "Authentication Failed", f"Schedules Direct authentication error:\n\n{details}")
+        self.status_bar.showMessage("Schedules Direct check completed.", 3000)
+
+    def save_sd_settings(self):
+        u = self.sd_user_input.text().strip()
+        p = self.sd_pass_input.text().strip()
+        l = self.sd_lineup_input.text().strip()
+        self.config_mgr.schedules_direct = {"username": u, "password": p, "lineup": l}
+        self.test_all_sources_health(silent=True)
+        QMessageBox.information(self, "Saved", "Schedules Direct credentials saved successfully.")
+
+    def update_tvpassport_notice(self):
+        unconfigured = self.config_mgr.get_unconfigured_regional_channels()
+        if unconfigured:
+            ch_list_str = ", ".join(unconfigured)
+            if hasattr(self, "passport_header_warning"):
+                self.passport_header_warning.setText(
+                    f"Action Needed: Regional channel(s) require Station ID: {ch_list_str}"
+                )
+                self.passport_header_warning.setVisible(True)
+            if hasattr(self, "passport_notice"):
+                self.passport_notice.setText(
+                    f"<div style='border: 1px solid #c8832a; border-radius: 6px; background-color: #2b2214; padding: 10px 14px; color: #ffc107; font-size: 11px; margin-top: 6px; margin-bottom: 8px; line-height: 1.4;'>"
+                    f"<b>Action Needed:</b> The following scanned channel(s) are local/regional and not covered by national feeds: "
+                    f"<b>{ch_list_str}</b>.<br><br>"
+                    f"<b>Where to get Station IDs:</b><br>"
+                    f"Go to <a href='https://www.tvpassport.com' style='color: #64b5f6; font-weight: bold; text-decoration: underline;'>https://www.tvpassport.com</a>, "
+                    f"search your city or station, click on your channel, and copy the numeric ID from the URL (e.g. <code>/station/1812/</code>).<br><br>"
+                    f"<b>Do you need to click sync?</b><br>"
+                    f"<b>No manual sync required:</b> When you click <i>Save Station IDs</i> below, Kaffeine DVR will automatically save the station, verify connection health, and immediately sync guide listings in the background.</div>"
+                )
+                self.passport_notice.setVisible(True)
+        else:
+            if hasattr(self, "passport_header_warning"):
+                self.passport_header_warning.setVisible(False)
+            if hasattr(self, "passport_notice"):
+                self.passport_notice.setVisible(False)
+
+    def save_tvpassport_settings(self):
+        raw = self.passport_stations_text.toPlainText()
+        stations = {}
+        for line in raw.splitlines():
+            line = line.strip()
+            if "=" in line:
+                k, v = line.split("=", 1)
+                if k.strip() and v.strip():
+                    stations[k.strip()] = v.strip()
+        self.config_mgr.tvpassport_stations = stations
+
+        # Ensure station names exist in channel_map so they immediately appear in all dropdowns
+        cur_map = dict(self.config_mgr.channel_map)
+        for st_name in stations.keys():
+            if st_name not in cur_map:
+                cur_map[st_name] = st_name
+        self.config_mgr.channel_map = cur_map
+        self.guide_service.set_channel_map(cur_map)
+        mapping_str = "\n".join([f"{k} = {v}" for k, v in cur_map.items()])
+        if hasattr(self, "mapping_text"):
+            self.mapping_text.setPlainText(mapping_str)
+
+        self.update_tvpassport_notice()
+        self.refresh_channel_dropdowns()
+        self.test_all_sources_health(silent=True)
+
+        # Automatically sync guide in background so listings for the new channel are downloaded immediately
+        QTimer.singleShot(400, self.sync_guide)
+
+        QMessageBox.information(
+            self, "Saved & Syncing",
+            f"Saved {len(stations)} TV Passport station mapping(s).\n\n"
+            f"TV Guide sync has been started in the background to fetch listings immediately."
+        )
+
+    def save_channel_mapping(self):
+        raw_text = self.mapping_text.toPlainText()
+        new_map = {}
+        for line in raw_text.splitlines():
+            line = line.strip()
+            if "=" in line:
+                k, v = line.split("=", 1)
+                if k.strip() and v.strip():
+                    new_map[k.strip()] = v.strip()
+        self.config_mgr.channel_map = new_map
+        self.guide_service.set_channel_map(new_map)
+        self.update_tvpassport_notice()
+        self.refresh_channel_dropdowns()
+        QMessageBox.information(self, "Saved", "Channel mapping saved successfully.")
+        self.filter_guide()
+
+    def import_channels_from_kaffeine(self, silent: bool = False) -> int:
+        channels = self.config_mgr.get_scanned_kaffeine_channels()
+        if not channels:
+            if not silent:
+                QMessageBox.warning(
+                    self, "No Kaffeine Channels Found",
+                    "No scanned digital TV channels were found in Kaffeine's database (~/.local/share/kaffeine/sqlite.db).\n\n"
+                    "Please ensure you have performed an antenna channel scan in Kaffeine first."
+                )
+            return 0
+
+        # Build clean 1:1 mapping directly from scanned channels
+        current_map = {}
+        for ch in channels:
+            ch_name = ch["name"].strip()
+            current_map[ch_name] = ch_name
+
+        self.config_mgr.channel_map = current_map
+        self.guide_service.set_channel_map(current_map)
+        mapping_str = "\n".join([f"{k} = {v}" for k, v in current_map.items()])
+        self.mapping_text.setPlainText(mapping_str)
+        self.update_tvpassport_notice()
+        self.refresh_channel_dropdowns()
+        self.filter_guide()
+
+        if not silent:
+            names_str = ", ".join([f"{c['name']} (Ch {c['number']})" if c.get('number') else c['name'] for c in channels])
+            QMessageBox.information(
+                self, "Channels Imported",
+                f"Successfully imported {len(channels)} channel(s) from Kaffeine:\n{names_str}\n\n"
+                f"Review the mappings above and click 'Save Channel Lineup' to persist."
+            )
+        return len(channels)
+
+    def check_first_run(self):
+        guide_status = self.guide_service.get_guide_status()
+        is_empty = guide_status.get("total_programs", 0) == 0
+        if not self.config_mgr.first_run_completed or is_empty:
+            dlg = FirstRunWelcomeDialog(self.config_mgr, self)
+            if dlg.exec() == QDialog.DialogCode.Accepted:
+                if dlg.import_check.isChecked():
+                    self.import_channels_from_kaffeine(silent=True)
+                if getattr(dlg, "service_check", None) and dlg.service_check.isChecked():
+                    try:
+                        subprocess.run(
+                            ["systemctl", "--user", "enable", "--now", "kaffeine-dvr-watcher.service"],
+                            check=False,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL
+                        )
+                    except Exception as e:
+                        print(f"Error starting background service: {e}")
+                if dlg.sync_check.isChecked():
+                    QTimer.singleShot(600, self.sync_guide)
+            self.config_mgr.first_run_completed = True
+
+    def reset_channel_mapping_defaults(self):
+        confirm = QMessageBox.question(
+            self, "Reset Channels",
+            "Reset channel mappings by re-importing from Kaffeine's scanned channel list?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if confirm == QMessageBox.StandardButton.Yes:
+            self.import_channels_from_kaffeine(silent=False)
+
+    def save_automation_settings(self):
+        self.config_mgr.lead_time_mins = self.lead_time_spin.value()
+        self.config_mgr.watcher_interval_seconds = self.interval_spin.value()
+        self.config_mgr.guide_days_ahead = self.days_spin.value()
+        self.config_mgr.launch_mode = self.launch_mode_combo.currentData()
+        self.config_mgr.enable_desktop_notifications = self.notify_check.isChecked()
+        QMessageBox.information(self, "Saved", "Automation settings saved successfully.")
+
+    def update_service_status_ui(self):
+        try:
+            res = subprocess.run(
+                ["systemctl", "--user", "is-active", "kaffeine-dvr-watcher.service"],
+                capture_output=True, text=True, check=False
+            )
+            active = res.stdout.strip() == "active"
+            if hasattr(self, "service_status_lbl"):
+                if active:
+                    self.service_status_lbl.setText("Status: Active and Running")
+                    self.service_status_lbl.setStyleSheet("color: #55a84c; font-weight: bold; font-size: 12px;")
+                else:
+                    self.service_status_lbl.setText("Status: Inactive / Stopped")
+                    self.service_status_lbl.setStyleSheet("color: #e57373; font-weight: bold; font-size: 12px;")
+        except Exception:
+            if hasattr(self, "service_status_lbl"):
+                self.service_status_lbl.setText("Status: Unknown")
+
+    def start_background_service(self):
+        try:
+            subprocess.run(["systemctl", "--user", "enable", "--now", "kaffeine-dvr-watcher.service"], check=False)
+            self.update_service_status_ui()
+            QMessageBox.information(self, "Service Started", "kaffeine-dvr-watcher.service has been started and enabled.")
+        except Exception as e:
+            QMessageBox.warning(self, "Service Error", f"Failed to start service: {e}")
+
+    def restart_background_service(self):
+        try:
+            subprocess.run(["systemctl", "--user", "restart", "kaffeine-dvr-watcher.service"], check=False)
+            self.update_service_status_ui()
+            QMessageBox.information(self, "Service Restarted", "kaffeine-dvr-watcher.service has been restarted.")
+        except Exception as e:
+            QMessageBox.warning(self, "Service Error", f"Failed to restart service: {e}")
+
+    # ------------------ LOGIC & REFRESH ------------------
+    def setup_timers(self):
+        # Poll status every 60 seconds
+        self.poll_timer = QTimer(self)
+        self.poll_timer.timeout.connect(self.periodic_check)
+        self.poll_timer.start(60000)
+
+    def periodic_check(self):
+        self.update_status_badges()
+        self.update_service_status_ui()
+        # Dispatch any recordings due in the lead time
+        armed = self.watcher.check_and_dispatch()
+        if armed > 0:
+            self.refresh_recordings()
+
+    def refresh_channel_dropdowns(self):
+        channels = sorted(list(set(
+            list(self.config_mgr.channel_map.values()) +
+            list(self.config_mgr.tvpassport_stations.keys())
+        )))
+        if hasattr(self, "guide_channel_combo"):
+            cur_selected = self.guide_channel_combo.currentText()
+            self.guide_channel_combo.blockSignals(True)
+            self.guide_channel_combo.clear()
+            self.guide_channel_combo.addItem("All")
+            self.guide_channel_combo.addItems(channels)
+            idx = self.guide_channel_combo.findText(cur_selected)
+            if idx >= 0:
+                self.guide_channel_combo.setCurrentIndex(idx)
+            self.guide_channel_combo.blockSignals(False)
+
+    def refresh_all(self):
+        self.update_status_badges()
+        self.update_service_status_ui()
+        self.refresh_channel_dropdowns()
+        self.refresh_recordings()
+        self.filter_guide()
+        self.refresh_rules()
+
+    def update_status_badges(self):
+        is_running = self.dbus_client.is_running()
+        if is_running:
+            self.kaffeine_status_lbl.setText("Kaffeine: Running (Connected)")
+            self.kaffeine_status_lbl.setStyleSheet("background-color: #28a745; color: white; padding: 4px 8px; border-radius: 4px;")
+            self.launch_kaffeine_btn.setVisible(False)
+        else:
+            self.kaffeine_status_lbl.setText("Kaffeine: Offline")
+            self.kaffeine_status_lbl.setStyleSheet("background-color: #6c757d; color: white; padding: 4px 8px; border-radius: 4px;")
+            self.launch_kaffeine_btn.setVisible(True)
+
+        guide_status = self.guide_service.get_guide_status()
+        last_updated = guide_status.get("last_updated")
+        count = guide_status.get("total_programs", 0)
+        if last_updated:
+            self.guide_status_lbl.setText(f"TV Guide: Updated {last_updated} ({count} shows cached)")
+        else:
+            self.guide_status_lbl.setText(f"TV Guide: Not Synced ({count} shows)")
+
+    def launch_kaffeine(self):
+        self.status_bar.showMessage("Launching Kaffeine...", 3000)
+        self.dbus_client.launch_kaffeine(mode=self.config_mgr.launch_mode)
+        QTimer.singleShot(2000, self.update_status_badges)
+
+    def sync_guide(self):
+        self.sync_guide_btn.setEnabled(False)
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setRange(0, 0)
+        self.status_bar.showMessage("Syncing guide data...")
+
+        self.sync_worker = SyncWorker(self.guide_service, self.config_mgr.guide_days_ahead)
+        self.sync_worker.progress.connect(lambda msg: self.status_bar.showMessage(msg))
+        self.sync_worker.finished.connect(self.on_sync_finished)
+        self.sync_worker.start()
+
+    def on_sync_finished(self, count: int, error: str):
+        self.sync_guide_btn.setEnabled(True)
+        self.progress_bar.setVisible(False)
+        if error:
+            QMessageBox.critical(self, "Guide Sync Error", f"Failed to sync guide: {error}")
+            self.status_bar.showMessage("Guide sync failed.")
+        else:
+            self.status_bar.showMessage(f"Guide synced: {count} programs cached.", 5000)
+            self.update_status_badges()
+            self.refresh_channel_dropdowns()
+            self.filter_guide()
+            self.run_rules(silent=True)
+            self.test_all_sources_health(silent=True)
+
+    def refresh_recordings(self):
+        queue = self.queue_mgr.list_queue(include_completed=True)
+        self.rec_table.setRowCount(len(queue))
+        today = date.today()
+
+        for row, rec in enumerate(queue):
+            qid = rec.get("id")
+            title = rec.get("title", "")
+            channel = rec.get("channel", "")
+            duration = rec.get("duration_iso", "")
+            status = rec.get("status", "QUEUED")
+            start_iso = rec.get("start_iso", "")
+
+            # Schedule text (e.g. Sat @ 1700 or Next Thu (Oct 15) @ 1700)
+            schedule_text = ""
+            full_date_text = rec.get("start_time_local", "")
+            try:
+                dt = datetime.fromisoformat(start_iso)
+                full_date_text = dt.strftime("%A, %B %d, %Y at %I:%M %p")
+                diff_days = (dt.date() - today).days
+                time_24 = dt.strftime("%H%M")
+                if diff_days == 0:
+                    schedule_text = f"Today @ {time_24}"
+                elif diff_days == 1:
+                    schedule_text = f"Tomorrow @ {time_24}"
+                elif 2 <= diff_days < 7:
+                    schedule_text = f"{dt.strftime('%a')} @ {time_24}"
+                elif 7 <= diff_days < 14:
+                    schedule_text = f"Next {dt.strftime('%a')} ({dt.strftime('%b %d')}) @ {time_24}"
+                elif diff_days >= 14:
+                    schedule_text = f"{dt.strftime('%a, %b %d')} @ {time_24}"
+                elif diff_days == -1:
+                    schedule_text = f"Yesterday @ {time_24}"
+                else:
+                    schedule_text = f"Past ({dt.strftime('%b %d')}) @ {time_24}"
+            except Exception:
+                schedule_text = full_date_text
+
+            title_item = QTableWidgetItem(title)
+            title_item.setData(Qt.ItemDataRole.UserRole, qid)
+
+            sched_item = QTableWidgetItem(schedule_text)
+            sched_item.setFont(QFont("", -1, QFont.Weight.Bold))
+            sched_item.setToolTip(f"Full broadcast time: {full_date_text}")
+
+            self.rec_table.setItem(row, 0, title_item)
+            self.rec_table.setItem(row, 1, sched_item)
+            self.rec_table.setItem(row, 2, QTableWidgetItem(channel))
+            self.rec_table.setItem(row, 3, QTableWidgetItem(duration))
+
+            status_display = status
+            color = "#007bff"
+            if status == "QUEUED":
+                lead = self.config_mgr.lead_time_mins
+                status_display = f"Queued (Arms {lead}m before show)"
+                color = "#17a2b8"
+            elif status == "ARMED":
+                status_display = "Armed in Kaffeine"
+                color = "#fd7e14"
+            elif status == "RECORDING":
+                status_display = "Recording Now"
+                color = "#28a745"
+            elif status == "COMPLETED":
+                status_display = "Completed"
+                color = "#6c757d"
+
+            status_item = QTableWidgetItem(status_display)
+            status_item.setForeground(QColor(color))
+            self.rec_table.setItem(row, 4, status_item)
+
+    def cancel_selected_recording(self):
+        row = self.rec_table.currentRow()
+        if row < 0:
+            QMessageBox.warning(self, "Selection Required", "Please select a recording to cancel.")
+            return
+
+        qid = self.rec_table.item(row, 0).data(Qt.ItemDataRole.UserRole)
+        rec_title = self.rec_table.item(row, 0).text()
+        confirm = QMessageBox.question(
+            self, "Confirm Cancellation",
+            f"Are you sure you want to cancel the recording for '{rec_title}'?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if confirm == QMessageBox.StandardButton.Yes:
+            k_key = self.queue_mgr.remove_recording(int(qid))
+            if k_key:
+                self.dbus_client.remove_recording(k_key)
+            self.status_bar.showMessage(f"Cancelled recording '{rec_title}'.", 3000)
+            self.refresh_recordings()
+
+    def add_manual_recording(self):
+        channels = sorted(list(set(self.config_mgr.channel_map.values())))
+        dlg = ManualRecordDialog(channels, self)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            title = dlg.title_input.text().strip()
+            ch = dlg.channel_combo.currentText()
+            start = dlg.start_input.text().strip()
+            dur = dlg.duration_input.text().strip()
+            if not title or not start or not dur:
+                QMessageBox.warning(self, "Invalid Input", "Please fill in all fields.")
+                return
+            try:
+                lead = self.config_mgr.lead_time_mins
+                qid = self.queue_mgr.add_recording(title, ch, start, dur, lead_time_mins=lead)
+                self.status_bar.showMessage(f"Queued recording '{title}' (Queue #{qid})", 4000)
+                self.refresh_recordings()
+            except Exception as e:
+                QMessageBox.critical(self, "Scheduling Error", str(e))
+
+    def filter_guide(self):
+        query = self.guide_search_input.text().strip()
+        channel = self.guide_channel_combo.currentText()
+        airdate = self.guide_date_combo.currentData()
+        programs = self.guide_service.search_programs(
+            query=query, channel=channel, airdate=airdate, trim_ended=True
+        )
+
+        self.current_guide_items = programs
+        self.guide_table.setRowCount(len(programs))
+        for row, p in enumerate(programs):
+            self.guide_table.setItem(row, 0, QTableWidgetItem(p.get("start_time_local", "")))
+            self.guide_table.setItem(row, 1, QTableWidgetItem(p.get("kaffeine_channel", "")))
+            self.guide_table.setItem(row, 2, QTableWidgetItem(p.get("show_title", "")))
+            self.guide_table.setItem(row, 3, QTableWidgetItem(p.get("episode_title", "")))
+            self.guide_table.setItem(row, 4, QTableWidgetItem(p.get("duration_iso", "")))
+
+    def on_guide_selection_changed(self):
+        row = self.guide_table.currentRow()
+        if row < 0 or row >= len(getattr(self, "current_guide_items", [])):
+            self.guide_detail_title.setText("Select a program to view details")
+            self.guide_detail_text.clear()
+            return
+
+        prog = self.current_guide_items[row]
+        title = prog.get("show_title", "")
+        ep = prog.get("episode_title", "")
+        channel = prog.get("kaffeine_channel", "")
+        start = prog.get("start_time_local", "")
+        season = prog.get("season")
+        number = prog.get("number")
+        summary = prog.get("summary") or "No description available."
+
+        header_str = f"{title}"
+        if ep:
+            header_str += f" - \"{ep}\""
+        if season and number:
+            header_str += f" (S{season:02d}E{number:02d})"
+        header_str += f" on {channel} at {start}"
+
+        self.guide_detail_title.setText(header_str)
+        self.guide_detail_text.setText(summary)
+
+    def record_selected_guide_item(self):
+        row = self.guide_table.currentRow()
+        if row < 0 or row >= len(getattr(self, "current_guide_items", [])):
+            QMessageBox.warning(self, "Selection Required", "Please select a program from the guide table.")
+            return
+
+        prog = self.current_guide_items[row]
+        show = prog.get("show_title", "")
+        ep = prog.get("episode_title", "")
+        rec_title = f"{show} - {ep}" if ep else show
+        channel = prog.get("kaffeine_channel", "")
+        start_iso = prog.get("start_iso", "")
+        duration_iso = prog.get("duration_iso", "")
+
+        try:
+            lead = self.config_mgr.lead_time_mins
+            qid = self.queue_mgr.add_recording(rec_title, channel, start_iso, duration_iso, lead_time_mins=lead)
+            QMessageBox.information(
+                self, "Recording Queued",
+                f"Successfully added to DVR Queue (Queue #{qid}):\n\n"
+                f"'{rec_title}' on {channel}\n"
+                f"Airs: {prog.get('start_time_local')}\n\n"
+                f"It is safely queued and will automatically launch Kaffeine and arm the timer {lead} minutes before showtime, preventing restart/shutdown blocks in Kaffeine."
+            )
+            self.refresh_recordings()
+        except Exception as e:
+            QMessageBox.critical(self, "Error Queueing Recording", str(e))
+
+    def add_rule_from_selected_guide_item(self):
+        row = self.guide_table.currentRow()
+        if row < 0 or row >= len(getattr(self, "current_guide_items", [])):
+            QMessageBox.warning(self, "Selection Required", "Please select a program first.")
+            return
+
+        prog = self.current_guide_items[row]
+        show_title = prog.get("show_title", "")
+        ch = prog.get("kaffeine_channel", "All")
+        self.rules_engine.add_rule(show_title, ch)
+        self.refresh_rules()
+        self.tabs.setCurrentIndex(0)
+        self.run_rules(silent=False)
+
+    # ------------------ RULES LOGIC ------------------
+    def refresh_rules(self):
+        rules = self.rules_engine.get_rules()
+        self.rules_table.setRowCount(len(rules))
+        for row, r in enumerate(rules):
+            self.rules_table.setItem(row, 0, QTableWidgetItem(str(r.get("id"))))
+            self.rules_table.setItem(row, 1, QTableWidgetItem(r.get("title_keyword", "")))
+            self.rules_table.setItem(row, 2, QTableWidgetItem(r.get("channel", "All")))
+            enabled_str = "Yes" if r.get("enabled", True) else "No"
+            self.rules_table.setItem(row, 3, QTableWidgetItem(enabled_str))
+
+    def add_rule_dialog(self):
+        channels = sorted(list(set(self.config_mgr.channel_map.values())))
+        dlg = AddRuleDialog(channels, self)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            kw = dlg.keyword_input.text().strip()
+            ch = dlg.channel_combo.currentText()
+            if kw:
+                self.rules_engine.add_rule(kw, ch)
+                self.refresh_rules()
+                self.tabs.setCurrentIndex(0)
+                self.run_rules(silent=False)
+
+    def edit_rule_dialog(self):
+        row = self.rules_table.currentRow()
+        if row < 0:
+            QMessageBox.warning(self, "Selection Required", "Please select a rule from the table to edit.")
+            return
+
+        rule_id = self.rules_table.item(row, 0).text()
+        current_kw = self.rules_table.item(row, 1).text()
+        current_ch = self.rules_table.item(row, 2).text()
+        current_enabled = self.rules_table.item(row, 3).text() == "Yes"
+
+        channels = sorted(list(set(self.config_mgr.channel_map.values())))
+        dlg = EditRuleDialog(
+            channels=channels,
+            rule_id=rule_id,
+            keyword=current_kw,
+            channel=current_ch,
+            enabled=current_enabled,
+            parent=self
+        )
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            new_kw = dlg.keyword_input.text().strip()
+            new_ch = dlg.channel_combo.currentText()
+            new_enabled = dlg.enabled_check.isChecked()
+            if new_kw:
+                self.rules_engine.update_rule(
+                    rule_id=rule_id,
+                    title_keyword=new_kw,
+                    channel=new_ch,
+                    enabled=new_enabled
+                )
+                self.refresh_rules()
+                self.status_bar.showMessage(f"Rule '{new_kw}' updated.", 4000)
+                if new_enabled:
+                    self.run_rules(silent=True)
+
+    def remove_selected_rule(self):
+        row = self.rules_table.currentRow()
+        if row < 0:
+            QMessageBox.warning(self, "Selection Required", "Please select a rule to remove.")
+            return
+        rule_id = self.rules_table.item(row, 0).text()
+        self.rules_engine.remove_rule(rule_id)
+        self.refresh_rules()
+
+    def run_rules(self, silent: bool = False):
+        if not silent:
+            self.status_bar.showMessage("Evaluating rules against guide data...")
+        self.rules_worker = RulesWorker(self.rules_engine)
+        self.rules_worker.progress.connect(lambda msg: self.status_bar.showMessage(msg))
+        self.rules_worker.finished.connect(lambda scheduled, err: self.on_rules_finished(scheduled, err, silent))
+        self.rules_worker.start()
+
+    def on_rules_finished(self, scheduled: list, error: str, silent: bool):
+        if error:
+            if not silent:
+                QMessageBox.critical(self, "Rules Error", error)
+        else:
+            msg = f"Rule check completed. {len(scheduled)} new recordings scheduled."
+            self.status_bar.showMessage(msg, 5000)
+            if scheduled:
+                self.refresh_recordings()
+                if not silent:
+                    details = "\n".join([f"- {s['title']} ({s['channel']} at {s['start_time']})" for s in scheduled])
+                    QMessageBox.information(self, "New Recordings Scheduled", f"Scheduled {len(scheduled)} shows:\n\n{details}")
+
+
+def main():
+    app = QApplication(sys.argv)
+    app.setApplicationName("kaffeine-dvr")
+    app.setApplicationDisplayName("Kaffeine DVR & TV Guide")
+    app.setDesktopFileName("kaffeine-dvr")
+    app.setWindowIcon(get_app_icon())
+    window = MainWindow()
+    window.show()
+    sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,107 @@
+import time
+import subprocess
+from datetime import datetime
+from typing import Optional
+from .dbus_client import KaffeineDbusClient
+from .queue_manager import QueueManager
+from .config import ConfigManager
+
+def send_desktop_notification(title: str, channel: str, start_display: str):
+    """
+    Send a persistent desktop notification via notify-send.
+    -t 0 specifies zero timeout, persisting in the notification center until dismissed.
+    """
+    try:
+        summary = f"Kaffeine Recording Armed: {title}"
+        body = f"Channel: {channel}\nAirtime: {start_display}\nKaffeine launched and recording timer armed."
+        cmd = [
+            "notify-send",
+            "-a", "Kaffeine DVR",
+            "-i", "kaffeine",
+            "-u", "normal",
+            "-t", "0",
+            summary,
+            body
+        ]
+        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception as e:
+        print(f"Error sending desktop notification: {e}")
+
+class Watcher:
+    def __init__(self, dbus_client: Optional[KaffeineDbusClient] = None, queue_mgr: Optional[QueueManager] = None):
+        self.dbus_client = dbus_client or KaffeineDbusClient()
+        self.queue_mgr = queue_mgr or QueueManager()
+        self.running = True
+        self.last_sync_time = 0.0
+
+    def check_and_dispatch(self) -> int:
+        due = self.queue_mgr.get_due_to_arm()
+        armed_count = 0
+        cfg = ConfigManager()
+
+        for rec in due:
+            title = rec["title"]
+            channel = rec["channel"]
+            start_iso = rec["start_iso"]
+            duration_iso = rec["duration_iso"]
+            start_local = rec.get("start_time_local", start_iso)
+            rec_id = rec["id"]
+            
+            now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            print(f"[{now_str}] Program due: '{title}' on {channel} at {start_iso}. Arming into Kaffeine...")
+            try:
+                # Ensure Kaffeine is running (launches if closed) and schedules via D-Bus
+                if not self.dbus_client.is_running():
+                    self.dbus_client.launch_kaffeine(mode=cfg.launch_mode)
+                    time.sleep(2)
+                key = self.dbus_client.schedule_recording(title, channel, start_iso, duration_iso, 0)
+                self.queue_mgr.mark_armed(rec_id, key)
+                print(f"[{now_str}] Successfully armed recording in Kaffeine (D-Bus Key: {key}).")
+                armed_count += 1
+
+                # Send persistent desktop notification if enabled
+                if cfg.enable_desktop_notifications:
+                    send_desktop_notification(title, channel, start_local)
+
+            except Exception as e:
+                print(f"[{now_str}] Error arming recording '{title}': {e}")
+
+        # Update in-progress and completed statuses
+        self.queue_mgr.update_statuses([])
+        return armed_count
+
+    def check_periodic_sync(self):
+        """Periodically sync TV guide listings and evaluate series rules."""
+        cfg = ConfigManager()
+        interval_seconds = getattr(cfg, "auto_sync_interval_hours", 6) * 3600
+        now = time.time()
+        
+        # If we haven't synced yet in this session or interval has elapsed
+        if (now - self.last_sync_time) >= interval_seconds:
+            self.last_sync_time = now
+            now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            print(f"[{now_str}] Running periodic TV guide sync and series rules evaluation...")
+            try:
+                from .guide_service import GuideService
+                from .rules_engine import RulesEngine
+                guide_svc = GuideService(channel_map=cfg.channel_map, config_mgr=cfg)
+                synced_count = guide_svc.sync_guide(days=cfg.guide_days_ahead)
+                print(f"[{now_str}] Guide sync completed: {synced_count} programs cached.")
+                
+                rules_eng = RulesEngine(cfg, self.dbus_client, guide_svc)
+                scheduled = rules_eng.evaluate_and_schedule()
+                print(f"[{now_str}] Rule evaluation completed: {len(scheduled)} recordings scheduled.")
+            except Exception as e:
+                print(f"[{now_str}] Error during periodic guide sync: {e}")
+
+    def run_loop(self, interval_seconds: int = 120):
+        print(f"Kaffeine DVR Watcher running (check interval: {interval_seconds}s).")
+        # Run an initial guide & rules check on daemon startup
+        self.check_periodic_sync()
+        while self.running:
+            try:
+                self.check_and_dispatch()
+                self.check_periodic_sync()
+            except Exception as e:
+                print(f"Error in watcher cycle: {e}")
+            time.sleep(interval_seconds)

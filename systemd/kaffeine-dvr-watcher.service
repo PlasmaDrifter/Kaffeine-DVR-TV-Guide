@@ -1,0 +1,14 @@
+[Unit]
+Description=Kaffeine DVR Background Watcher (Just-In-Time Dispatcher)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/kaffeine-dvr --watch
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
