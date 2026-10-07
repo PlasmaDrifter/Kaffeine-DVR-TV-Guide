@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QProgressBar, QStatusBar, QFrame, QGroupBox, QFileDialog,
     QScrollArea, QToolButton, QSizePolicy
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QSettings, QByteArray
 from PyQt6.QtGui import QColor, QFont, QIcon
 
 try:
@@ -260,25 +260,28 @@ class FirstRunWelcomeDialog(QDialog):
     def __init__(self, config_mgr: ConfigManager, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Welcome to Kaffeine DVR & TV Guide")
-        self.setMinimumWidth(560)
+        self.setMinimumWidth(820)
+        self.resize(850, 680)
         self.config_mgr = config_mgr
 
         layout = QVBoxLayout(self)
+        layout.setSpacing(12)
 
         title_lbl = QLabel("<b>Welcome to Kaffeine DVR & Web TV Guide</b>")
-        title_lbl.setStyleSheet("font-size: 15px;")
+        title_lbl.setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff;")
         layout.addWidget(title_lbl)
 
         desc_lbl = QLabel(
-            "This application enables online TV guide browsing and DVR scheduling for Kaffeine\n"
+            "This application enables online TV guide browsing and DVR scheduling for Kaffeine "
             "without blocking system restarts or shutdowns."
         )
-        desc_lbl.setStyleSheet("color: #6c757d; font-size: 12px;")
+        desc_lbl.setStyleSheet("color: #8c98aa; font-size: 13px; line-height: 1.4;")
+        desc_lbl.setWordWrap(True)
         layout.addWidget(desc_lbl)
-        layout.addSpacing(10)
 
         # Environment box
         env_box = QGroupBox("Detected System Environment")
+        env_box.setStyleSheet("QGroupBox { font-size: 13px; font-weight: bold; }")
         env_layout = QFormLayout(env_box)
 
         local_dt = datetime.now().astimezone()
@@ -286,10 +289,12 @@ class FirstRunWelcomeDialog(QDialog):
         tz_offset = local_dt.strftime("%z")
         tz_str = f"{tz_name} (UTC{tz_offset[:3]}:{tz_offset[3:]})"
 
-        env_layout.addRow("System Timezone:", QLabel(f"<b>{tz_str}</b>"))
+        tz_val = QLabel(f"<b>{tz_str}</b>")
+        tz_val.setStyleSheet("font-size: 13px;")
+        env_layout.addRow("System Timezone:", tz_val)
         tz_note = QLabel("Showtimes and recording timers automatically align with this local timezone.")
         tz_note.setWordWrap(True)
-        tz_note.setStyleSheet("color: #6c757d; font-size: 11px;")
+        tz_note.setStyleSheet("color: #8c98aa; font-size: 12px;")
         env_layout.addRow("", tz_note)
 
         kaffeine_channels = self.config_mgr.get_scanned_kaffeine_channels()
@@ -297,32 +302,38 @@ class FirstRunWelcomeDialog(QDialog):
             ch_status = f"{len(kaffeine_channels)} scanned channels found in Kaffeine"
         else:
             ch_status = "No scanned channels found yet (Kaffeine scan not performed)"
-        env_layout.addRow("Kaffeine Tuner:", QLabel(f"<b>{ch_status}</b>"))
+        ch_val = QLabel(f"<b>{ch_status}</b>")
+        ch_val.setStyleSheet("font-size: 13px;")
+        env_layout.addRow("Kaffeine Tuner:", ch_val)
         layout.addWidget(env_box)
-
-        layout.addSpacing(10)
 
         # TV Guide and Regional Channel Coverage Explanation
         guide_info_box = QGroupBox("TV Guide Coverage and Providers")
+        guide_info_box.setStyleSheet("QGroupBox { font-size: 13px; font-weight: bold; }")
         guide_info_layout = QVBoxLayout(guide_info_box)
 
         guide_info_text = QLabel(
-            "<b>How Guide Data Works:</b><br>"
-            "• <b>National Networks (TVMaze API):</b> Major networks (FOX, CBS, NBC, ABC, PBS, CW) are fetched via free cloud API. "
-            "<i>Note:</i> TVMaze only carries national prime-time feeds; local news, daytime syndicated shows, and midday programming are not listed in TVMaze. "
-            "To get complete 24/7 schedules with local daytime programming, configure their station IDs under TV Passport.<br><br>"
-            "• <b>Local / Regional Channels & 24/7 Affiliates (TV Passport):</b> Full 24/7 schedules (including daytime news and talk shows) and local independent subchannels can be added using:<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;1. <b>TV Passport:</b> Look up your local affiliate station ID on <a href='https://www.tvpassport.com' style='color: #64b5f6; font-weight: bold;'>tvpassport.com</a> "
-            "and enter <code>ChannelName = StationID</code> in <i>Settings &gt; Guide Sources &gt; TV Passport</i>.<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;2. <b>Custom XMLTV feed:</b> Connect a local XMLTV file or remote URL (e.g. zap2xml, WebGrab+).<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;3. <b>Schedules Direct:</b> Connect paid official Gracenote listings by ZIP/postal code.<br><br>"
-            "• <b>Using Both Sources Together:</b> Having both TVMaze and TV Passport active is fully supported. Under Hybrid mode, the application seamlessly uses TV Passport for any configured stations while filling in any remaining national networks with TVMaze without duplicates.<br><br>"
-            "• <b>International Coverage:</b> Non-US users can connect any standard XMLTV source or Schedules Direct account."
+            "<b>TV Guide Sources and How Listings Work:</b><br>"
+            "• <b>TVMaze API (Zero Configuration Required - Works Out of the Box):</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;Major broadcast networks (<b>FOX, CBS, NBC, ABC, PBS, and The CW</b>) work immediately with <b>zero setup, no account, and no API keys required</b>. "
+            "The moment the app starts, TVMaze automatically downloads up to 7 days of prime-time listings for all mapped national channels.<br><br>"
+            "• <b>National Programming vs. Local Daytime Programming:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;Because TVMaze tracks national network schedules, it covers all nationally broadcast prime-time series, network specials, and national sports. "
+            "However, broadcast networks relinquish morning, midday, and late-afternoon blocks to local affiliates. Consequently, <b>local news broadcasts, daytime syndicated talk shows, game shows, and independent local subchannels</b> "
+            "are not included in TVMaze's national feed.<br><br>"
+            "• <b>Getting 24/7 Local & Regional Schedules (TV Passport):</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;If you want full 24/7 continuous coverage including local morning/evening news and daytime shows, or listings for local independent subchannels, configure free station IDs via TV Passport:<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;1. Look up your local affiliate station ID on <a href='https://www.tvpassport.com' style='color: #64b5f6; font-weight: bold;'>tvpassport.com</a>.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;2. Enter <code>ChannelName = StationID</code> in <i>Settings &gt; Guide Sources &gt; TV Passport</i> and click <i>Save Station IDs</i>.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;3. The app connects and immediately syncs complete 24/7 local listings in the background.<br><br>"
+            "• <b>Free Hybrid Mode (Best of Both Worlds):</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;Running both sources together is the default mode. For channels where you enter a TV Passport station ID, TV Passport automatically takes over to provide 24/7 local affiliate listings, "
+            "while TVMaze seamlessly covers any remaining national channels with zero setup and no duplicate entries."
         )
         guide_info_text.setWordWrap(True)
         guide_info_text.setOpenExternalLinks(True)
         guide_info_text.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
-        guide_info_text.setStyleSheet("color: #b0bac8; font-size: 11px; line-height: 1.4;")
+        guide_info_text.setStyleSheet("color: #d1d8e0; font-size: 12px; line-height: 1.5;")
         guide_info_layout.addWidget(guide_info_text)
 
         # Check for unconfigured regional channels
@@ -330,7 +341,7 @@ class FirstRunWelcomeDialog(QDialog):
         if unconfigured_regional:
             ch_list_str = ", ".join(unconfigured_regional)
             notice_lbl = QLabel(
-                f"<div style='border: 1px solid #c8832a; border-radius: 4px; background-color: #2b2214; padding: 6px 10px; color: #ffc107; font-size: 11px;'>"
+                f"<div style='border: 1px solid #c8832a; border-radius: 4px; background-color: #2b2214; padding: 8px 12px; color: #ffc107; font-size: 12px; line-height: 1.4;'>"
                 f"<b>Notice:</b> The following scanned channel(s) are local/regional and not covered by national feeds: "
                 f"<b>{ch_list_str}</b>.<br>"
                 f"You can configure their free station ID under <b>Settings &gt; Guide Sources &gt; TV Passport</b> after startup.</div>"
@@ -340,29 +351,33 @@ class FirstRunWelcomeDialog(QDialog):
 
         layout.addWidget(guide_info_box)
 
-        layout.addSpacing(10)
         options_box = QGroupBox("Initial Setup Options")
+        options_box.setStyleSheet("QGroupBox { font-size: 13px; font-weight: bold; }")
         options_layout = QVBoxLayout(options_box)
+        options_layout.setSpacing(8)
 
         self.import_check = QCheckBox("Import detected channels from Kaffeine into lineup")
+        self.import_check.setStyleSheet("font-size: 13px;")
         self.import_check.setChecked(bool(kaffeine_channels))
         if not kaffeine_channels:
             self.import_check.setEnabled(False)
         options_layout.addWidget(self.import_check)
 
         self.sync_check = QCheckBox("Perform initial TV guide sync (download next 7 days)")
+        self.sync_check.setStyleSheet("font-size: 13px;")
         self.sync_check.setChecked(True)
         options_layout.addWidget(self.sync_check)
 
         self.service_check = QCheckBox("Enable & start background recording dispatcher service (systemd)")
+        self.service_check.setStyleSheet("font-size: 13px;")
         self.service_check.setChecked(True)
         options_layout.addWidget(self.service_check)
         layout.addWidget(options_box)
 
-        layout.addSpacing(15)
+        layout.addSpacing(10)
         btn_box = QHBoxLayout()
         self.start_btn = QPushButton("Start Kaffeine DVR")
-        self.start_btn.setStyleSheet("font-weight: bold; padding: 6px 18px;")
+        self.start_btn.setStyleSheet("font-weight: bold; font-size: 13px; padding: 8px 24px;")
         self.start_btn.clicked.connect(self.accept)
         btn_box.addStretch()
         btn_box.addWidget(self.start_btn)
@@ -527,8 +542,14 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Kaffeine DVR & Web TV Guide")
         self.setWindowIcon(get_app_icon())
-        self.resize(1100, 750)
         self.setStyleSheet(APP_STYLESHEET)
+
+        self.settings = QSettings("KaffeineDVR", "TVGuide")
+        geo = self.settings.value("geometry")
+        if geo and isinstance(geo, QByteArray) and not geo.isEmpty():
+            self.restoreGeometry(geo)
+        else:
+            self.resize(1100, 750)
 
         self.config_mgr = ConfigManager()
         self.dbus_client = KaffeineDbusClient()
@@ -1008,8 +1029,10 @@ class MainWindow(QMainWindow):
 
     # Subcategory 3: Automation & DVR
     def create_settings_automation_tab(self) -> QWidget:
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        container = QWidget()
+        layout = QVBoxLayout(container)
 
         layout.addWidget(QLabel("<b>DVR Automation & Polling Frequencies</b>:"))
         form = QFormLayout()
@@ -1111,10 +1134,11 @@ class MainWindow(QMainWindow):
         storage_form.addRow("", free_lbl)
 
         # Custom recording folder override
+        detected_folder = str(self.storage_mgr.get_recording_folder())
         folder_row = QHBoxLayout()
         self.custom_folder_input = QLineEdit()
         self.custom_folder_input.setText(self.config_mgr.custom_recording_folder)
-        self.custom_folder_input.setPlaceholderText("Auto-detect from ~/.config/kaffeinerc (or ~/Videos)")
+        self.custom_folder_input.setPlaceholderText(f"Auto-detected from Kaffeine: {detected_folder}")
         folder_row.addWidget(self.custom_folder_input)
         self.browse_folder_btn = QPushButton("Browse...")
         self.browse_folder_btn.clicked.connect(self.browse_custom_recording_folder)
@@ -1173,7 +1197,9 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(service_box)
         layout.addStretch()
-        return widget
+
+        scroll.setWidget(container)
+        return scroll
 
     # ------------------ TAB 5: HELP AND INFORMATION ------------------
     def create_help_tab(self) -> QWidget:
@@ -1219,24 +1245,23 @@ class MainWindow(QMainWindow):
         sources_box = QGroupBox("2. TV Guide Coverage and Providers")
         sources_layout = QVBoxLayout(sources_box)
         sources_text = QLabel(
-            "• <b>National Broadcast Networks (Free & Automatic):</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;Networks like <b>FOX, CBS, NBC, ABC, and The CW</b> are synchronized automatically through the free TVMaze API. "
-            "No account or manual key is required. <b>Note:</b> TVMaze only catalogs national network feeds. "
-            "Local news, daytime syndicated shows, and midday programming are not listed in TVMaze; to obtain complete 24/7 schedules with local programming, "
-            "add your local station IDs under TV Passport.<br><br>"
-            "• <b>Local / Regional Independent Subchannels & 24/7 Affiliates:</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;Channels without national feeds (e.g. independent stations) or national channels where you want complete 24/7 local affiliate schedules can be configured in <i>Settings &gt; Guide Sources &gt; TV Passport</i> using:<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;1. <b>TV Passport:</b> Look up your station on <a href='https://www.tvpassport.com' style='color: #64b5f6; font-weight: bold;'>tvpassport.com</a>, "
-            "copy the numeric station ID from the URL, and enter <code>ChannelName = StationID</code>.<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;<b>No manual sync required:</b> Clicking <i>Save Station IDs</i> automatically verifies the station and triggers background guide synchronization immediately.<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;2. <b>Custom XMLTV Feed:</b> Connect a local XMLTV file or remote URL (generated by zap2xml, WebGrab+, etc.).<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;3. <b>Schedules Direct (Paid):</b> Connect official Gracenote listings by entering your Postal/Zip code.<br><br>"
-            "• <b>Running Both Sources Together (Hybrid Mode):</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;Having both TVMaze and TV Passport active simultaneously is completely supported and recommended. "
-            "Under the default <i>Free Hybrid</i> mode, TV Passport automatically takes precedence for any channels configured with station IDs to provide 24/7 continuous local affiliate schedules, "
-            "while TVMaze automatically fills in guide data for any other national channels without duplicate show rows.<br><br>"
-            "• <b>International Coverage:</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;Non-US users can connect any standard XMLTV source (local file or web URL) or Schedules Direct account for full EPG listings."
+            "• <b>National Broadcast Networks (TVMaze API - Zero Configuration Required):</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;Networks like <b>FOX, CBS, NBC, ABC, PBS, and The CW</b> work out of the box with <b>zero configuration</b>. "
+            "No account, API keys, or manual setup are required—TVMaze automatically synchronizes up to 7 days of prime-time listings immediately upon launch.<br><br>"
+            "• <b>Understanding National Feeds vs. Local Daytime Programming:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;TVMaze tracks national network schedules, which includes all major prime-time dramas, comedies, national sports, and network specials. "
+            "However, US broadcast networks delegate midday and daytime time-slots to regional affiliates. As a result, <b>local news, syndicated morning/daytime talk shows, game shows, and local independent subchannels</b> "
+            "do not appear in TVMaze's national feed.<br><br>"
+            "• <b>Getting 24/7 Local Affiliate Schedules & Regional Subchannels (TV Passport):</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;To obtain continuous 24/7 schedules including local news and daytime programming, or to support independent local channels, use TV Passport in <i>Settings &gt; Guide Sources &gt; TV Passport</i>:<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;1. Look up your local affiliate station on <a href='https://www.tvpassport.com' style='color: #64b5f6; font-weight: bold;'>tvpassport.com</a>.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;2. Copy the numeric station ID from the URL and enter <code>ChannelName = StationID</code>.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;3. Click <i>Save Station IDs</i>. The app immediately verifies the station and downloads full 24/7 local affiliate listings in the background.<br><br>"
+            "• <b>Free Hybrid Mode (Recommended & Default):</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;Running TVMaze and TV Passport together is seamless. TV Passport provides complete 24/7 local schedules for any stations you configure with IDs, "
+            "while TVMaze automatically fills in listings for any remaining national networks with zero configuration and no duplicate rows.<br><br>"
+            "• <b>Additional Custom Providers & International Support:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;You can also connect a custom local XMLTV file or remote URL, or use a paid Schedules Direct (Gracenote) account for international listings."
         )
         sources_text.setWordWrap(True)
         sources_text.setOpenExternalLinks(True)
@@ -2061,6 +2086,10 @@ class MainWindow(QMainWindow):
                 if not silent:
                     details = "\n".join([f"- {s['title']} ({s['channel']} at {s['start_time']})" for s in scheduled])
                     QMessageBox.information(self, "New Recordings Scheduled", f"Scheduled {len(scheduled)} shows:\n\n{details}")
+
+    def closeEvent(self, event):
+        self.settings.setValue("geometry", self.saveGeometry())
+        super().closeEvent(event)
 
 
 def main():

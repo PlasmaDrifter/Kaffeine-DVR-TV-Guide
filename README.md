@@ -132,8 +132,12 @@ ABC = ABC
 The CW = CW6
 ```
 
-### 2. TV Passport Setup (24/7 Affiliate Coverage)
-TVMaze provides national prime-time schedules, but US broadcast networks relinquish midday and daytime blocks to local affiliates. To obtain full 24/7 schedules with local news and daytime syndicated programming:
+### 1. TV Guide Sources & Zero-Configuration TVMaze
+- **TVMaze (Zero Configuration Required):** Out of the box, national broadcast networks (**FOX, CBS, NBC, ABC, PBS, and The CW**) work automatically with **no accounts, no API keys, and no manual setup**. As soon as the application opens, it downloads 7 days of prime-time listings for all mapped channels.
+- **National vs. Local Daytime Programming:** TVMaze catalogs national network programming (evening prime-time dramas, comedies, national sports, and network specials). However, because broadcast networks leave morning, midday, and late-afternoon blocks to local stations, **local news broadcasts, daytime syndicated talk shows, game shows, and independent local subchannels** are not part of TVMaze's national feed.
+
+### 2. TV Passport Setup (24/7 Local Affiliate Coverage & Independent Channels)
+To get complete 24/7 continuous schedules with local morning/evening news, daytime talk shows, or independent local channels:
 1. Search for your local affiliate station on [tvpassport.com](https://www.tvpassport.com).
 2. Note the numeric ID from the station listings URL (for example, `/station/1812/`).
 3. Under **Settings > Guide Sources > TV Passport**, enter your station mapping:
@@ -144,7 +148,7 @@ TVMaze provides national prime-time schedules, but US broadcast networks relinqu
    CBS = 1813
    CW6 = 11611
    ```
-4. Click **Save Station IDs**. The app verifies connectivity and triggers background synchronization immediately. In Free Hybrid mode, TV Passport automatically supersedes TVMaze for those stations, while TVMaze fills in any unmapped channels without duplicates.
+4. Click **Save Station IDs**. The app verifies connectivity and triggers background synchronization immediately. In Free Hybrid mode, TV Passport automatically supersedes TVMaze for those stations to provide full 24/7 local affiliate schedules, while TVMaze continues covering any remaining national channels with zero setup and no duplicates.
 
 ---
 

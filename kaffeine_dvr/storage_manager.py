@@ -36,17 +36,36 @@ class StorageManager:
 
         kaffeinerc = Path.home() / ".config" / "kaffeinerc"
         if kaffeinerc.exists():
+            # Try 1: read line by line under [DVB]
             try:
-                cp = configparser.ConfigParser(interpolation=None)
-                cp.read(kaffeinerc, encoding="utf-8")
-                if "DVB" in cp and "RecordingFolder" in cp["DVB"]:
-                    rf = cp["DVB"]["RecordingFolder"].strip()
-                    if rf:
-                        p = Path(os.path.expanduser(rf))
-                        if p.exists() and p.is_dir():
-                            return p
+                in_dvb = False
+                with open(kaffeinerc, "r", encoding="utf-8", errors="replace") as f:
+                    for line in f:
+                        line_str = line.strip()
+                        if line_str.startswith("[") and line_str.endswith("]"):
+                            in_dvb = (line_str == "[DVB]")
+                            continue
+                        if in_dvb and line_str.startswith("RecordingFolder="):
+                            rf = line_str.split("=", 1)[1].strip()
+                            if rf:
+                                p = Path(os.path.expanduser(rf))
+                                if p.exists() and p.is_dir():
+                                    return p
             except Exception as e:
-                print(f"Error reading kaffeinerc for RecordingFolder: {e}")
+                print(f"Error reading kaffeinerc directly: {e}")
+
+            # Try 2: kreadconfig6
+            try:
+                res = subprocess.run(
+                    ["kreadconfig6", "--file", "kaffeinerc", "--group", "DVB", "--key", "RecordingFolder"],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+                )
+                if res.returncode == 0 and res.stdout.strip():
+                    p = Path(os.path.expanduser(res.stdout.strip()))
+                    if p.exists() and p.is_dir():
+                        return p
+            except Exception:
+                pass
 
         fallback = Path.home() / "Videos"
         return fallback
