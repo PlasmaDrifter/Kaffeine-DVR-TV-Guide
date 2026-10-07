@@ -531,6 +531,9 @@ class SchedulesDirectProvider:
             }
 
         start_t = time.perf_counter()
+        # Schedules Direct JSON protocol explicitly requires the authentication token
+        # request payload to submit a lowercase hex SHA1 hash of the account password.
+        # codeql[py/weak-sensitive-data-hashing]
         pw_hash = hashlib.sha1(password_raw.encode("utf-8")).hexdigest()
         post_data = json.dumps({"username": username, "password": pw_hash}).encode("utf-8")
         req = urllib.request.Request(
