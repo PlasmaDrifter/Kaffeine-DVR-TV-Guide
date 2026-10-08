@@ -89,12 +89,12 @@ class RulesEngine:
                 progress_callback("No active auto-recording rules configured.")
             return []
 
-        # Get existing queued or armed recordings to avoid duplicates
+        # Get existing queued or armed recordings to avoid duplicates or update buffers
         existing_queue = queue_mgr.list_queue(include_completed=False)
-        scheduled_signatures = set()
+        existing_by_sig = {}
         for s in existing_queue:
             sig = (s.get("channel", "").strip().lower(), s.get("start_iso", "")[:16])
-            scheduled_signatures.add(sig)
+            existing_by_sig[sig] = s
 
         newly_scheduled = []
 
@@ -116,16 +116,11 @@ class RulesEngine:
                 if kw.lower() not in full_text:
                     continue
 
-
                 prog_channel = prog.get("kaffeine_channel", "")
                 start_iso = prog.get("start_iso", "")
                 duration_iso = prog.get("duration_iso", "")
                 episode_title = prog.get("episode_title") or ""
                 rec_title = f"{show_title} - {episode_title}" if episode_title else show_title
-
-                sig = (prog_channel.lower(), start_iso[:16])
-                if sig in scheduled_signatures:
-                    continue  # already queued
 
                 # Determine post-roll recording buffer
                 rule_buf = rule.get("buffer_mins")
@@ -136,7 +131,15 @@ class RulesEngine:
                 else:
                     applied_buffer = int(self.config_mgr.end_buffer_mins)
 
-                # Add to deferred DVR queue
+                sig = (prog_channel.lower(), start_iso[:16])
+                existing_rec = existing_by_sig.get(sig)
+                if existing_rec:
+                    if existing_rec.get("status") != "QUEUED":
+                        continue
+                    if existing_rec.get("buffer_mins", 0) == applied_buffer:
+                        continue
+
+                # Add or update deferred DVR queue
                 try:
                     buf_note = f" (+{applied_buffer}m buffer)" if applied_buffer > 0 else ""
                     if progress_callback:
@@ -150,13 +153,18 @@ class RulesEngine:
                         lead_time_mins=self.config_mgr.lead_time_mins,
                         buffer_mins=applied_buffer
                     )
-                    scheduled_signatures.add(sig)
-                    newly_scheduled.append({
+                    existing_by_sig[sig] = {
                         "id": qid,
-                        "title": rec_title,
-                        "channel": prog_channel,
-                        "start_time": prog.get("start_time_local")
-                    })
+                        "status": "QUEUED",
+                        "buffer_mins": applied_buffer
+                    }
+                    if not existing_rec:
+                        newly_scheduled.append({
+                            "id": qid,
+                            "title": rec_title,
+                            "channel": prog_channel,
+                            "start_time": prog.get("start_time_local")
+                        })
                 except Exception as e:
                     print(f"Error queueing '{rec_title}': {e}")
 

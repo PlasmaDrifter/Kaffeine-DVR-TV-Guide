@@ -877,6 +877,10 @@ class MainWindow(QMainWindow):
         self.add_rec_btn.clicked.connect(self.add_manual_recording)
         ctrl_bar.addWidget(self.add_rec_btn)
 
+        self.adjust_buffer_btn = QPushButton("Adjust Buffer...")
+        self.adjust_buffer_btn.clicked.connect(self.adjust_selected_buffer)
+        ctrl_bar.addWidget(self.adjust_buffer_btn)
+
         self.cancel_rec_btn = QPushButton("Cancel Selected Recording")
         self.cancel_rec_btn.setStyleSheet("color: #d9534f;")
         self.cancel_rec_btn.clicked.connect(self.cancel_selected_recording)
@@ -901,6 +905,7 @@ class MainWindow(QMainWindow):
         self.rec_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
         self.rec_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.rec_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.rec_table.itemDoubleClicked.connect(self._on_rec_table_double_clicked)
         layout.addWidget(self.rec_table)
 
         return widget
@@ -2274,6 +2279,73 @@ class MainWindow(QMainWindow):
                 prot_item.setForeground(QColor("#a0aec0"))
                 prot_item.setToolTip("Standard: Subject to auto-cleanup retention rules.")
             self.rec_table.setItem(row, 5, prot_item)
+
+    def _on_rec_table_double_clicked(self, item):
+        col = item.column()
+        if col == 3:  # Duration column
+            self.adjust_selected_buffer()
+        elif col == 5:  # Retain / Protect column
+            self.toggle_protect_selected_recording()
+
+    def adjust_selected_buffer(self):
+        row = self.rec_table.currentRow()
+        if row < 0:
+            QMessageBox.warning(self, "Selection Required", "Please select a recording to adjust its buffer.")
+            return
+
+        qid = self.rec_table.item(row, 0).data(Qt.ItemDataRole.UserRole)
+        rec_title = self.rec_table.item(row, 0).text()
+
+        all_recs = self.queue_mgr.list_queue(include_completed=True)
+        rec = next((r for r in all_recs if r.get("id") == int(qid)), None)
+        if not rec:
+            return
+        if rec.get("status") != "QUEUED":
+            QMessageBox.information(
+                self, "Cannot Adjust Buffer",
+                f"Recording '{rec_title}' is currently {rec.get('status')}. Only QUEUED recordings can have their buffer adjusted."
+            )
+            return
+
+        current_buf = rec.get("buffer_mins", 0) or 0
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Adjust Recording Buffer")
+        dlg.setMinimumWidth(340)
+        form = QFormLayout(dlg)
+
+        title_lbl = QLabel(f"<b>{rec_title}</b>")
+        title_lbl.setWordWrap(True)
+        form.addRow("Show:", title_lbl)
+
+        buf_spin = QSpinBox()
+        buf_spin.setRange(0, 180)
+        buf_spin.setValue(current_buf)
+        buf_spin.setSuffix(" minutes")
+        form.addRow("End Buffer:", buf_spin)
+
+        presets_box = QHBoxLayout()
+        for m in [0, 15, 30, 45, 60]:
+            btn = QPushButton(f"+{m}m" if m > 0 else "None")
+            btn.clicked.connect(lambda _, val=m: buf_spin.setValue(val))
+            presets_box.addWidget(btn)
+        form.addRow("Presets:", presets_box)
+
+        btns = QHBoxLayout()
+        ok_btn = QPushButton("Save Buffer")
+        cancel_btn = QPushButton("Cancel")
+        ok_btn.clicked.connect(dlg.accept)
+        cancel_btn.clicked.connect(dlg.reject)
+        btns.addWidget(ok_btn)
+        btns.addWidget(cancel_btn)
+        form.addRow(btns)
+
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            new_buf = buf_spin.value()
+            if self.queue_mgr.update_recording_buffer(int(qid), new_buf):
+                self.status_bar.showMessage(f"Updated buffer for '{rec_title}' to +{new_buf}m.", 4000)
+                self.refresh_recordings()
+            else:
+                QMessageBox.warning(self, "Update Failed", "Could not update recording buffer.")
 
     def toggle_protect_selected_recording(self):
         row = self.rec_table.currentRow()

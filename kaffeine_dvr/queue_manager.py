@@ -76,15 +76,24 @@ class QueueManager:
         conn = sqlite3.connect(str(self.db_path))
         cur = conn.cursor()
 
-        # Check for duplicates
+        # Check for duplicates or update if still QUEUED
         cur.execute("""
-            SELECT id FROM recording_queue 
+            SELECT id, status, buffer_mins FROM recording_queue 
             WHERE channel = ? AND start_iso = ? AND status IN ('QUEUED', 'ARMED', 'RECORDING')
         """, (channel, start_iso))
         existing = cur.fetchone()
         if existing:
+            existing_id, existing_status, existing_buf = existing
+            if existing_status == 'QUEUED':
+                cur.execute("""
+                    UPDATE recording_queue
+                    SET title = ?, duration_iso = ?, start_time_local = ?,
+                        end_iso = ?, lead_time_mins = ?, buffer_mins = ?
+                    WHERE id = ?
+                """, (title, effective_duration_iso, start_display, end_iso, lead_time_mins, buffer_mins, existing_id))
+                conn.commit()
             conn.close()
-            return existing[0]
+            return existing_id
 
         now_str = datetime.now().isoformat()
         cur.execute("""
@@ -97,6 +106,54 @@ class QueueManager:
         conn.commit()
         conn.close()
         return new_id
+
+    def update_recording_buffer(self, queue_id: int, new_buffer_mins: int) -> bool:
+        """
+        Updates the buffer_mins of an existing QUEUED recording and recalculates
+        its duration_iso and end_iso.
+        """
+        conn = sqlite3.connect(str(self.db_path))
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM recording_queue WHERE id = ?", (queue_id,))
+        row = cur.fetchone()
+        if not row or row["status"] != "QUEUED":
+            conn.close()
+            return False
+
+        try:
+            start_iso = row["start_iso"]
+            curr_dur_iso = row["duration_iso"]
+            curr_buf = row["buffer_mins"] or 0
+
+            # Compute original base duration seconds by subtracting current buffer
+            h, m, s = map(int, curr_dur_iso.split(":"))
+            total_current_secs = h * 3600 + m * 60 + s
+            base_secs = max(0, total_current_secs - (curr_buf * 60))
+
+            # Apply new buffer
+            new_total_secs = base_secs + (new_buffer_mins * 60)
+            bh = new_total_secs // 3600
+            bm = (new_total_secs % 3600) // 60
+            bs = new_total_secs % 60
+            new_dur_iso = f"{bh:02d}:{bm:02d}:{bs:02d}"
+
+            dt_start = datetime.fromisoformat(start_iso)
+            dt_end = dt_start + timedelta(seconds=new_total_secs)
+            new_end_iso = dt_end.strftime("%Y-%m-%dT%H:%M:%S")
+
+            cur.execute("""
+                UPDATE recording_queue
+                SET duration_iso = ?, end_iso = ?, buffer_mins = ?
+                WHERE id = ?
+            """, (new_dur_iso, new_end_iso, new_buffer_mins, queue_id))
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            print(f"Error updating buffer for recording {queue_id}: {e}")
+            conn.close()
+            return False
 
     def list_queue(self, include_completed: bool = False) -> List[Dict[str, Any]]:
         conn = sqlite3.connect(str(self.db_path))
