@@ -3182,7 +3182,17 @@ class MainWindow(QMainWindow):
 
     def jump_guide_to_now(self):
         now = datetime.now()
-        now_slot = max(0, min(47, (now.hour * 60 + now.minute) // 30))
+        airdate = self.guide_date_combo.currentData() if hasattr(self, "guide_date_combo") else None
+        
+        if airdate:
+            # Viewing a specific single day in grid
+            now_slot = max(0, min(47, (now.hour * 60 + now.minute) // 30))
+        else:
+            # Multi-day continuous grid view (slots starting from today 12:00 AM)
+            today = date.today()
+            base_dt = datetime.combine(today, datetime.min.time())
+            offset_seconds = max(0, (now - base_dt).total_seconds())
+            now_slot = int(offset_seconds // 1800)
 
         # Check currently active programs in the grid to find the earliest starting slot
         # among programs currently airing (start <= now < end).
@@ -3201,7 +3211,10 @@ class MainWindow(QMainWindow):
                     dur = timedelta(hours=parts[0], minutes=parts[1], seconds=parts[2] if len(parts) > 2 else 0)
                     p_end = p_start + dur
                     if p_start <= now < p_end:
-                        p_slot = (p_start.hour * 60 + p_start.minute) // 30
+                        if airdate:
+                            p_slot = (p_start.hour * 60 + p_start.minute) // 30
+                        else:
+                            p_slot = int(max(0, (p_start - base_dt).total_seconds()) // 1800)
                         if p_slot < earliest_slot:
                             earliest_slot = p_slot
                 except Exception:
@@ -3214,8 +3227,13 @@ class MainWindow(QMainWindow):
         self._scroll_grid_to_slot(0, center=False)
 
     def jump_guide_to_primetime(self):
-        # 8:00 PM is 20:00 -> slot 40
-        self._scroll_grid_to_slot(40, center=False)
+        airdate = self.guide_date_combo.currentData() if hasattr(self, "guide_date_combo") else None
+        if airdate:
+            # 8:00 PM is 20:00 -> slot 40
+            self._scroll_grid_to_slot(40, center=False)
+        else:
+            # Multi-day grid: jump to today's prime time (8:00 PM = slot 40)
+            self._scroll_grid_to_slot(40, center=False)
 
     def filter_guide(self):
         # Automatically prune already elapsed past entries from SQLite database
@@ -3228,9 +3246,10 @@ class MainWindow(QMainWindow):
         channel = self.guide_channel_combo.currentText()
         airdate = self.guide_date_combo.currentData()
         
-        # When viewing the grid for a specific date, display full 24-hour day schedule
-        # In list mode or when "All Upcoming" is selected, trim ended programs
-        trim_ended = (self.guide_stack.currentIndex() == 1 or airdate is None)
+        # When viewing the grid for a specific date or in All Upcoming continuous mode,
+        # don't trim earlier shows of today so the grid is fully populated.
+        # In list mode, trim ended programs.
+        trim_ended = (self.guide_stack.currentIndex() == 1)
         programs = self.guide_service.search_programs(
             query=query, channel=channel, airdate=airdate, trim_ended=trim_ended
         )
@@ -3289,8 +3308,37 @@ class MainWindow(QMainWindow):
         self.guide_grid_table.setRowCount(len(channels))
         self.guide_grid_table.setVerticalHeaderLabels(channels)
 
-        # Parse airdate or default to today
-        target_date_str = airdate or date.today().strftime("%Y-%m-%d")
+        today = date.today()
+        num_days = 14
+
+        # Configure columns and headers based on whether "All Upcoming" (multi-day) or a specific date is selected:
+        if airdate is None:
+            # Multi-day continuous grid (e.g. 14 days = 672 half-hour columns)
+            total_cols = num_days * 48
+            if self.guide_grid_table.columnCount() != total_cols:
+                self.guide_grid_table.setColumnCount(total_cols)
+            
+            grid_headers = []
+            for d_idx in range(num_days):
+                cur_d = today + timedelta(days=d_idx)
+                d_label = "Today" if d_idx == 0 else ("Tomorrow" if d_idx == 1 else cur_d.strftime("%a %b %d"))
+                for h in range(24):
+                    for m in (0, 30):
+                        time_str = f"{h%12 or 12}:{m:02d} {'AM' if h < 12 else 'PM'}"
+                        grid_headers.append(f"{d_label} {time_str}")
+            self.guide_grid_table.setHorizontalHeaderLabels(grid_headers)
+            base_dt = datetime.combine(today, datetime.min.time())
+        else:
+            # Single-day 24-hour grid (48 columns)
+            total_cols = 48
+            if self.guide_grid_table.columnCount() != total_cols:
+                self.guide_grid_table.setColumnCount(total_cols)
+            grid_headers = []
+            for h in range(24):
+                for m in (0, 30):
+                    grid_headers.append(f"{h%12 or 12}:{m:02d} {'AM' if h < 12 else 'PM'}")
+            self.guide_grid_table.setHorizontalHeaderLabels(grid_headers)
+            base_dt = datetime.combine(datetime.strptime(airdate, "%Y-%m-%d").date(), datetime.min.time())
 
         # Color palette for tiles
         tile_bg = QColor("#222838")
@@ -3298,13 +3346,18 @@ class MainWindow(QMainWindow):
         tile_text_color = QColor("#ffffff")
 
         for row_idx, ch in enumerate(channels):
-            ch_progs = [
-                p for p in programs
-                if p.get("kaffeine_channel") == ch and (
-                    p.get("airdate") == target_date_str or
-                    (p.get("start_iso") and p.get("start_iso").startswith(target_date_str))
-                )
-            ]
+            if airdate is None:
+                # All upcoming days
+                ch_progs = [p for p in programs if p.get("kaffeine_channel") == ch]
+            else:
+                # Filter specifically to selected airdate
+                ch_progs = [
+                    p for p in programs
+                    if p.get("kaffeine_channel") == ch and (
+                        p.get("airdate") == airdate or
+                        (p.get("start_iso") and p.get("start_iso").startswith(airdate))
+                    )
+                ]
             ch_progs.sort(key=lambda x: x.get("start_iso", ""))
 
             current_col = 0
@@ -3325,24 +3378,24 @@ class MainWindow(QMainWindow):
                     dur = timedelta(minutes=30)
                 end_dt = dt + dur
 
-                start_col = (dt.hour * 60 + dt.minute) // 30
+                start_col = int((dt - base_dt).total_seconds() // 1800)
                 if start_col < current_col:
                     start_col = current_col
-                if start_col >= 48:
+                if start_col >= total_cols:
                     break
 
                 # Determine nominal end slot
                 if idx + 1 < len(ch_progs):
                     try:
                         next_dt = datetime.fromisoformat(ch_progs[idx + 1].get("start_iso", ""))
-                        next_start_col = (next_dt.hour * 60 + next_dt.minute) // 30
+                        next_start_col = int((next_dt - base_dt).total_seconds() // 1800)
                     except Exception:
-                        next_start_col = 48
-                    nominal_end_col = (end_dt.hour * 60 + end_dt.minute + 29) // 30 if end_dt.date() == dt.date() else 48
+                        next_start_col = total_cols
+                    nominal_end_col = int((end_dt - base_dt).total_seconds() + 1799) // 1800
                     end_col = max(start_col + 1, min(next_start_col, nominal_end_col))
                 else:
-                    nominal_end_col = (end_dt.hour * 60 + end_dt.minute + 29) // 30 if end_dt.date() == dt.date() else 48
-                    end_col = max(start_col + 1, min(48, nominal_end_col))
+                    nominal_end_col = int((end_dt - base_dt).total_seconds() + 1799) // 1800
+                    end_col = max(start_col + 1, min(total_cols, nominal_end_col))
 
                 span = max(1, end_col - start_col)
 
@@ -3387,7 +3440,7 @@ class MainWindow(QMainWindow):
 
         # Auto-scroll based on selected date (unless preserving scroll position):
         if not keep_scroll:
-            if target_date_str == date.today().strftime("%Y-%m-%d"):
+            if airdate is None or airdate == today.strftime("%Y-%m-%d"):
                 QTimer.singleShot(60, self.jump_guide_to_now)
             else:
                 QTimer.singleShot(60, self.jump_guide_to_start)
