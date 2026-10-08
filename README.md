@@ -89,33 +89,32 @@ Kaffeine is a powerful digital TV viewer for KDE and Linux desktop environments,
 
 ### Prerequisites
 - Python 3.9 or newer
-- PyQt6 (`pip install PyQt6` or via distribution package manager)
+- PyQt6 (`sudo apt install python3-pyqt6` on Ubuntu/Debian/Kubuntu, or `pip install PyQt6`)
 - Kaffeine (`kaffeine`)
 - Standard desktop tools: `systemd`, `notify-send` (optional, for notifications), `kdotool` or `xdotool` (optional, for window minimization)
 
-### Install via pip / local clone
+### 1. Install via pip / local clone
 ```bash
 git clone https://github.com/PlasmaDrifter/Kaffeine-DVR-TV-Guide.git
 cd Kaffeine-DVR-TV-Guide
-# On modern Debian/Ubuntu/Kubuntu (PEP 668 externally managed environment):
+
+# On Ubuntu / Kubuntu / Debian (PEP 668 externally managed environment):
 pip install --user --break-system-packages .
+
+# On other distributions (Arch, Fedora, etc.):
+pip install --user .
 ```
 
-### Install Desktop Launcher and Systemd User Service
-```bash
-# User binary wrapper
-mkdir -p ~/.local/bin
-cat << 'BIN_EOF' > ~/.local/bin/kaffeine-dvr
-#!/usr/bin/env bash
-exec python3 -m kaffeine_dvr.cli "$@"
-BIN_EOF
-chmod +x ~/.local/bin/kaffeine-dvr
+> **Note on PATH**: Ensure `~/.local/bin` is in your user `PATH` (standard on modern Ubuntu/Kubuntu).
 
+### 2. Install Desktop Launcher and Systemd User Service
+```bash
 # Desktop launcher
 mkdir -p ~/.local/share/applications
 cp desktop/kaffeine-dvr.desktop ~/.local/share/applications/
+update-desktop-database ~/.local/share/applications
 
-# Systemd background watcher service
+# Systemd background watcher service (Just-In-Time recording daemon)
 mkdir -p ~/.config/systemd/user
 cp systemd/kaffeine-dvr-watcher.service ~/.config/systemd/user/
 systemctl --user daemon-reload
@@ -142,11 +141,11 @@ ABC = ABC
 The CW = CW6
 ```
 
-### 1. TV Guide Sources & Zero-Configuration TVMaze
+### 2. TV Guide Sources & Zero-Configuration TVMaze
 - **TVMaze (Zero Configuration Required):** Out of the box, national broadcast networks (**FOX, CBS, NBC, ABC, PBS, and The CW**) work automatically with **no accounts, no API keys, and no manual setup**. As soon as the application opens, it downloads 7 days of prime-time listings for all mapped channels.
 - **National vs. Local Daytime Programming:** TVMaze catalogs national network programming (evening prime-time dramas, comedies, national sports, and network specials). However, because broadcast networks leave morning, midday, and late-afternoon blocks to local stations, **local news broadcasts, daytime syndicated talk shows, game shows, and independent local subchannels** are not part of TVMaze's national feed.
 
-### 2. TV Passport Setup (24/7 Local Affiliate Coverage & Independent Channels)
+### 3. TV Passport Setup (24/7 Local Affiliate Coverage & Independent Channels)
 To get complete 24/7 continuous schedules with local morning/evening news, daytime talk shows, or independent local channels:
 1. Search for your local affiliate station on [tvpassport.com](https://www.tvpassport.com).
 2. Note the numeric ID from the station listings URL (for example, `/station/1812/`).
@@ -162,12 +161,13 @@ To get complete 24/7 continuous schedules with local morning/evening news, dayti
 
 ---
 
-## CLI Usage
-
-The command-line interface provides full control without launching the GUI:
+## CLI & Launch Usage
 
 ```bash
-# Show current status, cache stats, and backend health
+# Launch GUI (default when run in desktop graphical session):
+kaffeine-dvr
+
+# Show current status, cache stats, and backend health (CLI summary):
 kaffeine-dvr --status
 
 # Synchronize 7 days of TV listings
