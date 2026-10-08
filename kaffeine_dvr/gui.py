@@ -888,22 +888,13 @@ class MainWindow(QMainWindow):
     def create_status_banner(self) -> QHBoxLayout:
         banner = QHBoxLayout()
 
-        # Kaffeine status badge
-        self.kaffeine_status_lbl = QLabel("Checking Kaffeine...")
-        self.kaffeine_status_lbl.setStyleSheet("font-weight: bold; padding: 4px 8px; border-radius: 4px;")
-        banner.addWidget(self.kaffeine_status_lbl)
-
-        self.launch_kaffeine_btn = QPushButton("Launch Kaffeine")
-        self.launch_kaffeine_btn.clicked.connect(self.launch_kaffeine)
-        banner.addWidget(self.launch_kaffeine_btn)
-
-        banner.addSpacing(20)
-
-        # Guide status badge
-        self.guide_status_lbl = QLabel("TV Guide Status: Unknown")
+        # Guide status label
+        self.guide_status_lbl = QLabel("TV Guide: Checking...")
+        self.guide_status_lbl.setStyleSheet("font-size: 12px; color: #a4b0c2; font-weight: 500;")
         banner.addWidget(self.guide_status_lbl)
 
         self.sync_guide_btn = QPushButton("Sync Guide Now")
+        self.sync_guide_btn.setStyleSheet("padding: 3px 10px; font-size: 11px;")
         self.sync_guide_btn.clicked.connect(self.sync_guide)
         banner.addWidget(self.sync_guide_btn)
 
@@ -2251,23 +2242,42 @@ class MainWindow(QMainWindow):
         self.refresh_rules()
 
     def update_status_badges(self):
-        is_running = self.dbus_client.is_running()
-        if is_running:
-            self.kaffeine_status_lbl.setText("Kaffeine: Running (Connected)")
-            self.kaffeine_status_lbl.setStyleSheet("background-color: #28a745; color: white; padding: 4px 8px; border-radius: 4px;")
-            self.launch_kaffeine_btn.setVisible(False)
-        else:
-            self.kaffeine_status_lbl.setText("Kaffeine: Offline")
-            self.kaffeine_status_lbl.setStyleSheet("background-color: #6c757d; color: white; padding: 4px 8px; border-radius: 4px;")
-            self.launch_kaffeine_btn.setVisible(True)
-
         guide_status = self.guide_service.get_guide_status()
         last_updated = guide_status.get("last_updated")
-        count = guide_status.get("total_programs", 0)
         if last_updated:
-            self.guide_status_lbl.setText(f"TV Guide: Updated {last_updated} ({count} shows cached)")
+            relative_str = "Recently"
+            try:
+                # Try parsing format: "YYYY-MM-DD hh:mm:ss AM/PM" or ISO
+                for fmt in ("%Y-%m-%d %I:%M:%S %p", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
+                    try:
+                        up_dt = datetime.strptime(last_updated.strip(), fmt)
+                        diff = datetime.now() - up_dt
+                        total_mins = int(diff.total_seconds() // 60)
+                        if total_mins < 1:
+                            relative_str = "Just now"
+                        elif total_mins == 1:
+                            relative_str = "1 min ago"
+                        elif total_mins < 60:
+                            relative_str = f"{total_mins} mins ago"
+                        else:
+                            hours = total_mins // 60
+                            if hours == 1:
+                                relative_str = "1 hour ago"
+                            elif hours < 24:
+                                relative_str = f"{hours} hours ago"
+                            else:
+                                days = hours // 24
+                                relative_str = f"{days} day{'s' if days > 1 else ''} ago"
+                        break
+                    except ValueError:
+                        continue
+            except Exception:
+                relative_str = last_updated
+
+            self.guide_status_lbl.setText(f"TV Guide Updated: {relative_str}")
+            self.guide_status_lbl.setToolTip(f"Last sync completed: {last_updated}")
         else:
-            self.guide_status_lbl.setText(f"TV Guide: Not Synced ({count} shows)")
+            self.guide_status_lbl.setText("TV Guide: Not Synced")
 
     def launch_kaffeine(self):
         self.status_bar.showMessage("Launching Kaffeine...", 3000)
