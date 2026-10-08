@@ -1163,7 +1163,6 @@ class MainWindow(QMainWindow):
         app_inst = QApplication.instance()
         if app_inst:
             setup_dark_theme(app_inst)
-        self.setStyleSheet(APP_STYLESHEET)
 
         self.settings = QSettings("KaffeineDVR", "TVGuide")
         geo = self.settings.value("geometry")
