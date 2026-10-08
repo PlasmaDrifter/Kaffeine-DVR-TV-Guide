@@ -97,7 +97,8 @@ Kaffeine is a powerful digital TV viewer for KDE and Linux desktop environments,
 ```bash
 git clone https://github.com/PlasmaDrifter/Kaffeine-DVR-TV-Guide.git
 cd Kaffeine-DVR-TV-Guide
-pip install .
+# On modern Debian/Ubuntu/Kubuntu (PEP 668 externally managed environment):
+pip install --user --break-system-packages .
 ```
 
 ### Install Desktop Launcher and Systemd User Service
