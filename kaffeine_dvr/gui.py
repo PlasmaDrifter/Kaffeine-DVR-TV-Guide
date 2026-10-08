@@ -832,7 +832,7 @@ def get_app_icon() -> QIcon:
     return QIcon()
 
 
-APP_STYLESHEET = f"""
+APP_STYLESHEET = """
 /* Base Application & Window Styling */
 QWidget {
     background-color: #191c28;
@@ -929,12 +929,12 @@ QCheckBox::indicator:hover {
 QCheckBox::indicator:checked {
     background-color: #2d6cd4;
     border-color: #4a8df5;
-    image: url("{CHECKMARK_ICON_PATH}");
+    image: url("__CHECKMARK_ICON_PATH__");
 }
 QCheckBox::indicator:checked:disabled {
     background-color: #238636;
     border-color: #2ea043;
-    image: url("{CHECKMARK_ICON_PATH}");
+    image: url("__CHECKMARK_ICON_PATH__");
 }
 
 /* Top-Level Main Tabs: Option 4 Browser-Style Curved / Flowing Tabs */
@@ -1151,7 +1151,8 @@ def setup_dark_theme(app: Optional[QApplication]):
     palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, QColor("#656f82"))
     palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, QColor("#656f82"))
     app.setPalette(palette)
-    app.setStyleSheet(APP_STYLESHEET)
+    stylesheet = APP_STYLESHEET.replace("__CHECKMARK_ICON_PATH__", CHECKMARK_ICON_PATH)
+    app.setStyleSheet(stylesheet)
 
 
 class MainWindow(QMainWindow):
