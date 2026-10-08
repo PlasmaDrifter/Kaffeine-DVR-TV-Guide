@@ -1493,14 +1493,11 @@ class MainWindow(QMainWindow):
         self.guide_date_combo = QComboBox()
         self.guide_date_combo.addItem("All Upcoming", None)
         today = date.today()
-        days_since_sunday = (today.weekday() + 1) % 7
-        cur_week_sunday = today - timedelta(days=days_since_sunday)
-        for i in range(21):
-            d = cur_week_sunday + timedelta(days=i)
-            label = "Today" if d == today else ("Tomorrow" if d == today + timedelta(days=1) else d.strftime("%a, %b %d"))
+        for i in range(14):
+            d = today + timedelta(days=i)
+            label = "Today" if i == 0 else ("Tomorrow" if i == 1 else d.strftime("%a, %b %d"))
             self.guide_date_combo.addItem(label, d.strftime("%Y-%m-%d"))
-        today_idx = self.guide_date_combo.findData(today.strftime("%Y-%m-%d"))
-        self.guide_date_combo.setCurrentIndex(today_idx if today_idx >= 0 else 1)
+        self.guide_date_combo.setCurrentIndex(1)
         self.guide_date_combo.currentIndexChanged.connect(self.filter_guide)
         filter_bar.addWidget(self.guide_date_combo)
 
@@ -2765,32 +2762,29 @@ class MainWindow(QMainWindow):
         if not hasattr(self, "guide_date_combo"):
             return
         today = date.today()
+        # Item 0 is 'All Upcoming' (data=None), Item 1 is 'Today' (data=today_str)
+        today_date_in_combo = self.guide_date_combo.itemData(1) if self.guide_date_combo.count() > 1 else None
         today_str = today.strftime("%Y-%m-%d")
-        days_since_sunday = (today.weekday() + 1) % 7
-        cur_week_sunday = today - timedelta(days=days_since_sunday)
-
-        today_idx_existing = self.guide_date_combo.findData(today_str) if self.guide_date_combo.count() > 1 else -1
-        if not reset_to_default and today_idx_existing >= 0:
+        if not reset_to_default and today_date_in_combo == today_str:
             return  # Date dropdown is already up to date
 
         cur_data = None if reset_to_default else self.guide_date_combo.currentData()
         self.guide_date_combo.blockSignals(True)
         self.guide_date_combo.clear()
         self.guide_date_combo.addItem("All Upcoming", None)
-        for i in range(21):
-            d = cur_week_sunday + timedelta(days=i)
-            label = "Today" if d == today else ("Tomorrow" if d == today + timedelta(days=1) else d.strftime("%a, %b %d"))
+        for i in range(14):
+            d = today + timedelta(days=i)
+            label = "Today" if i == 0 else ("Tomorrow" if i == 1 else d.strftime("%a, %b %d"))
             self.guide_date_combo.addItem(label, d.strftime("%Y-%m-%d"))
 
-        today_idx = self.guide_date_combo.findData(today_str)
         if reset_to_default or cur_data is None:
-            self.guide_date_combo.setCurrentIndex(today_idx if today_idx >= 0 else 1)
+            self.guide_date_combo.setCurrentIndex(1)
         else:
             idx = self.guide_date_combo.findData(cur_data)
             if idx >= 0:
                 self.guide_date_combo.setCurrentIndex(idx)
             else:
-                self.guide_date_combo.setCurrentIndex(today_idx if today_idx >= 0 else 1)
+                self.guide_date_combo.setCurrentIndex(1)
         self.guide_date_combo.blockSignals(False)
         self.filter_guide()
 
@@ -3338,7 +3332,7 @@ class MainWindow(QMainWindow):
         self._update_day_nav_bar(sync_week_with_selection=False)
 
     def _on_day_nav_next(self):
-        self.day_nav_offset = min(14, getattr(self, "day_nav_offset", 0) + 7)
+        self.day_nav_offset = min(7, getattr(self, "day_nav_offset", 0) + 7)
         self._update_day_nav_bar(sync_week_with_selection=False)
 
     def _update_day_nav_bar(self, sync_week_with_selection: bool = False):
@@ -3348,10 +3342,7 @@ class MainWindow(QMainWindow):
         selected_date_str = self.guide_date_combo.currentData() if hasattr(self, "guide_date_combo") else None
         today = date.today()
         today_str = today.strftime("%Y-%m-%d")
-
-        # Current calendar week starts on Sunday
-        days_since_sunday = (today.weekday() + 1) % 7
-        cur_week_sunday = today - timedelta(days=days_since_sunday)
+        today_idx = (today.weekday() + 1) % 7
 
         if not hasattr(self, "day_nav_offset"):
             self.day_nav_offset = 0
@@ -3361,17 +3352,19 @@ class MainWindow(QMainWindow):
         if sync_week_with_selection and selected_date_str:
             try:
                 sel_date = datetime.strptime(selected_date_str, "%Y-%m-%d").date()
-                diff_from_cur_sunday = (sel_date - cur_week_sunday).days
-                week_idx = diff_from_cur_sunday // 7
-                if 0 <= week_idx <= 2:
-                    self.day_nav_offset = week_idx * 7
+                days_ahead = (sel_date - today).days
+                day_of_week_idx = (sel_date.weekday() + 1) % 7
+                nominal_offset0 = (day_of_week_idx - today_idx) % 7
+                if days_ahead >= nominal_offset0 + 7:
+                    self.day_nav_offset = 7
+                else:
+                    self.day_nav_offset = 0
             except Exception:
                 pass
 
-        base_sunday = cur_week_sunday + timedelta(days=self.day_nav_offset)
-
         for i, btn in enumerate(self.day_nav_buttons):
-            btn_date = base_sunday + timedelta(days=i)
+            days_ahead = (i - today_idx) % 7 + self.day_nav_offset
+            btn_date = today + timedelta(days=days_ahead)
             btn_date_str = btn_date.strftime("%Y-%m-%d")
 
             day_label = btn_date.strftime("%A, %b ") + str(btn_date.day)
@@ -3380,7 +3373,6 @@ class MainWindow(QMainWindow):
 
             is_today = (btn_date_str == today_str)
             is_selected = (btn_date_str == selected_date_str)
-            is_past = (btn_date < today)
 
             if is_today and is_selected:
                 btn.setStyleSheet(self._day_style_today_selected)
@@ -3391,9 +3383,6 @@ class MainWindow(QMainWindow):
             elif is_selected:
                 btn.setStyleSheet(self._day_style_selected)
                 btn.setToolTip(f"{day_label} (Selected)")
-            elif is_past:
-                btn.setStyleSheet(self._day_style_past)
-                btn.setToolTip(f"{day_label} (Past)")
             else:
                 btn.setStyleSheet(self._day_style_unselected)
                 btn.setToolTip(day_label)
@@ -3401,7 +3390,7 @@ class MainWindow(QMainWindow):
         if hasattr(self, "day_nav_prev_btn"):
             self.day_nav_prev_btn.setEnabled(self.day_nav_offset > 0)
         if hasattr(self, "day_nav_next_btn"):
-            self.day_nav_next_btn.setEnabled(self.day_nav_offset < 14)
+            self.day_nav_next_btn.setEnabled(self.day_nav_offset < 7)
 
     def filter_guide(self):
         # Automatically prune already elapsed past entries from SQLite database
