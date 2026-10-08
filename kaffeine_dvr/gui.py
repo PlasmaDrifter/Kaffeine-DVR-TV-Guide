@@ -626,72 +626,87 @@ def get_app_icon() -> QIcon:
 
 
 APP_STYLESHEET = """
-/* Top-Level Main Tabs */
+/* Top-Level Main Tabs: Option 4 Browser-Style Curved / Flowing Tabs */
 QTabWidget#mainTabs::pane {
-    border: 1px solid #363e52;
-    border-radius: 6px;
-    background-color: #181b26;
+    border: 1px solid #3d465c;
+    border-top: 1.5px solid #4a5570;
+    border-radius: 8px;
+    background-color: #191c28;
     top: -1px;
 }
+QTabWidget#mainTabs > QTabBar {
+    background: transparent;
+}
 QTabWidget#mainTabs > QTabBar::tab {
-    background-color: #1e2332;
-    border: 1px solid #363e52;
-    border-top-left-radius: 6px;
-    border-top-right-radius: 6px;
-    padding: 10px 24px;
-    margin-right: 5px;
-    color: #94a3b8;
+    background-color: transparent;
+    border: 1px solid transparent;
+    border-top-left-radius: 9px;
+    border-top-right-radius: 9px;
+    padding: 9px 24px 8px 24px;
+    margin-right: 4px;
+    margin-top: 5px;
+    color: #8c9bb0;
     font-size: 13px;
-    font-weight: 600;
+    font-weight: 500;
 }
 QTabWidget#mainTabs > QTabBar::tab:selected {
-    background-color: #273042;
-    border-top: 3.5px solid #48bb78;
-    border-left: 1px solid #4a5568;
-    border-right: 1px solid #4a5568;
-    border-bottom: 1px solid #273042;
+    background-color: #191c28;
+    border: 1px solid #3d465c;
+    border-bottom: 2px solid #191c28;
+    border-top-left-radius: 9px;
+    border-top-right-radius: 9px;
+    margin-top: 0px;
+    padding-top: 11px;
+    padding-bottom: 9px;
     color: #ffffff;
     font-weight: bold;
 }
 QTabWidget#mainTabs > QTabBar::tab:hover:!selected {
-    background-color: #252c3e;
-    border-color: #4a5568;
-    color: #e2e8f0;
+    background-color: #212637;
+    border: 1px solid #2f374a;
+    border-bottom: none;
+    color: #d8e2ee;
 }
 
-/* Secondary Subtabs: Recordings & Settings */
+/* Secondary Subtabs: Curved Flowing Subtabs */
 QTabWidget#recordingsSubTabs::pane,
 QTabWidget#settingsSubTabs::pane {
-    border: 1px solid #2e3547;
+    border: 1px solid #323a4d;
+    border-top: 1.5px solid #3f4961;
     border-radius: 6px;
-    background-color: #161924;
+    background-color: #151822;
     padding: 6px;
     top: -1px;
 }
 QTabWidget#recordingsSubTabs > QTabBar::tab,
 QTabWidget#settingsSubTabs > QTabBar::tab {
-    background-color: #1d2230;
-    border: 1px solid #333b4e;
-    border-radius: 6px;
-    padding: 7px 20px;
-    margin-right: 6px;
-    margin-bottom: 4px;
-    color: #94a3b8;
+    background-color: transparent;
+    border: 1px solid transparent;
+    border-top-left-radius: 7px;
+    border-top-right-radius: 7px;
+    padding: 6px 18px 5px 18px;
+    margin-right: 4px;
+    margin-top: 3px;
+    color: #8896aa;
     font-size: 12px;
-    font-weight: 600;
+    font-weight: 500;
 }
 QTabWidget#recordingsSubTabs > QTabBar::tab:selected,
 QTabWidget#settingsSubTabs > QTabBar::tab:selected {
-    background-color: #273145;
-    border: 1.5px solid #38bdf8;
+    background-color: #151822;
+    border: 1px solid #323a4d;
+    border-bottom: 2px solid #151822;
+    margin-top: 0px;
+    padding-top: 8px;
     color: #ffffff;
     font-weight: bold;
 }
 QTabWidget#recordingsSubTabs > QTabBar::tab:hover:!selected,
 QTabWidget#settingsSubTabs > QTabBar::tab:hover:!selected {
-    background-color: #232a3b;
-    border-color: #444f68;
-    color: #e2e8f0;
+    background-color: #1e2332;
+    border: 1px solid #2a3142;
+    border-bottom: none;
+    color: #d1dbe7;
 }
 
 /* Scroll area background inside settings */
