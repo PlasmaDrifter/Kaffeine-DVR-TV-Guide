@@ -1826,6 +1826,7 @@ class MainWindow(QMainWindow):
         # Storage Action Buttons
         storage_btn_row = QHBoxLayout()
         self.run_cleanup_btn = QPushButton("Run Retention Cleanup Now")
+        self.run_cleanup_btn.setStyleSheet("color: #d9534f;")
         self.run_cleanup_btn.clicked.connect(self.run_manual_cleanup)
         storage_btn_row.addWidget(self.run_cleanup_btn)
 
@@ -2338,10 +2339,28 @@ class MainWindow(QMainWindow):
             self.storage_status_lbl.setStyleSheet(f"font-weight: bold; font-size: 11px; color: {color};")
 
     def run_manual_cleanup(self):
+        retention_days = self.retention_days_spin.value()
+        min_free = self.min_free_spin.value()
+        folder = self.custom_folder_input.text().strip() or self.storage_mgr.get_active_recording_folder()
+
+        confirm = QMessageBox.warning(
+            self,
+            "Confirm Retention Cleanup",
+            f"Are you sure you want to run retention cleanup now?\n\n"
+            f"Target Directory: {folder}\n"
+            f"Retention Policy: Delete unprotected recordings older than {retention_days} days "
+            f"or if free space is below {min_free} GB.\n\n"
+            f"Recordings matching these criteria will be permanently deleted.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+
         # Apply current settings to manager first
         self.config_mgr.auto_cleanup_enabled = True
-        self.config_mgr.retention_days = self.retention_days_spin.value()
-        self.config_mgr.min_free_disk_gb = self.min_free_spin.value()
+        self.config_mgr.retention_days = retention_days
+        self.config_mgr.min_free_disk_gb = min_free
         self.config_mgr.custom_recording_folder = self.custom_folder_input.text().strip()
 
         res = self.storage_mgr.run_cleanup_cycle()
