@@ -65,7 +65,7 @@ class KaffeineDbusClient:
             print(f"Error launching kaffeine: {e}")
             return False
 
-    def _minimize_window_async(self, timeout_sec: float = 6.0):
+    def _minimize_window_async(self, timeout_sec: float = 8.0):
         """Poll briefly for Kaffeine's window to appear and minimize it to the taskbar."""
         import shutil
         import time
@@ -76,45 +76,60 @@ class KaffeineDbusClient:
         if not kdotool_bin and not xdotool_bin:
             return
 
+        env = self._get_display_env()
         start_time = time.time()
         while time.time() - start_time < timeout_sec:
-            time.sleep(0.25)
+            time.sleep(0.3)
             try:
                 if kdotool_bin:
                     res = subprocess.run(
                         [kdotool_bin, "search", "--class", "kaffeine"],
+                        env=env,
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE,
                         text=True,
-                        timeout=1.0
+                        timeout=1.5
                     )
-                    if res.stdout.strip():
-                        subprocess.run(
-                            [kdotool_bin, "search", "--class", "kaffeine", "windowminimize"],
-                            stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL,
-                            timeout=1.0
-                        )
+                    wids = [w.strip() for w in res.stdout.strip().splitlines() if w.strip()]
+                    if wids:
+                        for wid in wids:
+                            subprocess.run(
+                                [kdotool_bin, "windowstate", "--add", "MINIMIZED", wid],
+                                env=env,
+                                stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL,
+                                timeout=1.0
+                            )
+                            subprocess.run(
+                                [kdotool_bin, "windowminimize", wid],
+                                env=env,
+                                stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL,
+                                timeout=1.0
+                            )
                         break
                 elif xdotool_bin:
                     res = subprocess.run(
                         [xdotool_bin, "search", "--class", "kaffeine"],
+                        env=env,
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE,
                         text=True,
-                        timeout=1.0
+                        timeout=1.5
                     )
-                    if res.stdout.strip():
-                        wid = res.stdout.strip().split()[0]
-                        subprocess.run(
-                            [xdotool_bin, "windowminimize", wid],
-                            stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL,
-                            timeout=1.0
-                        )
+                    wids = [w.strip() for w in res.stdout.strip().splitlines() if w.strip()]
+                    if wids:
+                        for wid in wids:
+                            subprocess.run(
+                                [xdotool_bin, "windowminimize", wid],
+                                env=env,
+                                stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL,
+                                timeout=1.0
+                            )
                         break
             except Exception:
-                break
+                pass
 
 
     def list_scheduled_recordings(self) -> List[Dict[str, Any]]:
