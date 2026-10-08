@@ -900,8 +900,43 @@ class MainWindow(QMainWindow):
     def create_recordings_tab(self) -> QWidget:
         widget = QWidget()
         layout = QVBoxLayout(widget)
+        layout.setContentsMargins(4, 4, 4, 4)
 
-        # Controls bar
+        self.recordings_subtabs = QTabWidget()
+        self.recordings_subtabs.setStyleSheet("""
+            QTabWidget::pane {
+                border: 1px solid #333a4d;
+                border-radius: 4px;
+                background-color: #1a1e29;
+            }
+            QTabBar::tab {
+                background: #212635;
+                color: #a4b0c2;
+                padding: 6px 16px;
+                border: 1px solid #333a4d;
+                border-bottom: none;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+                margin-right: 2px;
+                font-weight: bold;
+                font-size: 12px;
+            }
+            QTabBar::tab:selected {
+                background: #2b3244;
+                color: #ffffff;
+                border-color: #4a5568;
+            }
+            QTabBar::tab:hover:!selected {
+                background: #262c3d;
+                color: #d1d8e0;
+            }
+        """)
+
+        # ----- SUBTAB 1: Active Schedule -----
+        active_widget = QWidget()
+        active_layout = QVBoxLayout(active_widget)
+
+        # Controls bar for Active Schedule
         ctrl_bar = QHBoxLayout()
         self.refresh_rec_btn = QPushButton("Refresh Schedule")
         self.refresh_rec_btn.clicked.connect(self.refresh_recordings)
@@ -925,9 +960,9 @@ class MainWindow(QMainWindow):
         ctrl_bar.addWidget(self.protect_rec_btn)
 
         ctrl_bar.addStretch()
-        layout.addLayout(ctrl_bar)
+        active_layout.addLayout(ctrl_bar)
 
-        # Recordings Table
+        # Active Schedule Table
         self.rec_table = QTableWidget()
         self.rec_table.setColumnCount(6)
         self.rec_table.setHorizontalHeaderLabels(["Title", "Schedule", "Channel", "Duration", "Status", "Retain"])
@@ -940,8 +975,62 @@ class MainWindow(QMainWindow):
         self.rec_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.rec_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.rec_table.itemDoubleClicked.connect(self._on_rec_table_double_clicked)
-        layout.addWidget(self.rec_table)
+        active_layout.addWidget(self.rec_table)
 
+        self.recordings_subtabs.addTab(active_widget, "Active Schedule")
+
+        # ----- SUBTAB 2: History -----
+        history_widget = QWidget()
+        history_layout = QVBoxLayout(history_widget)
+
+        hist_ctrl_bar = QHBoxLayout()
+        self.refresh_hist_btn = QPushButton("Refresh History")
+        self.refresh_hist_btn.clicked.connect(self.refresh_history)
+        hist_ctrl_bar.addWidget(self.refresh_hist_btn)
+
+        hist_ctrl_bar.addSpacing(10)
+        hist_limit_lbl = QLabel("Max entries to keep:")
+        hist_limit_lbl.setStyleSheet("font-size: 12px; color: #a4b0c2;")
+        hist_ctrl_bar.addWidget(hist_limit_lbl)
+
+        self.hist_max_spin = QSpinBox()
+        self.hist_max_spin.setRange(5, 500)
+        self.hist_max_spin.setSingleStep(5)
+        self.hist_max_spin.setValue(self.config_mgr.max_history_entries)
+        self.hist_max_spin.setToolTip("Maximum number of completed recording history entries to retain")
+        self.hist_max_spin.valueChanged.connect(self.on_max_history_changed)
+        hist_ctrl_bar.addWidget(self.hist_max_spin)
+
+        hist_ctrl_bar.addSpacing(16)
+        self.clear_hist_entry_btn = QPushButton("Clear Entry")
+        self.clear_hist_entry_btn.setToolTip("Remove the selected item from history")
+        self.clear_hist_entry_btn.clicked.connect(self.clear_selected_history_entry)
+        hist_ctrl_bar.addWidget(self.clear_hist_entry_btn)
+
+        self.clear_all_hist_btn = QPushButton("Clear All")
+        self.clear_all_hist_btn.setStyleSheet("color: #d9534f;")
+        self.clear_all_hist_btn.setToolTip("Clear all completed recording history")
+        self.clear_all_hist_btn.clicked.connect(self.clear_all_history)
+        hist_ctrl_bar.addWidget(self.clear_all_hist_btn)
+
+        hist_ctrl_bar.addStretch()
+        history_layout.addLayout(hist_ctrl_bar)
+
+        # History Table
+        self.history_table = QTableWidget()
+        self.history_table.setColumnCount(4)
+        self.history_table.setHorizontalHeaderLabels(["Title", "Date / Time", "Channel", "Runtime"])
+        self.history_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.history_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.history_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self.history_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        self.history_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.history_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        history_layout.addWidget(self.history_table)
+
+        self.recordings_subtabs.addTab(history_widget, "History")
+
+        layout.addWidget(self.recordings_subtabs)
         return widget
 
     # ------------------ TAB 2: TV GUIDE BROWSER ------------------
@@ -2217,7 +2306,11 @@ class MainWindow(QMainWindow):
             self.test_all_sources_health(silent=True)
 
     def refresh_recordings(self):
-        queue = self.queue_mgr.list_queue(include_completed=True)
+        # Update queue statuses (archives finished recordings to history)
+        self.queue_mgr.update_statuses([], max_history=self.config_mgr.max_history_entries)
+
+        # Active Schedule only shows QUEUED, ARMED, RECORDING
+        queue = self.queue_mgr.list_queue(include_completed=False)
         self.rec_table.setRowCount(len(queue))
         today = date.today()
 
@@ -2309,6 +2402,80 @@ class MainWindow(QMainWindow):
                 prot_item.setForeground(QColor("#a0aec0"))
                 prot_item.setToolTip("Standard: Subject to auto-cleanup retention rules.")
             self.rec_table.setItem(row, 5, prot_item)
+
+        # Also refresh history table
+        self.refresh_history()
+
+    # ------------------ RECORDING HISTORY UI ------------------
+
+    def refresh_history(self):
+        """Populates the History table with recorded broadcast history."""
+        if not hasattr(self, "history_table"):
+            return
+        hist = self.queue_mgr.list_history()
+        self.history_table.setRowCount(len(hist))
+
+        for row, item in enumerate(hist):
+            hid = item.get("id")
+            title = item.get("title", "")
+            channel = item.get("channel", "")
+            duration = item.get("duration_iso", "")
+            start_iso = item.get("start_iso", "")
+            start_local = item.get("start_time_local", "")
+
+            # Format Date / Time nicely
+            date_time_str = start_local
+            try:
+                dt = datetime.fromisoformat(start_iso)
+                date_time_str = dt.strftime("%A, %b %d, %Y @ %I:%M %p")
+            except Exception:
+                pass
+
+            title_item = QTableWidgetItem(title)
+            title_item.setData(Qt.ItemDataRole.UserRole, hid)
+
+            dt_item = QTableWidgetItem(date_time_str)
+            dt_item.setToolTip(f"Broadcast start: {start_iso}")
+
+            chan_item = QTableWidgetItem(channel)
+            dur_item = QTableWidgetItem(duration)
+
+            self.history_table.setItem(row, 0, title_item)
+            self.history_table.setItem(row, 1, dt_item)
+            self.history_table.setItem(row, 2, chan_item)
+            self.history_table.setItem(row, 3, dur_item)
+
+    def on_max_history_changed(self, val: int):
+        self.config_mgr.max_history_entries = val
+        self.queue_mgr.prune_history(val)
+        self.refresh_history()
+
+    def clear_selected_history_entry(self):
+        row = self.history_table.currentRow()
+        if row < 0:
+            QMessageBox.warning(self, "Selection Required", "Please select a history entry to clear.")
+            return
+
+        hid = self.history_table.item(row, 0).data(Qt.ItemDataRole.UserRole)
+        title = self.history_table.item(row, 0).text()
+        if hid:
+            self.queue_mgr.delete_history_entry(int(hid))
+            self.status_bar.showMessage(f"Removed '{title}' from history.", 3000)
+            self.refresh_history()
+
+    def clear_all_history(self):
+        count = self.history_table.rowCount()
+        if count == 0:
+            return
+        confirm = QMessageBox.question(
+            self, "Clear History",
+            f"Are you sure you want to clear all {count} history entries?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if confirm == QMessageBox.StandardButton.Yes:
+            self.queue_mgr.clear_all_history()
+            self.status_bar.showMessage("Recording history cleared.", 3000)
+            self.refresh_history()
 
     def _on_rec_table_double_clicked(self, item):
         col = item.column()

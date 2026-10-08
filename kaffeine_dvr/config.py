@@ -64,6 +64,8 @@ class ConfigManager:
                         data["sports_buffer_mins"] = 30
                     if "auto_buffer_sports" not in data:
                         data["auto_buffer_sports"] = True
+                    if "max_history_entries" not in data:
+                        data["max_history_entries"] = 50
                     return data
             except Exception:
                 pass
@@ -94,7 +96,8 @@ class ConfigManager:
             "custom_recording_folder": "",
             "end_buffer_mins": 0,
             "sports_buffer_mins": 30,
-            "auto_buffer_sports": True
+            "auto_buffer_sports": True,
+            "max_history_entries": 50
         }
         self._save(default_data)
         return default_data
@@ -293,6 +296,15 @@ class ConfigManager:
     @auto_buffer_sports.setter
     def auto_buffer_sports(self, val: bool):
         self.data["auto_buffer_sports"] = val
+        self.save()
+
+    @property
+    def max_history_entries(self) -> int:
+        return self.data.get("max_history_entries", 50)
+
+    @max_history_entries.setter
+    def max_history_entries(self, val: int):
+        self.data["max_history_entries"] = max(1, int(val))
         self.save()
 
     def get_scanned_kaffeine_channels(self) -> List[Dict[str, Any]]:

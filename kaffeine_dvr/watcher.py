@@ -68,8 +68,8 @@ class Watcher:
             except Exception as e:
                 print(f"[{now_str}] Error arming recording '{title}': {e}")
 
-        # Update in-progress and completed statuses
-        self.queue_mgr.update_statuses([])
+        # Update in-progress and completed statuses (archive finished to history)
+        self.queue_mgr.update_statuses([], max_history=cfg.max_history_entries)
 
         # Run storage retention & auto-cleanup if enabled
         try:

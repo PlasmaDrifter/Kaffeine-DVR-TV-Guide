@@ -43,6 +43,31 @@ class QueueManager:
 
         cur.execute("CREATE INDEX IF NOT EXISTS idx_queue_status ON recording_queue(status)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_queue_start ON recording_queue(start_iso)")
+
+        # Recording History Table
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS recording_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT,
+                channel TEXT,
+                start_iso TEXT,
+                duration_iso TEXT,
+                start_time_local TEXT,
+                completed_at TEXT
+            )
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_hist_start ON recording_history(start_iso)")
+
+        # Migrate any legacy COMPLETED or PURGED records from recording_queue into history
+        cur.execute("SELECT id, title, channel, start_iso, duration_iso, start_time_local, end_iso FROM recording_queue WHERE status IN ('COMPLETED', 'PURGED')")
+        legacy_done = cur.fetchall()
+        for l_id, l_title, l_chan, l_start, l_dur, l_local, l_end in legacy_done:
+            cur.execute("""
+                INSERT INTO recording_history (title, channel, start_iso, duration_iso, start_time_local, completed_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (l_title, l_chan, l_start, l_dur, l_local, l_end or datetime.now().isoformat()))
+            cur.execute("DELETE FROM recording_queue WHERE id = ?", (l_id,))
+
         conn.commit()
         conn.close()
 
@@ -231,9 +256,10 @@ class QueueManager:
         conn.commit()
         conn.close()
 
-    def update_statuses(self, active_kaffeine_keys: List[int]):
+    def update_statuses(self, active_kaffeine_keys: List[int], max_history: int = 50):
         """
-        Transitions ARMED -> RECORDING -> COMPLETED based on current time and Kaffeine state.
+        Transitions ARMED -> RECORDING, and when finished (now >= end_dt),
+        archives recording to recording_history and removes from active recording_queue.
         """
         conn = sqlite3.connect(str(self.db_path))
         conn.row_factory = sqlite3.Row
@@ -249,14 +275,30 @@ class QueueManager:
                 qid = rec["id"]
 
                 if now >= end_dt:
-                    cur.execute("UPDATE recording_queue SET status = 'COMPLETED' WHERE id = ?", (qid,))
+                    # Archive to history
+                    cur.execute("""
+                        INSERT INTO recording_history (title, channel, start_iso, duration_iso, start_time_local, completed_at)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (
+                        rec.get("title", ""),
+                        rec.get("channel", ""),
+                        rec.get("start_iso", ""),
+                        rec.get("duration_iso", ""),
+                        rec.get("start_time_local", ""),
+                        now.isoformat()
+                    ))
+                    # Remove from active queue
+                    cur.execute("DELETE FROM recording_queue WHERE id = ?", (qid,))
                 elif now >= start_dt:
                     cur.execute("UPDATE recording_queue SET status = 'RECORDING' WHERE id = ?", (qid,))
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Error updating status for recording {rec.get('id')}: {e}")
 
         conn.commit()
         conn.close()
+
+        # Prune history to max configured limit
+        self.prune_history(max_history)
 
     def toggle_protected(self, queue_id: int) -> bool:
         """Toggles the protected status of a recording."""
@@ -283,10 +325,12 @@ class QueueManager:
         return paths
 
     def mark_file_purged(self, file_path_str: str):
-        """Marks queue entry status as PURGED when file is auto-deleted."""
+        """
+        When a recording file is deleted/purged, removes its listing from the schedule.
+        """
         conn = sqlite3.connect(str(self.db_path))
         cur = conn.cursor()
-        cur.execute("UPDATE recording_queue SET status = 'PURGED' WHERE file_path = ?", (file_path_str,))
+        cur.execute("DELETE FROM recording_queue WHERE file_path = ?", (file_path_str,))
         conn.commit()
         conn.close()
 
@@ -295,5 +339,85 @@ class QueueManager:
         conn = sqlite3.connect(str(self.db_path))
         cur = conn.cursor()
         cur.execute("UPDATE recording_queue SET file_path = ? WHERE id = ?", (file_path_str, queue_id))
+        conn.commit()
+        conn.close()
+
+    # ------------------ RECORDING HISTORY METHODS ------------------
+
+    def add_history_entry(
+        self,
+        title: str,
+        channel: str,
+        start_iso: str,
+        duration_iso: str,
+        start_time_local: str = "",
+        completed_at: Optional[str] = None,
+        max_entries: int = 50
+    ) -> int:
+        """Directly adds an entry into the recording history table."""
+        comp = completed_at or datetime.now().isoformat()
+        conn = sqlite3.connect(str(self.db_path))
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO recording_history (title, channel, start_iso, duration_iso, start_time_local, completed_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (title, channel, start_iso, duration_iso, start_time_local, comp))
+        new_id = cur.lastrowid
+        conn.commit()
+        conn.close()
+
+        self.prune_history(max_entries)
+        return new_id
+
+    def list_history(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Returns recorded history sorted newest first."""
+        conn = sqlite3.connect(str(self.db_path))
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        if limit and limit > 0:
+            cur.execute("SELECT * FROM recording_history ORDER BY id DESC LIMIT ?", (limit,))
+        else:
+            cur.execute("SELECT * FROM recording_history ORDER BY id DESC")
+        rows = [dict(r) for r in cur.fetchall()]
+        conn.close()
+        return rows
+
+    def delete_history_entry(self, history_id: int) -> bool:
+        """Deletes a single history entry by ID."""
+        conn = sqlite3.connect(str(self.db_path))
+        cur = conn.cursor()
+        cur.execute("DELETE FROM recording_history WHERE id = ?", (history_id,))
+        deleted = cur.rowcount > 0
+        conn.commit()
+        conn.close()
+        return deleted
+
+    def clear_all_history(self) -> bool:
+        """Clears all records in recording history."""
+        conn = sqlite3.connect(str(self.db_path))
+        cur = conn.cursor()
+        cur.execute("DELETE FROM recording_history")
+        conn.commit()
+        conn.close()
+        return True
+
+    def prune_history(self, max_entries: int):
+        """
+        Retains only the newest `max_entries` records in recording_history,
+        removing the oldest entries exceeding the threshold.
+        """
+        if max_entries <= 0:
+            return
+        conn = sqlite3.connect(str(self.db_path))
+        cur = conn.cursor()
+        # Delete entries where ID is not among the top max_entries
+        cur.execute("""
+            DELETE FROM recording_history
+            WHERE id NOT IN (
+                SELECT id FROM recording_history
+                ORDER BY id DESC
+                LIMIT ?
+            )
+        """, (max_entries,))
         conn.commit()
         conn.close()
