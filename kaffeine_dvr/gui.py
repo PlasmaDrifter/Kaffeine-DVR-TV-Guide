@@ -2203,10 +2203,9 @@ class MainWindow(QMainWindow):
 
     # ------------------ LOGIC & REFRESH ------------------
     def setup_timers(self):
-        # Poll status every 60 seconds
-        self.poll_timer = QTimer(self)
-        self.poll_timer.timeout.connect(self.periodic_check)
-        self.poll_timer.start(60000)
+        # Background scheduling and recording dispatch are handled by the systemd service.
+        # GUI refreshes on-demand (when syncing guide, switching tabs, or user actions).
+        pass
 
     def refresh_date_dropdown(self):
         """Refreshes the Date dropdown when a new calendar day begins."""
@@ -2235,15 +2234,6 @@ class MainWindow(QMainWindow):
             self.guide_date_combo.setCurrentIndex(0)
         self.guide_date_combo.blockSignals(False)
         self.filter_guide()
-
-    def periodic_check(self):
-        self.refresh_date_dropdown()
-        self.update_status_badges()
-        self.update_service_status_ui()
-        # Dispatch any recordings due in the lead time
-        armed = self.watcher.check_and_dispatch()
-        if armed > 0:
-            self.refresh_recordings()
 
     def refresh_channel_dropdowns(self):
         channels = sorted(list(set(
@@ -2333,6 +2323,7 @@ class MainWindow(QMainWindow):
             self.status_bar.showMessage("Guide sync failed.")
         else:
             self.status_bar.showMessage(f"Guide synced: {count} programs cached.", 5000)
+            self.refresh_date_dropdown()
             self.update_status_badges()
             self.refresh_channel_dropdowns()
             self.filter_guide()
@@ -2637,6 +2628,7 @@ class MainWindow(QMainWindow):
     def _on_main_tab_changed(self, index: int):
         # When switching to the TV Guide Browser tab (index 1)
         if index == 1:
+            self.refresh_date_dropdown()
             sel_date = self.guide_date_combo.currentData()
             today_str = date.today().strftime("%Y-%m-%d")
             if sel_date == today_str or sel_date is None:
