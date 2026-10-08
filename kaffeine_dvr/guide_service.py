@@ -808,14 +808,15 @@ class GuideService:
                 if v.strip().lower() not in passport_channel_names
             }
 
-            for i in range(days):
+            # Sync starting from yesterday to capture overnight (12:00 AM - 6:00 AM) broadcasts for today
+            for i in range(-1, days):
                 target_date = today + timedelta(days=i)
                 date_label = target_date.strftime('%a, %b %d')
                 if progress_callback:
-                    progress_callback(f"Fetching schedules for {date_label} ({i + 1}/{days})...")
+                    progress_callback(f"Fetching schedules for {date_label} ({i + 2}/{days + 1})...")
 
                 # TVMaze for channels not covered by TV Passport
-                if tvmaze_map:
+                if tvmaze_map and i >= 0:
                     try:
                         day_progs = TVMazeProvider.fetch_day(target_date, country, tvmaze_map)
                         all_programs.extend(day_progs)
@@ -823,7 +824,7 @@ class GuideService:
                         error_msg = f"Error fetching TVMaze on {target_date}: {e}"
                         print(error_msg)
 
-                # TV Passport for configured stations
+                # TV Passport for configured stations (includes yesterday overnight)
                 for ch_alias, st_id in passport_stations.items():
                     try:
                         pass_progs = TVPassportProvider.fetch_station(target_date, ch_alias, st_id)

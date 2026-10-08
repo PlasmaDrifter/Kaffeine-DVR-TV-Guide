@@ -2208,7 +2208,36 @@ class MainWindow(QMainWindow):
         self.poll_timer.timeout.connect(self.periodic_check)
         self.poll_timer.start(60000)
 
+    def refresh_date_dropdown(self):
+        """Refreshes the Date dropdown when a new calendar day begins."""
+        if not hasattr(self, "guide_date_combo"):
+            return
+        today = date.today()
+        # Check if the first entry is still Today's date
+        first_date = self.guide_date_combo.itemData(0)
+        today_str = today.strftime("%Y-%m-%d")
+        if first_date == today_str:
+            return  # Date dropdown is already up to date
+
+        cur_data = self.guide_date_combo.currentData()
+        self.guide_date_combo.blockSignals(True)
+        self.guide_date_combo.clear()
+        for i in range(14):
+            d = today + timedelta(days=i)
+            label = "Today" if i == 0 else ("Tomorrow" if i == 1 else d.strftime("%a, %b %d"))
+            self.guide_date_combo.addItem(label, d.strftime("%Y-%m-%d"))
+        self.guide_date_combo.addItem("All Upcoming", None)
+
+        idx = self.guide_date_combo.findData(cur_data)
+        if idx >= 0:
+            self.guide_date_combo.setCurrentIndex(idx)
+        else:
+            self.guide_date_combo.setCurrentIndex(0)
+        self.guide_date_combo.blockSignals(False)
+        self.filter_guide()
+
     def periodic_check(self):
+        self.refresh_date_dropdown()
         self.update_status_badges()
         self.update_service_status_ui()
         # Dispatch any recordings due in the lead time
@@ -2233,6 +2262,7 @@ class MainWindow(QMainWindow):
             self.guide_channel_combo.blockSignals(False)
 
     def refresh_all(self):
+        self.refresh_date_dropdown()
         self.update_status_badges()
         self.update_service_status_ui()
         self.update_storage_status_ui()
