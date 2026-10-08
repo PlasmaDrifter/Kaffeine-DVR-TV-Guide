@@ -1488,20 +1488,6 @@ class MainWindow(QMainWindow):
         filter_bar.addWidget(self.jump_prime_btn)
         filter_bar.addSpacing(14)
 
-        filter_bar.addWidget(QLabel("Search:"))
-        self.guide_search_input = QLineEdit()
-        self.guide_search_input.setPlaceholderText("Filter shows...")
-        self.guide_search_input.textChanged.connect(self.filter_guide)
-        filter_bar.addWidget(self.guide_search_input)
-
-        filter_bar.addWidget(QLabel("Channel:"))
-        self.guide_channel_combo = QComboBox()
-        self.guide_channel_combo.addItem("All")
-        channels = self.config_mgr.get_ordered_channels()
-        self.guide_channel_combo.addItems(channels)
-        self.guide_channel_combo.currentIndexChanged.connect(self.filter_guide)
-        filter_bar.addWidget(self.guide_channel_combo)
-
         filter_bar.addWidget(QLabel("Date:"))
         self.guide_date_combo = QComboBox()
         today = date.today()
@@ -1512,6 +1498,20 @@ class MainWindow(QMainWindow):
         self.guide_date_combo.addItem("All Upcoming", None)
         self.guide_date_combo.currentIndexChanged.connect(self.filter_guide)
         filter_bar.addWidget(self.guide_date_combo)
+
+        filter_bar.addWidget(QLabel("Channel:"))
+        self.guide_channel_combo = QComboBox()
+        self.guide_channel_combo.addItem("All")
+        channels = self.config_mgr.get_ordered_channels()
+        self.guide_channel_combo.addItems(channels)
+        self.guide_channel_combo.currentIndexChanged.connect(self.filter_guide)
+        filter_bar.addWidget(self.guide_channel_combo)
+
+        filter_bar.addWidget(QLabel("Search:"))
+        self.guide_search_input = QLineEdit()
+        self.guide_search_input.setPlaceholderText("Filter shows...")
+        self.guide_search_input.textChanged.connect(self.filter_guide)
+        filter_bar.addWidget(self.guide_search_input)
 
         layout.addLayout(filter_bar)
 
