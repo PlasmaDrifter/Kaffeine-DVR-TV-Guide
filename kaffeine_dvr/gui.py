@@ -417,26 +417,43 @@ class ProgramTileDelegate(QStyledItemDelegate):
         # Draw Scheduled [● REC] badge in upper right corner if scheduled
         badge_reserved_w = 0
         if is_scheduled:
-            badge_text = "● REC"
             badge_font = QFont(option.font)
             badge_font.setBold(True)
-            badge_font.setPointSize(8)
+            badge_font.setPointSize(7)
             painter.setFont(badge_font)
             fm_badge = painter.fontMetrics()
-            bw = fm_badge.horizontalAdvance(badge_text) + 8
-            bh = fm_badge.height() + 2
+
+            rec_text = "REC"
+            rec_w = fm_badge.horizontalAdvance(rec_text)
+
+            # Clean geometric dimensions
+            dot_diam = 5
+            spacing = 4
+            pad_h = 5
+            bw = pad_h + dot_diam + spacing + rec_w + pad_h
+            bh = 15
+
             bx = rect.right() - pad_right - bw
-            by = rect.top() + pad_top - 1
+            by = rect.top() + pad_top
             badge_rect = QRect(bx, by, bw, bh)
 
-            # Draw rounded badge background
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor("#c62828"))
+            # Draw rounded badge background with subtle border
+            painter.setPen(QColor("#e53935"))
+            painter.setBrush(QColor("#b71c1c"))
             painter.drawRoundedRect(badge_rect, 3, 3)
 
-            # Draw badge text
+            # Draw crisp aligned indicator dot
+            dot_x = bx + pad_h
+            dot_y = by + (bh - dot_diam) // 2
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor("#ff5252"))
+            painter.drawEllipse(dot_x, dot_y, dot_diam, dot_diam)
+
+            # Draw "REC" text vertically centered
+            text_x = dot_x + dot_diam + spacing
+            text_rect = QRect(text_x, by, rec_w + 2, bh)
             painter.setPen(QColor("#ffffff"))
-            painter.drawText(badge_rect, Qt.AlignmentFlag.AlignCenter, badge_text)
+            painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, rec_text)
 
             badge_reserved_w = bw + 6
 
