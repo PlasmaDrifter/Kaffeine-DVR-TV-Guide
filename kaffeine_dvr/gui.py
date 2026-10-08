@@ -2404,7 +2404,7 @@ class MainWindow(QMainWindow):
                 color = "#fd7e14"
             elif status == "RECORDING":
                 status_display = "Recording Now"
-                color = "#28a745"
+                color = "#ff5252"
             elif status == "COMPLETED":
                 status_display = "Completed"
                 color = "#6c757d"
