@@ -24,15 +24,28 @@ class KaffeineDbusClient:
             return res.returncode == 0
 
     def _get_display_env(self) -> Dict[str, str]:
-        """Ensure WAYLAND_DISPLAY and DISPLAY exist when launched from background services."""
+        """Ensure WAYLAND_DISPLAY, DISPLAY, XAUTHORITY, and QT_QPA_PLATFORM exist when launched from background services."""
         env = os.environ.copy()
-        if not env.get("WAYLAND_DISPLAY") and not env.get("DISPLAY"):
-            runtime_dir = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
-            wayland_sockets = list(Path(runtime_dir).glob("wayland-*"))
+        runtime_dir_str = env.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
+        runtime_dir = Path(runtime_dir_str)
+
+        if not env.get("WAYLAND_DISPLAY"):
+            wayland_sockets = list(runtime_dir.glob("wayland-*"))
             if wayland_sockets:
                 env["WAYLAND_DISPLAY"] = wayland_sockets[0].name
-            if not env.get("DISPLAY"):
-                env["DISPLAY"] = ":0"
+
+        if not env.get("DISPLAY"):
+            env["DISPLAY"] = ":0"
+
+        if not env.get("XAUTHORITY"):
+            xauth_files = sorted(runtime_dir.glob("xauth_*"), key=lambda p: p.stat().st_mtime, reverse=True)
+            if xauth_files:
+                env["XAUTHORITY"] = str(xauth_files[0])
+
+        # Kaffeine is configured in its desktop launcher with QT_QPA_PLATFORM=xcb,
+        # which produces wmclass='kaffeine' (matching user KWin rules to place on the second monitor).
+        # Native Wayland uses wmclass='org.kde.kaffeine' and bypasses those X11 window placement rules.
+        env["QT_QPA_PLATFORM"] = "xcb"
         return env
 
     def launch_kaffeine(self, mode: str = "taskbar", minimized: Optional[bool] = None) -> bool:
