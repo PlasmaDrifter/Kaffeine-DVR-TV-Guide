@@ -1493,11 +1493,14 @@ class MainWindow(QMainWindow):
         self.guide_date_combo = QComboBox()
         self.guide_date_combo.addItem("All Upcoming", None)
         today = date.today()
-        for i in range(14):
-            d = today + timedelta(days=i)
-            label = "Today" if i == 0 else ("Tomorrow" if i == 1 else d.strftime("%a, %b %d"))
+        days_since_sunday = (today.weekday() + 1) % 7
+        cur_week_sunday = today - timedelta(days=days_since_sunday)
+        for i in range(21):
+            d = cur_week_sunday + timedelta(days=i)
+            label = "Today" if d == today else ("Tomorrow" if d == today + timedelta(days=1) else d.strftime("%a, %b %d"))
             self.guide_date_combo.addItem(label, d.strftime("%Y-%m-%d"))
-        self.guide_date_combo.setCurrentIndex(1)
+        today_idx = self.guide_date_combo.findData(today.strftime("%Y-%m-%d"))
+        self.guide_date_combo.setCurrentIndex(today_idx if today_idx >= 0 else 1)
         self.guide_date_combo.currentIndexChanged.connect(self.filter_guide)
         filter_bar.addWidget(self.guide_date_combo)
 
@@ -2762,29 +2765,32 @@ class MainWindow(QMainWindow):
         if not hasattr(self, "guide_date_combo"):
             return
         today = date.today()
-        # Item 0 is 'All Upcoming' (data=None), Item 1 is 'Today' (data=today_str)
-        today_date_in_combo = self.guide_date_combo.itemData(1) if self.guide_date_combo.count() > 1 else None
         today_str = today.strftime("%Y-%m-%d")
-        if not reset_to_default and today_date_in_combo == today_str:
+        days_since_sunday = (today.weekday() + 1) % 7
+        cur_week_sunday = today - timedelta(days=days_since_sunday)
+
+        today_idx_existing = self.guide_date_combo.findData(today_str) if self.guide_date_combo.count() > 1 else -1
+        if not reset_to_default and today_idx_existing >= 0:
             return  # Date dropdown is already up to date
 
         cur_data = None if reset_to_default else self.guide_date_combo.currentData()
         self.guide_date_combo.blockSignals(True)
         self.guide_date_combo.clear()
         self.guide_date_combo.addItem("All Upcoming", None)
-        for i in range(14):
-            d = today + timedelta(days=i)
-            label = "Today" if i == 0 else ("Tomorrow" if i == 1 else d.strftime("%a, %b %d"))
+        for i in range(21):
+            d = cur_week_sunday + timedelta(days=i)
+            label = "Today" if d == today else ("Tomorrow" if d == today + timedelta(days=1) else d.strftime("%a, %b %d"))
             self.guide_date_combo.addItem(label, d.strftime("%Y-%m-%d"))
 
+        today_idx = self.guide_date_combo.findData(today_str)
         if reset_to_default or cur_data is None:
-            self.guide_date_combo.setCurrentIndex(1)
+            self.guide_date_combo.setCurrentIndex(today_idx if today_idx >= 0 else 1)
         else:
             idx = self.guide_date_combo.findData(cur_data)
             if idx >= 0:
                 self.guide_date_combo.setCurrentIndex(idx)
             else:
-                self.guide_date_combo.setCurrentIndex(1)
+                self.guide_date_combo.setCurrentIndex(today_idx if today_idx >= 0 else 1)
         self.guide_date_combo.blockSignals(False)
         self.filter_guide()
 
@@ -3237,45 +3243,57 @@ class MainWindow(QMainWindow):
 
         arrow_style = (
             "QPushButton { font-size: 13px; font-weight: bold; "
-            "border: 1px solid #3d465c; border-radius: 4px; background-color: #212635; color: #c8d2df; }"
-            "QPushButton:hover { background-color: #313d56; border: 1px solid #5a80b8; color: #ffffff; }"
-            "QPushButton:disabled { background-color: #1a1e27; border: 1px solid #2a2f3d; color: #4e5566; }"
+            "border: 1px solid #303746; border-radius: 4px; background-color: #1e2330; color: #a4b0c2; }"
+            "QPushButton:hover { background-color: #262e3f; border: 1px solid #455470; color: #e2e8f0; }"
+            "QPushButton:disabled { background-color: #161a22; border: 1px solid #242935; color: #434a58; }"
         )
 
         self.day_nav_prev_btn = QPushButton("◀")
-        self.day_nav_prev_btn.setToolTip("Previous 7 days")
+        self.day_nav_prev_btn.setToolTip("Previous week (Sun - Sat)")
         self.day_nav_prev_btn.setFixedWidth(34)
         self.day_nav_prev_btn.setFixedHeight(34)
         self.day_nav_prev_btn.setStyleSheet(arrow_style)
         self.day_nav_prev_btn.clicked.connect(self._on_day_nav_prev)
         nav_layout.addWidget(self.day_nav_prev_btn)
 
+        # Standard upcoming unselected day
         self._day_style_unselected = (
-            "QPushButton { padding: 6px 4px; font-size: 12px; font-weight: 500; "
-            "border: 1px solid #3d465c; border-radius: 5px; background-color: #212635; color: #c8d2df; }"
-            "QPushButton:hover { background-color: #2e384d; border: 1px solid #6482ad; color: #ffffff; }"
-            "QPushButton:pressed { background-color: #191c26; }"
+            "QPushButton { padding: 5px 3px; font-size: 11px; font-weight: 500; "
+            "border: 1px solid #303746; border-radius: 4px; background-color: #1e2330; color: #a4b0c2; }"
+            "QPushButton:hover { background-color: #262e3f; border: 1px solid #455470; color: #e2e8f0; }"
+            "QPushButton:pressed { background-color: #161a24; }"
         )
 
+        # Past unselected day (earlier this week) - subtly dimmed
+        self._day_style_past = (
+            "QPushButton { padding: 5px 3px; font-size: 11px; font-weight: normal; "
+            "border: 1px solid #262b37; border-radius: 4px; background-color: #181c25; color: #626d7f; }"
+            "QPushButton:hover { background-color: #202633; border: 1px solid #384255; color: #8a96a8; }"
+            "QPushButton:pressed { background-color: #13161e; }"
+        )
+
+        # Today's day (when NOT currently selected) - understated dark green tint & border
         self._day_style_today_unselected = (
-            "QPushButton { padding: 6px 4px; font-size: 12px; font-weight: bold; "
-            "border: 2px solid #388e3c; border-radius: 5px; background-color: #1b3822; color: #81c784; }"
-            "QPushButton:hover { background-color: #254d30; border: 2px solid #4caf50; color: #a5d6a7; }"
-            "QPushButton:pressed { background-color: #142b1a; }"
+            "QPushButton { padding: 5px 3px; font-size: 11px; font-weight: 600; "
+            "border: 1px solid #2e5937; border-radius: 4px; background-color: #16261b; color: #7ec788; }"
+            "QPushButton:hover { background-color: #1e3324; border: 1px solid #3d7349; color: #9cdba4; }"
+            "QPushButton:pressed { background-color: #111e15; }"
         )
 
+        # Today's day (when ALSO currently selected) - subdued dark forest green with clean accent
         self._day_style_today_selected = (
-            "QPushButton { padding: 6px 4px; font-size: 12px; font-weight: bold; "
-            "border: 2px solid #81c784; border-radius: 5px; background-color: #2e7d32; color: #ffffff; }"
-            "QPushButton:hover { background-color: #388e3c; border: 2px solid #a5d6a7; color: #ffffff; }"
-            "QPushButton:pressed { background-color: #1b5e20; }"
+            "QPushButton { padding: 5px 3px; font-size: 11px; font-weight: 600; "
+            "border: 1px solid #438450; border-radius: 4px; background-color: #223f2a; color: #e8f5e9; }"
+            "QPushButton:hover { background-color: #2a4c33; border: 1px solid #529c62; color: #ffffff; }"
+            "QPushButton:pressed { background-color: #1a3221; }"
         )
 
+        # Selected day (when it is NOT Today) - subdued dark warm amber with soft border
         self._day_style_selected = (
-            "QPushButton { padding: 6px 4px; font-size: 12px; font-weight: bold; "
-            "border: 2px solid #ffb74d; border-radius: 5px; background-color: #e65100; color: #ffffff; }"
-            "QPushButton:hover { background-color: #f57c00; border: 2px solid #ffe082; color: #ffffff; }"
-            "QPushButton:pressed { background-color: #bf360c; }"
+            "QPushButton { padding: 5px 3px; font-size: 11px; font-weight: 600; "
+            "border: 1px solid #b86e28; border-radius: 4px; background-color: #3b2818; color: #ffd8a8; }"
+            "QPushButton:hover { background-color: #4a3320; border: 1px solid #d48332; color: #ffe3c2; }"
+            "QPushButton:pressed { background-color: #2e1f13; }"
         )
 
         self.day_nav_buttons = []
@@ -3288,7 +3306,7 @@ class MainWindow(QMainWindow):
             self.day_nav_buttons.append(btn)
 
         self.day_nav_next_btn = QPushButton("▶")
-        self.day_nav_next_btn.setToolTip("Next 7 days")
+        self.day_nav_next_btn.setToolTip("Next week (Sun - Sat)")
         self.day_nav_next_btn.setFixedWidth(34)
         self.day_nav_next_btn.setFixedHeight(34)
         self.day_nav_next_btn.setStyleSheet(arrow_style)
@@ -3320,7 +3338,7 @@ class MainWindow(QMainWindow):
         self._update_day_nav_bar(sync_week_with_selection=False)
 
     def _on_day_nav_next(self):
-        self.day_nav_offset = min(7, getattr(self, "day_nav_offset", 0) + 7)
+        self.day_nav_offset = min(14, getattr(self, "day_nav_offset", 0) + 7)
         self._update_day_nav_bar(sync_week_with_selection=False)
 
     def _update_day_nav_bar(self, sync_week_with_selection: bool = False):
@@ -3331,6 +3349,10 @@ class MainWindow(QMainWindow):
         today = date.today()
         today_str = today.strftime("%Y-%m-%d")
 
+        # Current calendar week starts on Sunday
+        days_since_sunday = (today.weekday() + 1) % 7
+        cur_week_sunday = today - timedelta(days=days_since_sunday)
+
         if not hasattr(self, "day_nav_offset"):
             self.day_nav_offset = 0
 
@@ -3339,17 +3361,17 @@ class MainWindow(QMainWindow):
         if sync_week_with_selection and selected_date_str:
             try:
                 sel_date = datetime.strptime(selected_date_str, "%Y-%m-%d").date()
-                day_diff = (sel_date - today).days
-                if 0 <= day_diff < 7:
-                    self.day_nav_offset = 0
-                elif 7 <= day_diff < 14:
-                    self.day_nav_offset = 7
+                diff_from_cur_sunday = (sel_date - cur_week_sunday).days
+                week_idx = diff_from_cur_sunday // 7
+                if 0 <= week_idx <= 2:
+                    self.day_nav_offset = week_idx * 7
             except Exception:
                 pass
 
+        base_sunday = cur_week_sunday + timedelta(days=self.day_nav_offset)
+
         for i, btn in enumerate(self.day_nav_buttons):
-            day_offset = self.day_nav_offset + i
-            btn_date = today + timedelta(days=day_offset)
+            btn_date = base_sunday + timedelta(days=i)
             btn_date_str = btn_date.strftime("%Y-%m-%d")
 
             day_label = btn_date.strftime("%A, %b ") + str(btn_date.day)
@@ -3358,6 +3380,7 @@ class MainWindow(QMainWindow):
 
             is_today = (btn_date_str == today_str)
             is_selected = (btn_date_str == selected_date_str)
+            is_past = (btn_date < today)
 
             if is_today and is_selected:
                 btn.setStyleSheet(self._day_style_today_selected)
@@ -3368,6 +3391,9 @@ class MainWindow(QMainWindow):
             elif is_selected:
                 btn.setStyleSheet(self._day_style_selected)
                 btn.setToolTip(f"{day_label} (Selected)")
+            elif is_past:
+                btn.setStyleSheet(self._day_style_past)
+                btn.setToolTip(f"{day_label} (Past)")
             else:
                 btn.setStyleSheet(self._day_style_unselected)
                 btn.setToolTip(day_label)
@@ -3375,7 +3401,7 @@ class MainWindow(QMainWindow):
         if hasattr(self, "day_nav_prev_btn"):
             self.day_nav_prev_btn.setEnabled(self.day_nav_offset > 0)
         if hasattr(self, "day_nav_next_btn"):
-            self.day_nav_next_btn.setEnabled(self.day_nav_offset + 7 < 14)
+            self.day_nav_next_btn.setEnabled(self.day_nav_offset < 14)
 
     def filter_guide(self):
         # Automatically prune already elapsed past entries from SQLite database
