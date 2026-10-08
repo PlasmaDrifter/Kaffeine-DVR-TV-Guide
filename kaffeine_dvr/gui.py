@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
     QStyle
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QSettings, QByteArray, QEvent, QObject, QPoint, QPointF, QRect
-from PyQt6.QtGui import QColor, QFont, QIcon, QWheelEvent, QPainter
+from PyQt6.QtGui import QColor, QFont, QIcon, QWheelEvent, QPainter, QPalette
 
 try:
     from .config import ConfigManager, DEFAULT_CHANNEL_MAP
@@ -117,6 +117,7 @@ class ManualRecordDialog(QDialog):
 
         btn_box = QHBoxLayout()
         self.ok_btn = QPushButton("Schedule")
+        self.ok_btn.setObjectName("primaryActionBtn")
         self.cancel_btn = QPushButton("Cancel")
         self.ok_btn.clicked.connect(self.accept)
         self.cancel_btn.clicked.connect(self.reject)
@@ -149,6 +150,7 @@ class AddRuleDialog(QDialog):
 
         btn_box = QHBoxLayout()
         self.ok_btn = QPushButton("Save Rule")
+        self.ok_btn.setObjectName("primaryActionBtn")
         self.cancel_btn = QPushButton("Cancel")
         self.ok_btn.clicked.connect(self.accept)
         self.cancel_btn.clicked.connect(self.reject)
@@ -192,6 +194,7 @@ class EditRuleDialog(QDialog):
 
         btn_box = QHBoxLayout()
         self.ok_btn = QPushButton("Update Rule")
+        self.ok_btn.setObjectName("primaryActionBtn")
         self.cancel_btn = QPushButton("Cancel")
         self.ok_btn.clicked.connect(self.accept)
         self.cancel_btn.clicked.connect(self.reject)
@@ -496,25 +499,84 @@ class FirstRunWelcomeDialog(QDialog):
         self.setMinimumWidth(820)
         self.resize(850, 680)
         self.config_mgr = config_mgr
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #191c28;
+                color: #dce1e8;
+            }
+            QLabel {
+                color: #dce1e8;
+            }
+            QGroupBox {
+                background-color: #1e2230;
+                border: 1px solid #333a4c;
+                border-radius: 6px;
+                margin-top: 14px;
+                padding-top: 14px;
+                font-weight: bold;
+                font-size: 13px;
+                color: #d3dae3;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                padding: 0 8px;
+                color: #d3dae3;
+            }
+            QCheckBox {
+                color: #e0e6ed;
+                font-size: 13px;
+                spacing: 8px;
+                background: transparent;
+            }
+            QCheckBox::indicator {
+                width: 16px;
+                height: 16px;
+                border: 1px solid #3d465c;
+                border-radius: 3px;
+                background-color: #141620;
+            }
+            QCheckBox::indicator:hover {
+                border-color: #505c75;
+            }
+            QCheckBox::indicator:checked {
+                background-color: #2d6cd4;
+                border-color: #4a8df5;
+            }
+            QPushButton#primaryActionBtn {
+                background-color: #2d6cd4;
+                color: #ffffff;
+                font-weight: bold;
+                font-size: 13px;
+                padding: 8px 24px;
+                border-radius: 5px;
+                border: 1px solid #4a8df5;
+            }
+            QPushButton#primaryActionBtn:hover {
+                background-color: #3b7ee8;
+            }
+            QPushButton#primaryActionBtn:pressed {
+                background-color: #2259b3;
+            }
+        """)
 
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
 
         title_lbl = QLabel("<b>Welcome to Kaffeine DVR & Web TV Guide</b>")
-        title_lbl.setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff;")
+        title_lbl.setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff; background: transparent;")
         layout.addWidget(title_lbl)
 
         desc_lbl = QLabel(
             "This application enables online TV guide browsing and DVR scheduling for Kaffeine "
             "without blocking system restarts or shutdowns."
         )
-        desc_lbl.setStyleSheet("color: #8c98aa; font-size: 13px; line-height: 1.4;")
+        desc_lbl.setStyleSheet("color: #a4b0c2; font-size: 13px; line-height: 1.4; background: transparent;")
         desc_lbl.setWordWrap(True)
         layout.addWidget(desc_lbl)
 
         # Environment box
         env_box = QGroupBox("Detected System Environment")
-        env_box.setStyleSheet("QGroupBox { font-size: 13px; font-weight: bold; }")
         env_layout = QFormLayout(env_box)
 
         local_dt = datetime.now().astimezone()
@@ -523,11 +585,11 @@ class FirstRunWelcomeDialog(QDialog):
         tz_str = f"{tz_name} (UTC{tz_offset[:3]}:{tz_offset[3:]})"
 
         tz_val = QLabel(f"<b>{tz_str}</b>")
-        tz_val.setStyleSheet("font-size: 13px;")
+        tz_val.setStyleSheet("font-size: 13px; color: #ffffff; background: transparent;")
         env_layout.addRow("System Timezone:", tz_val)
         tz_note = QLabel("Showtimes and recording timers automatically align with this local timezone.")
         tz_note.setWordWrap(True)
-        tz_note.setStyleSheet("color: #8c98aa; font-size: 12px;")
+        tz_note.setStyleSheet("color: #a4b0c2; font-size: 12px; background: transparent;")
         env_layout.addRow("", tz_note)
 
         kaffeine_channels = self.config_mgr.get_scanned_kaffeine_channels()
@@ -536,13 +598,12 @@ class FirstRunWelcomeDialog(QDialog):
         else:
             ch_status = "No scanned channels found yet (Kaffeine scan not performed)"
         ch_val = QLabel(f"<b>{ch_status}</b>")
-        ch_val.setStyleSheet("font-size: 13px;")
+        ch_val.setStyleSheet("font-size: 13px; color: #ffffff; background: transparent;")
         env_layout.addRow("Kaffeine Tuner:", ch_val)
         layout.addWidget(env_box)
 
         # TV Guide and Regional Channel Coverage Explanation
         guide_info_box = QGroupBox("TV Guide Coverage and Providers")
-        guide_info_box.setStyleSheet("QGroupBox { font-size: 13px; font-weight: bold; }")
         guide_info_layout = QVBoxLayout(guide_info_box)
 
         guide_info_text = QLabel(
@@ -566,7 +627,7 @@ class FirstRunWelcomeDialog(QDialog):
         guide_info_text.setWordWrap(True)
         guide_info_text.setOpenExternalLinks(True)
         guide_info_text.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
-        guide_info_text.setStyleSheet("color: #d1d8e0; font-size: 12px; line-height: 1.5;")
+        guide_info_text.setStyleSheet("color: #d1d8e0; font-size: 12px; line-height: 1.5; background: transparent;")
         guide_info_layout.addWidget(guide_info_text)
 
         # Check for unconfigured regional channels
@@ -585,24 +646,20 @@ class FirstRunWelcomeDialog(QDialog):
         layout.addWidget(guide_info_box)
 
         options_box = QGroupBox("Initial Setup Options")
-        options_box.setStyleSheet("QGroupBox { font-size: 13px; font-weight: bold; }")
         options_layout = QVBoxLayout(options_box)
         options_layout.setSpacing(8)
 
         self.import_check = QCheckBox("Import detected channels from Kaffeine into lineup")
-        self.import_check.setStyleSheet("font-size: 13px;")
         self.import_check.setChecked(bool(kaffeine_channels))
         if not kaffeine_channels:
             self.import_check.setEnabled(False)
         options_layout.addWidget(self.import_check)
 
         self.sync_check = QCheckBox("Perform initial TV guide sync (download next 7 days)")
-        self.sync_check.setStyleSheet("font-size: 13px;")
         self.sync_check.setChecked(True)
         options_layout.addWidget(self.sync_check)
 
         self.service_check = QCheckBox("Enable & start background recording dispatcher service (systemd)")
-        self.service_check.setStyleSheet("font-size: 13px;")
         self.service_check.setChecked(True)
         options_layout.addWidget(self.service_check)
         layout.addWidget(options_box)
@@ -610,7 +667,7 @@ class FirstRunWelcomeDialog(QDialog):
         layout.addSpacing(10)
         btn_box = QHBoxLayout()
         self.start_btn = QPushButton("Start Kaffeine DVR")
-        self.start_btn.setStyleSheet("font-weight: bold; font-size: 13px; padding: 8px 24px;")
+        self.start_btn.setObjectName("primaryActionBtn")
         self.start_btn.clicked.connect(self.accept)
         btn_box.addStretch()
         btn_box.addWidget(self.start_btn)
@@ -626,6 +683,104 @@ def get_app_icon() -> QIcon:
 
 
 APP_STYLESHEET = """
+/* Base Application & Window Styling */
+QWidget {
+    background-color: #191c28;
+    color: #dce1e8;
+    font-size: 13px;
+}
+
+QMainWindow, QDialog {
+    background-color: #191c28;
+    color: #dce1e8;
+}
+
+QMessageBox {
+    background-color: #191c28;
+    color: #dce1e8;
+}
+
+QMenu {
+    background-color: #1c202e;
+    color: #e0e6ed;
+    border: 1px solid #333a4c;
+    padding: 4px;
+}
+QMenu::item:selected {
+    background-color: #2b3346;
+    color: #ffffff;
+}
+
+/* Default Form Controls */
+QLineEdit, QTextEdit, QSpinBox, QComboBox {
+    background-color: #12141d;
+    border: 1px solid #333a4c;
+    border-radius: 4px;
+    color: #e4e9f0;
+    padding: 5px 8px;
+}
+QLineEdit:focus, QTextEdit:focus, QSpinBox:focus, QComboBox:focus {
+    border-color: #4a8df5;
+}
+
+/* Buttons */
+QPushButton {
+    background-color: #272d3d;
+    border: 1px solid #3c465d;
+    border-radius: 5px;
+    color: #e0e6ed;
+    padding: 6px 16px;
+    font-weight: 500;
+}
+QPushButton:hover {
+    background-color: #333a50;
+    border-color: #4f5b79;
+    color: #ffffff;
+}
+QPushButton:pressed {
+    background-color: #1e2330;
+}
+QPushButton:disabled {
+    background-color: #181b24;
+    color: #5a6475;
+    border-color: #252b38;
+}
+
+/* Primary Action Buttons */
+QPushButton#primaryActionBtn {
+    background-color: #2d6cd4;
+    border: 1px solid #4a8df5;
+    color: #ffffff;
+    font-weight: bold;
+}
+QPushButton#primaryActionBtn:hover {
+    background-color: #3b7ee8;
+}
+QPushButton#primaryActionBtn:pressed {
+    background-color: #2259b3;
+}
+
+/* Checkboxes */
+QCheckBox {
+    color: #dce1e8;
+    spacing: 8px;
+    background: transparent;
+}
+QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+    border: 1px solid #3d465c;
+    border-radius: 3px;
+    background-color: #13151f;
+}
+QCheckBox::indicator:hover {
+    border-color: #505c75;
+}
+QCheckBox::indicator:checked {
+    background-color: #2d6cd4;
+    border-color: #4a8df5;
+}
+
 /* Top-Level Main Tabs: Option 4 Browser-Style Curved / Flowing Tabs */
 QTabWidget#mainTabs::pane {
     border: 1px solid #3d465c;
@@ -818,11 +973,39 @@ QTableWidget#guideGridTable QHeaderView::section:vertical {
 """
 
 
+def setup_dark_theme(app: Optional[QApplication]):
+    if not app:
+        return
+    app.setStyle("Fusion")
+    palette = QPalette()
+    palette.setColor(QPalette.ColorRole.Window, QColor("#191c28"))
+    palette.setColor(QPalette.ColorRole.WindowText, QColor("#e0e6ed"))
+    palette.setColor(QPalette.ColorRole.Base, QColor("#13151f"))
+    palette.setColor(QPalette.ColorRole.AlternateBase, QColor("#191c28"))
+    palette.setColor(QPalette.ColorRole.ToolTipBase, QColor("#222736"))
+    palette.setColor(QPalette.ColorRole.ToolTipText, QColor("#ffffff"))
+    palette.setColor(QPalette.ColorRole.Text, QColor("#e0e6ed"))
+    palette.setColor(QPalette.ColorRole.Button, QColor("#222634"))
+    palette.setColor(QPalette.ColorRole.ButtonText, QColor("#e0e6ed"))
+    palette.setColor(QPalette.ColorRole.BrightText, QColor("#ffffff"))
+    palette.setColor(QPalette.ColorRole.Link, QColor("#5b9cf6"))
+    palette.setColor(QPalette.ColorRole.Highlight, QColor("#2d6cd4"))
+    palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#ffffff"))
+    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText, QColor("#656f82"))
+    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, QColor("#656f82"))
+    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, QColor("#656f82"))
+    app.setPalette(palette)
+    app.setStyleSheet(APP_STYLESHEET)
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Kaffeine DVR & Web TV Guide")
         self.setWindowIcon(get_app_icon())
+        app_inst = QApplication.instance()
+        if app_inst:
+            setup_dark_theme(app_inst)
         self.setStyleSheet(APP_STYLESHEET)
 
         self.settings = QSettings("KaffeineDVR", "TVGuide")
@@ -3201,6 +3384,7 @@ def main():
     app.setApplicationDisplayName("Kaffeine DVR & TV Guide")
     app.setDesktopFileName("kaffeine-dvr")
     app.setWindowIcon(get_app_icon())
+    setup_dark_theme(app)
     window = MainWindow()
     window.show()
     sys.exit(app.exec())
