@@ -123,6 +123,34 @@ class ConfigManager:
         self.save()
 
     @property
+    def channel_order(self) -> List[str]:
+        return self.data.get("channel_order", [])
+
+    @channel_order.setter
+    def channel_order(self, val: List[str]):
+        self.data["channel_order"] = val
+        self.save()
+
+    def get_ordered_channels(self) -> List[str]:
+        """
+        Returns all unique channels in configured manual order.
+        Any active channels not yet in channel_order are appended to the end.
+        """
+        all_unique = list(dict.fromkeys(
+            list(self.channel_map.values()) +
+            list(self.tvpassport_stations.keys())
+        ))
+        saved_order = self.channel_order
+        ordered = []
+        for ch in saved_order:
+            if ch in all_unique and ch not in ordered:
+                ordered.append(ch)
+        for ch in all_unique:
+            if ch not in ordered:
+                ordered.append(ch)
+        return ordered
+
+    @property
     def rules(self) -> List[Dict[str, Any]]:
         return self.data.get("rules", [])
 

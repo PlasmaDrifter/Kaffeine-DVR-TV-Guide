@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QProgressBar, QStatusBar, QFrame, QGroupBox, QFileDialog,
     QScrollArea, QToolButton, QSizePolicy, QAbstractSpinBox, QSlider,
     QStackedWidget, QButtonGroup, QStyledItemDelegate, QStyleOptionViewItem,
-    QStyle
+    QStyle, QListWidget, QListWidgetItem, QAbstractItemView
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QSettings, QByteArray, QEvent, QObject, QPoint, QPointF, QRect
 from PyQt6.QtGui import QColor, QFont, QFontMetrics, QIcon, QWheelEvent, QPainter, QPalette, QPixmap, QPen
@@ -1113,6 +1113,34 @@ QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
     background: none;
 }
 
+/* Channel Order List Widget */
+QListWidget#channelOrderList {
+    background-color: #141722;
+    border: 1px solid #323b4e;
+    border-radius: 6px;
+    padding: 4px;
+    font-size: 13px;
+}
+QListWidget#channelOrderList::item {
+    background-color: #1c2130;
+    border: 1px solid #2d3547;
+    border-radius: 5px;
+    padding: 6px 10px;
+    margin-bottom: 3px;
+    color: #e0e6ed;
+    font-weight: 500;
+}
+QListWidget#channelOrderList::item:hover {
+    background-color: #272f44;
+    border-color: #43516f;
+}
+QListWidget#channelOrderList::item:selected {
+    background-color: #2563eb;
+    border-color: #3b82f6;
+    color: #ffffff;
+    font-weight: bold;
+}
+
 /* EPG Grid Table Styles */
 QTableWidget#guideGridTable {
     background-color: #161922;
@@ -1469,7 +1497,7 @@ class MainWindow(QMainWindow):
         filter_bar.addWidget(QLabel("Channel:"))
         self.guide_channel_combo = QComboBox()
         self.guide_channel_combo.addItem("All")
-        channels = sorted(list(set(self.config_mgr.channel_map.values())))
+        channels = self.config_mgr.get_ordered_channels()
         self.guide_channel_combo.addItems(channels)
         self.guide_channel_combo.currentIndexChanged.connect(self.filter_guide)
         filter_bar.addWidget(self.guide_channel_combo)
@@ -1819,26 +1847,65 @@ class MainWindow(QMainWindow):
         widget = QWidget()
         layout = QVBoxLayout(widget)
 
-        layout.addWidget(QLabel("<b>Kaffeine Channel & Guide Network Lineup</b>:"))
+        layout.addWidget(QLabel("<b>Kaffeine Channel Lineup & Guide Network Mapping</b>:"))
         desc = QLabel(
-            "Map external guide broadcast network names to the exact channel names tuned in your Kaffeine channel scan.\n"
-            "Format: Guide Network Name = Kaffeine Channel Name (e.g. FOX = Fox, The CW = CW6)"
+            "Reorder rows in your EPG TV Guide using drag-and-drop or the Move Up/Down buttons.\n"
+            "Map external guide broadcast network names to your exact Kaffeine tuned channel names on the right."
         )
         desc.setStyleSheet("color: #6c757d; font-size: 11px;")
         layout.addWidget(desc)
+
+        # Splitter / Two-panel layout
+        lineup_panels = QHBoxLayout()
+
+        # Left Panel: Interactive Channel Order List
+        order_box = QGroupBox("TV Guide Channel Order (Manual Priority)")
+        order_layout = QVBoxLayout(order_box)
+
+        self.channel_order_list = QListWidget()
+        self.channel_order_list.setObjectName("channelOrderList")
+        self.channel_order_list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        self.channel_order_list.setDefaultDropAction(Qt.DropAction.MoveAction)
+        self.channel_order_list.model().rowsMoved.connect(self._on_channel_rows_dragged)
+        order_layout.addWidget(self.channel_order_list)
+
+        order_ctrl_bar = QHBoxLayout()
+        self.move_up_btn = QPushButton("▲ Move Up")
+        self.move_up_btn.clicked.connect(self._move_channel_up)
+        order_ctrl_bar.addWidget(self.move_up_btn)
+
+        self.move_down_btn = QPushButton("▼ Move Down")
+        self.move_down_btn.clicked.connect(self._move_channel_down)
+        order_ctrl_bar.addWidget(self.move_down_btn)
+
+        self.sort_alpha_btn = QPushButton("Sort A-Z")
+        self.sort_alpha_btn.clicked.connect(self._sort_channels_alphabetical)
+        order_ctrl_bar.addWidget(self.sort_alpha_btn)
+
+        order_layout.addLayout(order_ctrl_bar)
+        lineup_panels.addWidget(order_box, 1)
+
+        # Right Panel: Channel & Network Mapping
+        map_box = QGroupBox("Guide Network Mapping (Name = Channel)")
+        map_layout = QVBoxLayout(map_box)
 
         self.mapping_text = QTextEdit()
         mapping_str = "\n".join([f"{k} = {v}" for k, v in self.config_mgr.channel_map.items()])
         self.mapping_text.setPlainText(mapping_str)
         self.mapping_text.setMinimumHeight(200)
-        layout.addWidget(self.mapping_text)
+        map_layout.addWidget(self.mapping_text)
 
+        lineup_panels.addWidget(map_box, 1)
+        layout.addLayout(lineup_panels)
+
+        # Bottom Button Row
         btn_row = QHBoxLayout()
         import_kaffeine_btn = QPushButton("Import Channels from Kaffeine")
         import_kaffeine_btn.clicked.connect(lambda: self.import_channels_from_kaffeine(silent=False))
         btn_row.addWidget(import_kaffeine_btn)
 
         save_mapping_btn = QPushButton("Save Channel Lineup")
+        save_mapping_btn.setObjectName("primaryActionBtn")
         save_mapping_btn.clicked.connect(self.save_channel_mapping)
         btn_row.addWidget(save_mapping_btn)
 
@@ -1849,8 +1916,73 @@ class MainWindow(QMainWindow):
         btn_row.addStretch()
         layout.addLayout(btn_row)
 
-        layout.addStretch()
+        self.refresh_channel_order_list()
         return widget
+
+    def refresh_channel_order_list(self):
+        if not hasattr(self, "channel_order_list"):
+            return
+        self.channel_order_list.blockSignals(True)
+        self.channel_order_list.clear()
+        ordered = self.config_mgr.get_ordered_channels()
+        for idx, ch in enumerate(ordered, 1):
+            item = QListWidgetItem(f"{idx}.  {ch}")
+            item.setData(Qt.ItemDataRole.UserRole, ch)
+            self.channel_order_list.addItem(item)
+        self.channel_order_list.blockSignals(False)
+
+    def _get_current_list_channels(self) -> List[str]:
+        channels = []
+        for i in range(self.channel_order_list.count()):
+            it = self.channel_order_list.item(i)
+            ch = it.data(Qt.ItemDataRole.UserRole) or it.text().strip()
+            channels.append(ch)
+        return channels
+
+    def _renumber_channel_order_list(self):
+        for i in range(self.channel_order_list.count()):
+            it = self.channel_order_list.item(i)
+            ch = it.data(Qt.ItemDataRole.UserRole)
+            it.setText(f"{i + 1}.  {ch}")
+
+    def _move_channel_up(self):
+        row = self.channel_order_list.currentRow()
+        if row > 0:
+            item = self.channel_order_list.takeItem(row)
+            self.channel_order_list.insertItem(row - 1, item)
+            self.channel_order_list.setCurrentRow(row - 1)
+            self._renumber_channel_order_list()
+            self._save_current_channel_order()
+
+    def _move_channel_down(self):
+        row = self.channel_order_list.currentRow()
+        if 0 <= row < self.channel_order_list.count() - 1:
+            item = self.channel_order_list.takeItem(row)
+            self.channel_order_list.insertItem(row + 1, item)
+            self.channel_order_list.setCurrentRow(row + 1)
+            self._renumber_channel_order_list()
+            self._save_current_channel_order()
+
+    def _sort_channels_alphabetical(self):
+        channels = sorted(self._get_current_list_channels())
+        self.config_mgr.channel_order = channels
+        self.refresh_channel_order_list()
+        self._apply_channel_order_to_views()
+        self.flash_save_indicator("Lineup Sorted A-Z")
+
+    def _on_channel_rows_dragged(self):
+        self._renumber_channel_order_list()
+        self._save_current_channel_order()
+
+    def _save_current_channel_order(self):
+        ordered = self._get_current_list_channels()
+        self.config_mgr.channel_order = ordered
+        self._apply_channel_order_to_views()
+        self.flash_save_indicator("Channel Order Saved")
+
+    def _apply_channel_order_to_views(self):
+        self.refresh_channel_dropdowns()
+        self._refresh_guide_view(keep_scroll=True)
 
     # Subcategory 3: Automation & DVR
     def create_settings_automation_tab(self) -> QWidget:
@@ -2389,6 +2521,7 @@ class MainWindow(QMainWindow):
         self.config_mgr.channel_map = new_map
         self.guide_service.set_channel_map(new_map)
         self.update_tvpassport_notice()
+        self.refresh_channel_order_list()
         self.refresh_channel_dropdowns()
         self.flash_save_indicator("Lineup Saved")
         QMessageBox.information(self, "Saved", "Channel mapping saved successfully.")
@@ -2416,6 +2549,7 @@ class MainWindow(QMainWindow):
         mapping_str = "\n".join([f"{k} = {v}" for k, v in current_map.items()])
         self.mapping_text.setPlainText(mapping_str)
         self.update_tvpassport_notice()
+        self.refresh_channel_order_list()
         self.refresh_channel_dropdowns()
         self.filter_guide()
 
@@ -2641,10 +2775,7 @@ class MainWindow(QMainWindow):
         self.filter_guide()
 
     def refresh_channel_dropdowns(self):
-        channels = sorted(list(set(
-            list(self.config_mgr.channel_map.values()) +
-            list(self.config_mgr.tvpassport_stations.keys())
-        )))
+        channels = self.config_mgr.get_ordered_channels()
         if hasattr(self, "guide_channel_combo"):
             cur_selected = self.guide_channel_combo.currentText()
             self.guide_channel_combo.blockSignals(True)
@@ -2986,7 +3117,7 @@ class MainWindow(QMainWindow):
             self._refresh_guide_view(keep_scroll=True)
 
     def add_manual_recording(self):
-        channels = sorted(list(set(self.config_mgr.channel_map.values())))
+        channels = self.config_mgr.get_ordered_channels()
         dlg = ManualRecordDialog(channels, self, default_buffer_mins=self.config_mgr.end_buffer_mins)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             title = dlg.title_input.text().strip()
@@ -3142,13 +3273,12 @@ class MainWindow(QMainWindow):
         if filter_ch and filter_ch != "All":
             channels = [filter_ch]
         else:
-            channels = sorted(list(set(self.config_mgr.channel_map.values())))
-            # Also include any channel present in programs
+            channels = list(self.config_mgr.get_ordered_channels())
+            # Also include any channel present in programs that wasn't in config
             for p in programs:
                 ch_name = p.get("kaffeine_channel")
                 if ch_name and ch_name not in channels:
                     channels.append(ch_name)
-            channels.sort()
 
         self.grid_channels = channels
         self.guide_grid_table.setRowCount(len(channels))
@@ -3477,7 +3607,7 @@ class MainWindow(QMainWindow):
             self.rules_table.setItem(row, 4, enabled_item)
 
     def add_rule_dialog(self):
-        channels = sorted(list(set(self.config_mgr.channel_map.values())))
+        channels = self.config_mgr.get_ordered_channels()
         dlg = AddRuleDialog(channels, self)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             kw = dlg.keyword_input.text().strip()
@@ -3504,7 +3634,7 @@ class MainWindow(QMainWindow):
         rule_obj = next((r for r in self.rules_engine.get_rules() if str(r.get("id")) == rule_id), {})
         current_buffer = rule_obj.get("buffer_mins")
 
-        channels = sorted(list(set(self.config_mgr.channel_map.values())))
+        channels = self.config_mgr.get_ordered_channels()
         dlg = EditRuleDialog(
             channels=channels,
             rule_id=rule_id,
