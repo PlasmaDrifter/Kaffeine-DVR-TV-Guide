@@ -1240,7 +1240,7 @@ class MainWindow(QMainWindow):
 
         self.init_ui()
         self.setup_timers()
-        self.refresh_all()
+        self.refresh_all(on_startup=True)
 
         # Ensure mouse wheel scrolling on setting input widgets (spinboxes, combos)
         # doesn't accidentally mutate values while scrolling through settings pages
@@ -2746,18 +2746,18 @@ class MainWindow(QMainWindow):
         # GUI refreshes on-demand (when syncing guide, switching tabs, or user actions).
         pass
 
-    def refresh_date_dropdown(self):
-        """Refreshes the Date dropdown when a new calendar day begins."""
+    def refresh_date_dropdown(self, reset_to_default: bool = False):
+        """Refreshes the Date dropdown when a new calendar day begins or on app startup."""
         if not hasattr(self, "guide_date_combo"):
             return
         today = date.today()
         # Item 0 is 'All Upcoming' (data=None), Item 1 is 'Today' (data=today_str)
         today_date_in_combo = self.guide_date_combo.itemData(1) if self.guide_date_combo.count() > 1 else None
         today_str = today.strftime("%Y-%m-%d")
-        if today_date_in_combo == today_str:
+        if not reset_to_default and today_date_in_combo == today_str:
             return  # Date dropdown is already up to date
 
-        cur_data = self.guide_date_combo.currentData()
+        cur_data = None if reset_to_default else self.guide_date_combo.currentData()
         self.guide_date_combo.blockSignals(True)
         self.guide_date_combo.clear()
         self.guide_date_combo.addItem("All Upcoming", None)
@@ -2766,33 +2766,38 @@ class MainWindow(QMainWindow):
             label = "Today" if i == 0 else ("Tomorrow" if i == 1 else d.strftime("%a, %b %d"))
             self.guide_date_combo.addItem(label, d.strftime("%Y-%m-%d"))
 
-        idx = self.guide_date_combo.findData(cur_data)
-        if idx >= 0:
-            self.guide_date_combo.setCurrentIndex(idx)
-        else:
+        if reset_to_default or cur_data is None:
             self.guide_date_combo.setCurrentIndex(0)
+        else:
+            idx = self.guide_date_combo.findData(cur_data)
+            if idx >= 0:
+                self.guide_date_combo.setCurrentIndex(idx)
+            else:
+                self.guide_date_combo.setCurrentIndex(0)
         self.guide_date_combo.blockSignals(False)
         self.filter_guide()
 
-    def refresh_channel_dropdowns(self):
+    def refresh_channel_dropdowns(self, reset_to_default: bool = False):
         channels = self.config_mgr.get_ordered_channels()
         if hasattr(self, "guide_channel_combo"):
-            cur_selected = self.guide_channel_combo.currentText()
+            cur_selected = "All" if reset_to_default else self.guide_channel_combo.currentText()
             self.guide_channel_combo.blockSignals(True)
             self.guide_channel_combo.clear()
             self.guide_channel_combo.addItem("All")
             self.guide_channel_combo.addItems(channels)
-            idx = self.guide_channel_combo.findText(cur_selected)
+            idx = 0 if reset_to_default else self.guide_channel_combo.findText(cur_selected)
             if idx >= 0:
                 self.guide_channel_combo.setCurrentIndex(idx)
+            else:
+                self.guide_channel_combo.setCurrentIndex(0)
             self.guide_channel_combo.blockSignals(False)
 
-    def refresh_all(self):
-        self.refresh_date_dropdown()
+    def refresh_all(self, on_startup: bool = False):
+        self.refresh_date_dropdown(reset_to_default=on_startup)
         self.update_status_badges()
         self.update_service_status_ui()
         self.update_storage_status_ui()
-        self.refresh_channel_dropdowns()
+        self.refresh_channel_dropdowns(reset_to_default=on_startup)
         self.refresh_recordings()
         self.filter_guide()
         self.refresh_rules()
@@ -3293,7 +3298,13 @@ class MainWindow(QMainWindow):
         tile_text_color = QColor("#ffffff")
 
         for row_idx, ch in enumerate(channels):
-            ch_progs = [p for p in programs if p.get("kaffeine_channel") == ch]
+            ch_progs = [
+                p for p in programs
+                if p.get("kaffeine_channel") == ch and (
+                    p.get("airdate") == target_date_str or
+                    (p.get("start_iso") and p.get("start_iso").startswith(target_date_str))
+                )
+            ]
             ch_progs.sort(key=lambda x: x.get("start_iso", ""))
 
             current_col = 0
