@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
     QStyle
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QSettings, QByteArray, QEvent, QObject, QPoint, QPointF, QRect
-from PyQt6.QtGui import QColor, QFont, QIcon, QWheelEvent, QPainter, QPalette
+from PyQt6.QtGui import QColor, QFont, QFontMetrics, QIcon, QWheelEvent, QPainter, QPalette
 
 try:
     from .config import ConfigManager, DEFAULT_CHANNEL_MAP
@@ -201,6 +201,104 @@ class EditRuleDialog(QDialog):
         btn_box.addWidget(self.ok_btn)
         btn_box.addWidget(self.cancel_btn)
         layout.addRow(btn_box)
+
+
+class AdjustBufferDialog(QDialog):
+    """
+    Dialog for adjusting recording end buffer with a dedicated 2-line title container.
+    Guarantees a clean 2-line layout without clipping and truncates to 2 lines max with ellipsis.
+    """
+    def __init__(self, title_text: str, current_buffer: int = 0, parent=None):
+        super().__init__(parent)
+        self.raw_title = title_text
+        self.setWindowTitle("Adjust Recording Buffer")
+        self.setMinimumWidth(380)
+
+        form = QFormLayout(self)
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+
+        # 2-line title label
+        self.title_lbl = QLabel()
+        self.title_lbl.setWordWrap(True)
+        # Calculate line height based on bold font metrics
+        title_font = QFont(self.font())
+        title_font.setBold(True)
+        self.title_lbl.setFont(title_font)
+        fm = QFontMetrics(title_font)
+        line_h = fm.lineSpacing()
+        two_line_h = line_h * 2 + 4
+        self.title_lbl.setMinimumHeight(two_line_h)
+        self.title_lbl.setMaximumHeight(two_line_h)
+        self.title_lbl.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        form.addRow("Show:", self.title_lbl)
+
+        # Spinbox
+        self.buf_spin = QSpinBox()
+        self.buf_spin.setRange(0, 180)
+        self.buf_spin.setValue(current_buffer)
+        self.buf_spin.setSuffix(" minutes")
+        form.addRow("End Buffer:", self.buf_spin)
+
+        # Presets
+        presets_box = QHBoxLayout()
+        for m in [0, 15, 30, 45, 60]:
+            btn = QPushButton(f"+{m}m" if m > 0 else "None")
+            btn.clicked.connect(lambda _, val=m: self.buf_spin.setValue(val))
+            presets_box.addWidget(btn)
+        form.addRow("Presets:", presets_box)
+
+        # Buttons
+        btns = QHBoxLayout()
+        self.ok_btn = QPushButton("Save Buffer")
+        self.cancel_btn = QPushButton("Cancel")
+        self.ok_btn.clicked.connect(self.accept)
+        self.cancel_btn.clicked.connect(self.reject)
+        btns.addWidget(self.ok_btn)
+        btns.addWidget(self.cancel_btn)
+        form.addRow(btns)
+
+        self._update_elided_title()
+
+    def _update_elided_title(self):
+        fm = self.title_lbl.fontMetrics()
+        avail_w = max(100, self.title_lbl.width() if self.title_lbl.width() > 0 else self.width() - 80)
+        
+        words = self.raw_title.split()
+        if not words:
+            self.title_lbl.setText("")
+            return
+
+        line1_words = []
+        rem_words = []
+        for i, w in enumerate(words):
+            test_line = " ".join(line1_words + [w])
+            if fm.horizontalAdvance(test_line) <= avail_w:
+                line1_words.append(w)
+            else:
+                rem_words = words[i:]
+                break
+
+        if not line1_words and words:
+            line1_words = [words[0]]
+            rem_words = words[1:]
+
+        line1_text = " ".join(line1_words)
+
+        if not rem_words:
+            # Fits on 1 line: display line 1
+            self.title_lbl.setText(f"<b>{line1_text}</b>")
+        else:
+            # 2nd line: elide if longer than available width
+            rem_text = " ".join(rem_words)
+            elided_line2 = fm.elidedText(rem_text, Qt.TextElideMode.ElideRight, avail_w)
+            self.title_lbl.setText(f"<b>{line1_text}<br>{elided_line2}</b>")
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._update_elided_title()
+
+    def get_buffer(self) -> int:
+        return self.buf_spin.value()
 
 
 class CollapsibleSection(QWidget):
@@ -2745,39 +2843,9 @@ class MainWindow(QMainWindow):
             return
 
         current_buf = rec.get("buffer_mins", 0) or 0
-        dlg = QDialog(self)
-        dlg.setWindowTitle("Adjust Recording Buffer")
-        dlg.setMinimumWidth(340)
-        form = QFormLayout(dlg)
-
-        title_lbl = QLabel(f"<b>{rec_title}</b>")
-        title_lbl.setWordWrap(True)
-        form.addRow("Show:", title_lbl)
-
-        buf_spin = QSpinBox()
-        buf_spin.setRange(0, 180)
-        buf_spin.setValue(current_buf)
-        buf_spin.setSuffix(" minutes")
-        form.addRow("End Buffer:", buf_spin)
-
-        presets_box = QHBoxLayout()
-        for m in [0, 15, 30, 45, 60]:
-            btn = QPushButton(f"+{m}m" if m > 0 else "None")
-            btn.clicked.connect(lambda _, val=m: buf_spin.setValue(val))
-            presets_box.addWidget(btn)
-        form.addRow("Presets:", presets_box)
-
-        btns = QHBoxLayout()
-        ok_btn = QPushButton("Save Buffer")
-        cancel_btn = QPushButton("Cancel")
-        ok_btn.clicked.connect(dlg.accept)
-        cancel_btn.clicked.connect(dlg.reject)
-        btns.addWidget(ok_btn)
-        btns.addWidget(cancel_btn)
-        form.addRow(btns)
-
+        dlg = AdjustBufferDialog(rec_title, current_buffer=current_buf, parent=self)
         if dlg.exec() == QDialog.DialogCode.Accepted:
-            new_buf = buf_spin.value()
+            new_buf = dlg.get_buffer()
             if self.queue_mgr.update_recording_buffer(int(qid), new_buf):
                 self.status_bar.showMessage(f"Updated buffer for '{rec_title}' to +{new_buf}m.", 4000)
                 self.refresh_recordings()
@@ -3235,39 +3303,9 @@ class MainWindow(QMainWindow):
             # Already queued: open buffer adjust dialog directly
             qid = rec_info.get("id")
             current_buf = rec_info.get("buffer_mins", 0) or 0
-            dlg = QDialog(self)
-            dlg.setWindowTitle("Adjust Recording Buffer")
-            dlg.setMinimumWidth(340)
-            form = QFormLayout(dlg)
-
-            title_lbl = QLabel(f"<b>{rec_title}</b>")
-            title_lbl.setWordWrap(True)
-            form.addRow("Show:", title_lbl)
-
-            buf_spin = QSpinBox()
-            buf_spin.setRange(0, 180)
-            buf_spin.setValue(current_buf)
-            buf_spin.setSuffix(" minutes")
-            form.addRow("End Buffer:", buf_spin)
-
-            presets_box = QHBoxLayout()
-            for m in [0, 15, 30, 45, 60]:
-                btn = QPushButton(f"+{m}m" if m > 0 else "None")
-                btn.clicked.connect(lambda _, val=m: buf_spin.setValue(val))
-                presets_box.addWidget(btn)
-            form.addRow("Presets:", presets_box)
-
-            btns = QHBoxLayout()
-            ok_btn = QPushButton("Save Buffer")
-            cancel_btn = QPushButton("Cancel")
-            ok_btn.clicked.connect(dlg.accept)
-            cancel_btn.clicked.connect(dlg.reject)
-            btns.addWidget(ok_btn)
-            btns.addWidget(cancel_btn)
-            form.addRow(btns)
-
+            dlg = AdjustBufferDialog(rec_title, current_buffer=current_buf, parent=self)
             if dlg.exec() == QDialog.DialogCode.Accepted:
-                new_buf = buf_spin.value()
+                new_buf = dlg.get_buffer()
                 if self.queue_mgr.update_recording_buffer(int(qid), new_buf):
                     self.status_bar.showMessage(f"Updated buffer for '{rec_title}' to +{new_buf}m.", 4000)
                     self.refresh_recordings()
