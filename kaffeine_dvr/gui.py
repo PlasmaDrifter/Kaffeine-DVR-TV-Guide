@@ -1080,7 +1080,7 @@ class MainWindow(QMainWindow):
         self.sync_guide_btn.setStyleSheet(
             "QPushButton { padding: 3px 10px; font-size: 11px; font-weight: 500; "
             "border: 1px solid #3d465c; border-radius: 4px; background-color: #212635; color: #c8d2df; }"
-            "QPushButton:hover { background-color: #2b3244; border: 1px solid #4f5b77; color: #ffffff; }"
+            "QPushButton:hover { background-color: #313d56; border: 1px solid #5a80b8; color: #ffffff; }"
             "QPushButton:pressed { background-color: #1a1e2b; border: 1px solid #353d50; }"
             "QPushButton:disabled { background-color: #1a1c26; border: 1px solid #2a3040; color: #5d6778; }"
         )
@@ -1092,7 +1092,7 @@ class MainWindow(QMainWindow):
         # Upper-right corner auto-save notification indicator
         self.save_indicator_lbl = QLabel("Changes save automatically")
         self.save_indicator_lbl.setStyleSheet(
-            "color: #8c98aa; font-size: 11px; padding: 4px 10px; border-radius: 4px; border: 1px solid #333a46; background-color: #1e222a;"
+            "color: #8c98aa; font-size: 11px; padding: 4px 6px; background: transparent;"
         )
         banner.addWidget(self.save_indicator_lbl)
         return banner
@@ -1228,7 +1228,7 @@ class MainWindow(QMainWindow):
         btn_style = (
             "QPushButton { padding: 4px 12px; font-weight: bold; font-size: 11px; "
             "border: 1px solid #3d465c; border-radius: 4px; background-color: #212635; color: #a4b0c2; }"
-            "QPushButton:hover:!checked { background-color: #2b3244; border: 1px solid #4f5b77; color: #ffffff; }"
+            "QPushButton:hover:!checked { background-color: #313d56; border: 1px solid #5a80b8; color: #ffffff; }"
             "QPushButton:checked { background-color: #1e2e1f; border: 1.5px solid #3e7e3d; color: #ffffff; }"
             "QPushButton:checked:hover { background-color: #243725; border: 1.5px solid #478e45; color: #ffffff; }"
         )
@@ -1254,7 +1254,7 @@ class MainWindow(QMainWindow):
         jump_btn_style = (
             "QPushButton { padding: 4px 10px; font-size: 11px; font-weight: 500; "
             "border: 1px solid #3d465c; border-radius: 4px; background-color: #212635; color: #c8d2df; }"
-            "QPushButton:hover { background-color: #2b3244; border: 1px solid #4f5b77; color: #ffffff; }"
+            "QPushButton:hover { background-color: #313d56; border: 1px solid #5a80b8; color: #ffffff; }"
             "QPushButton:pressed { background-color: #1a1e2b; border: 1px solid #353d50; }"
         )
         self.jump_now_btn = QPushButton("Jump to Now")
@@ -2274,8 +2274,7 @@ class MainWindow(QMainWindow):
             return
         self.save_indicator_lbl.setText(f"✓ {text}")
         self.save_indicator_lbl.setStyleSheet(
-            "color: #78c48a; font-size: 11px; padding: 4px 10px; "
-            "border-radius: 4px; border: 1px solid #2f5636; background-color: #1a271c;"
+            "color: #78c48a; font-size: 11px; padding: 4px 6px; background: transparent;"
         )
         if hasattr(self, "_save_indicator_timer") and self._save_indicator_timer:
             self._save_indicator_timer.stop()
@@ -2288,8 +2287,7 @@ class MainWindow(QMainWindow):
         if hasattr(self, "save_indicator_lbl"):
             self.save_indicator_lbl.setText("Changes save automatically")
             self.save_indicator_lbl.setStyleSheet(
-                "color: #8c98aa; font-size: 11px; padding: 4px 10px; "
-                "border-radius: 4px; border: 1px solid #333a46; background-color: #1e222a;"
+                "color: #8c98aa; font-size: 11px; padding: 4px 6px; background: transparent;"
             )
 
     def _auto_save_automation_settings(self):
