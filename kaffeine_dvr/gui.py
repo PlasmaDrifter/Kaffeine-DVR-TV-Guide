@@ -1490,12 +1490,12 @@ class MainWindow(QMainWindow):
 
         filter_bar.addWidget(QLabel("Date:"))
         self.guide_date_combo = QComboBox()
+        self.guide_date_combo.addItem("All Upcoming", None)
         today = date.today()
         for i in range(14):
             d = today + timedelta(days=i)
             label = "Today" if i == 0 else ("Tomorrow" if i == 1 else d.strftime("%a, %b %d"))
             self.guide_date_combo.addItem(label, d.strftime("%Y-%m-%d"))
-        self.guide_date_combo.addItem("All Upcoming", None)
         self.guide_date_combo.currentIndexChanged.connect(self.filter_guide)
         filter_bar.addWidget(self.guide_date_combo)
 
@@ -2751,20 +2751,20 @@ class MainWindow(QMainWindow):
         if not hasattr(self, "guide_date_combo"):
             return
         today = date.today()
-        # Check if the first entry is still Today's date
-        first_date = self.guide_date_combo.itemData(0)
+        # Item 0 is 'All Upcoming' (data=None), Item 1 is 'Today' (data=today_str)
+        today_date_in_combo = self.guide_date_combo.itemData(1) if self.guide_date_combo.count() > 1 else None
         today_str = today.strftime("%Y-%m-%d")
-        if first_date == today_str:
+        if today_date_in_combo == today_str:
             return  # Date dropdown is already up to date
 
         cur_data = self.guide_date_combo.currentData()
         self.guide_date_combo.blockSignals(True)
         self.guide_date_combo.clear()
+        self.guide_date_combo.addItem("All Upcoming", None)
         for i in range(14):
             d = today + timedelta(days=i)
             label = "Today" if i == 0 else ("Tomorrow" if i == 1 else d.strftime("%a, %b %d"))
             self.guide_date_combo.addItem(label, d.strftime("%Y-%m-%d"))
-        self.guide_date_combo.addItem("All Upcoming", None)
 
         idx = self.guide_date_combo.findData(cur_data)
         if idx >= 0:
