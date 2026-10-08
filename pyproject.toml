@@ -18,6 +18,7 @@ dependencies = [
 
 [project.scripts]
 kaffeine-dvr = "kaffeine_dvr.cli:main"
+kaffeine-dvr-gui = "kaffeine_dvr.gui:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

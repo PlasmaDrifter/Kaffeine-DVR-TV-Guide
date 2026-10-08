@@ -1,3 +1,4 @@
+import os
 import sys
 import argparse
 
@@ -16,6 +17,7 @@ except (ImportError, ValueError):
 
 def main():
     parser = argparse.ArgumentParser(description="Kaffeine DVR & Web TV Guide CLI Manager")
+    parser.add_argument("--gui", action="store_true", help="Launch the TV Guide & DVR graphical user interface")
     parser.add_argument("--sync", action="store_true", help="Sync web TV guide cache")
     parser.add_argument("--days", type=int, default=7, help="Number of days to sync (default: 7)")
     parser.add_argument("--rules", action="store_true", help="Evaluate auto-record rules against cached guide")
@@ -25,6 +27,18 @@ def main():
     parser.add_argument("--status", action="store_true", help="Show TV guide and Kaffeine connection status")
 
     args = parser.parse_args()
+
+    # Launch GUI when explicitly requested or by default when invoked without CLI flags in a graphical session
+    no_cli_flags = not any([args.sync, args.rules, args.watch, args.list, args.status])
+    if args.gui or no_cli_flags:
+        has_display = bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+        if has_display or args.gui:
+            try:
+                from .gui import main as gui_main
+            except (ImportError, ValueError):
+                from kaffeine_dvr.gui import main as gui_main
+            gui_main()
+            return
 
     cfg = ConfigManager()
     dbus_client = KaffeineDbusClient()
@@ -48,7 +62,7 @@ def main():
 
 
 
-    if args.status or (not any([args.sync, args.rules, args.list])):
+    if args.status or no_cli_flags:
         k_running = dbus_client.is_running()
         print(f"Kaffeine D-Bus status: {'Running (Connected)' if k_running else 'Offline'}")
         print(f"Active Guide Provider: {cfg.guide_provider.upper()}")
