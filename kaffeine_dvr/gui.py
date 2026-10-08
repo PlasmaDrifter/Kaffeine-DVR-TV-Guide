@@ -2847,7 +2847,7 @@ class MainWindow(QMainWindow):
         self._update_time_jump_buttons_visibility()
         self.filter_guide()
 
-    def _scroll_grid_to_slot(self, slot: int, center: bool = True):
+    def _scroll_grid_to_slot(self, slot: int, center: bool = False):
         bar = self.guide_grid_table.horizontalScrollBar()
         if not center or slot <= 0:
             bar.setValue(max(0, min(bar.maximum(), slot)))
@@ -2861,15 +2861,40 @@ class MainWindow(QMainWindow):
 
     def jump_guide_to_now(self):
         now = datetime.now()
-        slot = max(0, min(47, (now.hour * 60 + now.minute) // 30))
-        self._scroll_grid_to_slot(slot, center=True)
+        now_slot = max(0, min(47, (now.hour * 60 + now.minute) // 30))
+
+        # Check currently active programs in the grid to find the earliest starting slot
+        # among programs currently airing (start <= now < end).
+        # We clamp to at most 2 slots (1 hour) before now_slot so we don't jump too far back.
+        target_slot = now_slot
+        if hasattr(self, "current_guide_items") and self.current_guide_items:
+            earliest_slot = now_slot
+            for p in self.current_guide_items:
+                start_iso = p.get("start_iso")
+                if not start_iso:
+                    continue
+                try:
+                    p_start = datetime.fromisoformat(start_iso)
+                    dur_iso = p.get("duration_iso") or "00:30:00"
+                    parts = [int(x) for x in dur_iso.split(":")]
+                    dur = timedelta(hours=parts[0], minutes=parts[1], seconds=parts[2] if len(parts) > 2 else 0)
+                    p_end = p_start + dur
+                    if p_start <= now < p_end:
+                        p_slot = (p_start.hour * 60 + p_start.minute) // 30
+                        if p_slot < earliest_slot:
+                            earliest_slot = p_slot
+                except Exception:
+                    continue
+            target_slot = max(max(0, now_slot - 2), earliest_slot)
+
+        self._scroll_grid_to_slot(target_slot, center=False)
 
     def jump_guide_to_start(self):
         self._scroll_grid_to_slot(0, center=False)
 
     def jump_guide_to_primetime(self):
         # 8:00 PM is 20:00 -> slot 40
-        self._scroll_grid_to_slot(40, center=True)
+        self._scroll_grid_to_slot(40, center=False)
 
     def filter_guide(self):
         # Automatically prune already elapsed past entries from SQLite database

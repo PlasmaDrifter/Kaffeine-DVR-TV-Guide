@@ -939,7 +939,7 @@ class GuideService:
 
     def prune_past_programs(self) -> int:
         """
-        Deletes past guide entries that have already ended from the local database.
+        Deletes past guide entries from previous calendar days.
         Returns the count of purged records.
         """
         conn = sqlite3.connect(str(self.db_path))
@@ -948,33 +948,9 @@ class GuideService:
         now_dt = datetime.now()
         today_str = now_dt.strftime("%Y-%m-%d")
 
-        # 1. Delete all programs with an airdate before today
+        # Delete all programs with an airdate before today
         cur.execute("DELETE FROM guide_programs WHERE airdate < ?", (today_str,))
         count = cur.rowcount
-
-        # 2. For today's programs, prune entries whose end time (start_iso + duration) has already elapsed
-        cur.execute("SELECT id, start_iso, duration_iso FROM guide_programs WHERE airdate = ?", (today_str,))
-        today_rows = cur.fetchall()
-
-        ids_to_delete = []
-        for pid, start_iso, dur_iso in today_rows:
-            if not start_iso:
-                continue
-            try:
-                start_dt = datetime.fromisoformat(start_iso)
-                dur_iso_str = dur_iso or "00:30:00"
-                parts = [int(x) for x in dur_iso_str.split(":")]
-                dur = timedelta(hours=parts[0], minutes=parts[1], seconds=parts[2] if len(parts) > 2 else 0)
-                end_dt = start_dt + dur
-                # Give a 15-minute buffer so currently airing / just finished programs remain visible
-                if end_dt + timedelta(minutes=15) < now_dt:
-                    ids_to_delete.append(pid)
-            except Exception:
-                continue
-
-        if ids_to_delete:
-            cur.executemany("DELETE FROM guide_programs WHERE id = ?", [(i,) for i in ids_to_delete])
-            count += len(ids_to_delete)
 
         conn.commit()
         conn.close()
