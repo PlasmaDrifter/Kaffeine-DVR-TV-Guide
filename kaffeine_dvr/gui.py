@@ -1237,6 +1237,7 @@ class MainWindow(QMainWindow):
         self.rules_engine = RulesEngine(self.config_mgr, self.dbus_client, self.guide_service)
         self.watcher = Watcher(self.dbus_client, self.queue_mgr)
         self.storage_mgr = StorageManager(self.config_mgr, self.queue_mgr)
+        self.day_nav_offset = 0
 
         self.init_ui()
         self.setup_timers()
@@ -1496,6 +1497,7 @@ class MainWindow(QMainWindow):
             d = today + timedelta(days=i)
             label = "Today" if i == 0 else ("Tomorrow" if i == 1 else d.strftime("%a, %b %d"))
             self.guide_date_combo.addItem(label, d.strftime("%Y-%m-%d"))
+        self.guide_date_combo.setCurrentIndex(1)
         self.guide_date_combo.currentIndexChanged.connect(self.filter_guide)
         filter_bar.addWidget(self.guide_date_combo)
 
@@ -1558,7 +1560,16 @@ class MainWindow(QMainWindow):
         self.guide_stack.setCurrentIndex(1 if saved_view == "list" else 0)
         self._update_time_jump_buttons_visibility()
 
-        splitter.addWidget(self.guide_stack)
+        guide_container = QWidget()
+        guide_container_layout = QVBoxLayout(guide_container)
+        guide_container_layout.setContentsMargins(0, 0, 0, 0)
+        guide_container_layout.setSpacing(4)
+        guide_container_layout.addWidget(self.guide_stack, 1)
+
+        self.day_nav_bar = self._create_day_nav_bar()
+        guide_container_layout.addWidget(self.day_nav_bar, 0)
+
+        splitter.addWidget(guide_container)
 
         # Detail Panel
         detail_widget = QWidget()
@@ -2767,13 +2778,13 @@ class MainWindow(QMainWindow):
             self.guide_date_combo.addItem(label, d.strftime("%Y-%m-%d"))
 
         if reset_to_default or cur_data is None:
-            self.guide_date_combo.setCurrentIndex(0)
+            self.guide_date_combo.setCurrentIndex(1)
         else:
             idx = self.guide_date_combo.findData(cur_data)
             if idx >= 0:
                 self.guide_date_combo.setCurrentIndex(idx)
             else:
-                self.guide_date_combo.setCurrentIndex(0)
+                self.guide_date_combo.setCurrentIndex(1)
         self.guide_date_combo.blockSignals(False)
         self.filter_guide()
 
@@ -3182,17 +3193,7 @@ class MainWindow(QMainWindow):
 
     def jump_guide_to_now(self):
         now = datetime.now()
-        airdate = self.guide_date_combo.currentData() if hasattr(self, "guide_date_combo") else None
-        
-        if airdate:
-            # Viewing a specific single day in grid
-            now_slot = max(0, min(47, (now.hour * 60 + now.minute) // 30))
-        else:
-            # Multi-day continuous grid view (slots starting from today 12:00 AM)
-            today = date.today()
-            base_dt = datetime.combine(today, datetime.min.time())
-            offset_seconds = max(0, (now - base_dt).total_seconds())
-            now_slot = int(offset_seconds // 1800)
+        now_slot = max(0, min(47, (now.hour * 60 + now.minute) // 30))
 
         # Check currently active programs in the grid to find the earliest starting slot
         # among programs currently airing (start <= now < end).
@@ -3211,10 +3212,7 @@ class MainWindow(QMainWindow):
                     dur = timedelta(hours=parts[0], minutes=parts[1], seconds=parts[2] if len(parts) > 2 else 0)
                     p_end = p_start + dur
                     if p_start <= now < p_end:
-                        if airdate:
-                            p_slot = (p_start.hour * 60 + p_start.minute) // 30
-                        else:
-                            p_slot = int(max(0, (p_start - base_dt).total_seconds()) // 1800)
+                        p_slot = (p_start.hour * 60 + p_start.minute) // 30
                         if p_slot < earliest_slot:
                             earliest_slot = p_slot
                 except Exception:
@@ -3227,13 +3225,157 @@ class MainWindow(QMainWindow):
         self._scroll_grid_to_slot(0, center=False)
 
     def jump_guide_to_primetime(self):
-        airdate = self.guide_date_combo.currentData() if hasattr(self, "guide_date_combo") else None
-        if airdate:
-            # 8:00 PM is 20:00 -> slot 40
-            self._scroll_grid_to_slot(40, center=False)
+        # 8:00 PM is 20:00 -> slot 40
+        self._scroll_grid_to_slot(40, center=False)
+
+    def _create_day_nav_bar(self) -> QWidget:
+        container = QWidget()
+        container.setObjectName("dayNavBar")
+        nav_layout = QHBoxLayout(container)
+        nav_layout.setContentsMargins(0, 4, 0, 2)
+        nav_layout.setSpacing(6)
+
+        arrow_style = (
+            "QPushButton { font-size: 13px; font-weight: bold; "
+            "border: 1px solid #3d465c; border-radius: 4px; background-color: #212635; color: #c8d2df; }"
+            "QPushButton:hover { background-color: #313d56; border: 1px solid #5a80b8; color: #ffffff; }"
+            "QPushButton:disabled { background-color: #1a1e27; border: 1px solid #2a2f3d; color: #4e5566; }"
+        )
+
+        self.day_nav_prev_btn = QPushButton("◀")
+        self.day_nav_prev_btn.setToolTip("Previous 7 days")
+        self.day_nav_prev_btn.setFixedWidth(34)
+        self.day_nav_prev_btn.setFixedHeight(34)
+        self.day_nav_prev_btn.setStyleSheet(arrow_style)
+        self.day_nav_prev_btn.clicked.connect(self._on_day_nav_prev)
+        nav_layout.addWidget(self.day_nav_prev_btn)
+
+        self._day_style_unselected = (
+            "QPushButton { padding: 6px 4px; font-size: 12px; font-weight: 500; "
+            "border: 1px solid #3d465c; border-radius: 5px; background-color: #212635; color: #c8d2df; }"
+            "QPushButton:hover { background-color: #2e384d; border: 1px solid #6482ad; color: #ffffff; }"
+            "QPushButton:pressed { background-color: #191c26; }"
+        )
+
+        self._day_style_today_unselected = (
+            "QPushButton { padding: 6px 4px; font-size: 12px; font-weight: bold; "
+            "border: 2px solid #388e3c; border-radius: 5px; background-color: #1b3822; color: #81c784; }"
+            "QPushButton:hover { background-color: #254d30; border: 2px solid #4caf50; color: #a5d6a7; }"
+            "QPushButton:pressed { background-color: #142b1a; }"
+        )
+
+        self._day_style_today_selected = (
+            "QPushButton { padding: 6px 4px; font-size: 12px; font-weight: bold; "
+            "border: 2px solid #81c784; border-radius: 5px; background-color: #2e7d32; color: #ffffff; }"
+            "QPushButton:hover { background-color: #388e3c; border: 2px solid #a5d6a7; color: #ffffff; }"
+            "QPushButton:pressed { background-color: #1b5e20; }"
+        )
+
+        self._day_style_selected = (
+            "QPushButton { padding: 6px 4px; font-size: 12px; font-weight: bold; "
+            "border: 2px solid #ffb74d; border-radius: 5px; background-color: #e65100; color: #ffffff; }"
+            "QPushButton:hover { background-color: #f57c00; border: 2px solid #ffe082; color: #ffffff; }"
+            "QPushButton:pressed { background-color: #bf360c; }"
+        )
+
+        self.day_nav_buttons = []
+        for i in range(7):
+            btn = QPushButton()
+            btn.setFixedHeight(34)
+            btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            btn.clicked.connect(self._make_day_nav_handler(btn))
+            nav_layout.addWidget(btn, 1)
+            self.day_nav_buttons.append(btn)
+
+        self.day_nav_next_btn = QPushButton("▶")
+        self.day_nav_next_btn.setToolTip("Next 7 days")
+        self.day_nav_next_btn.setFixedWidth(34)
+        self.day_nav_next_btn.setFixedHeight(34)
+        self.day_nav_next_btn.setStyleSheet(arrow_style)
+        self.day_nav_next_btn.clicked.connect(self._on_day_nav_next)
+        nav_layout.addWidget(self.day_nav_next_btn)
+
+        return container
+
+    def _make_day_nav_handler(self, btn: QPushButton):
+        def handler():
+            date_str = btn.property("date_str")
+            if date_str:
+                self._on_day_nav_clicked(date_str)
+        return handler
+
+    def _on_day_nav_clicked(self, target_date_str: str):
+        if not hasattr(self, "guide_date_combo"):
+            return
+        self._skip_day_nav_sync = True
+        idx = self.guide_date_combo.findData(target_date_str)
+        if idx >= 0:
+            self.guide_date_combo.setCurrentIndex(idx)
         else:
-            # Multi-day grid: jump to today's prime time (8:00 PM = slot 40)
-            self._scroll_grid_to_slot(40, center=False)
+            self._skip_day_nav_sync = False
+            self.filter_guide()
+
+    def _on_day_nav_prev(self):
+        self.day_nav_offset = max(0, getattr(self, "day_nav_offset", 0) - 7)
+        self._update_day_nav_bar(sync_week_with_selection=False)
+
+    def _on_day_nav_next(self):
+        self.day_nav_offset = min(7, getattr(self, "day_nav_offset", 0) + 7)
+        self._update_day_nav_bar(sync_week_with_selection=False)
+
+    def _update_day_nav_bar(self, sync_week_with_selection: bool = False):
+        if not hasattr(self, "day_nav_buttons") or not self.day_nav_buttons:
+            return
+
+        selected_date_str = self.guide_date_combo.currentData() if hasattr(self, "guide_date_combo") else None
+        today = date.today()
+        today_str = today.strftime("%Y-%m-%d")
+
+        if not hasattr(self, "day_nav_offset"):
+            self.day_nav_offset = 0
+
+        # If sync_week_with_selection is requested (e.g. when selected from dropdown),
+        # adjust offset to display the week containing the selected date.
+        if sync_week_with_selection and selected_date_str:
+            try:
+                sel_date = datetime.strptime(selected_date_str, "%Y-%m-%d").date()
+                day_diff = (sel_date - today).days
+                if 0 <= day_diff < 7:
+                    self.day_nav_offset = 0
+                elif 7 <= day_diff < 14:
+                    self.day_nav_offset = 7
+            except Exception:
+                pass
+
+        for i, btn in enumerate(self.day_nav_buttons):
+            day_offset = self.day_nav_offset + i
+            btn_date = today + timedelta(days=day_offset)
+            btn_date_str = btn_date.strftime("%Y-%m-%d")
+
+            day_label = btn_date.strftime("%A, %b ") + str(btn_date.day)
+            btn.setText(day_label)
+            btn.setProperty("date_str", btn_date_str)
+
+            is_today = (btn_date_str == today_str)
+            is_selected = (btn_date_str == selected_date_str)
+
+            if is_today and is_selected:
+                btn.setStyleSheet(self._day_style_today_selected)
+                btn.setToolTip(f"{day_label} (Current Day - Selected)")
+            elif is_today:
+                btn.setStyleSheet(self._day_style_today_unselected)
+                btn.setToolTip(f"{day_label} (Current Day)")
+            elif is_selected:
+                btn.setStyleSheet(self._day_style_selected)
+                btn.setToolTip(f"{day_label} (Selected)")
+            else:
+                btn.setStyleSheet(self._day_style_unselected)
+                btn.setToolTip(day_label)
+
+        if hasattr(self, "day_nav_prev_btn"):
+            self.day_nav_prev_btn.setEnabled(self.day_nav_offset > 0)
+        if hasattr(self, "day_nav_next_btn"):
+            self.day_nav_next_btn.setEnabled(self.day_nav_offset + 7 < 14)
 
     def filter_guide(self):
         # Automatically prune already elapsed past entries from SQLite database
@@ -3246,10 +3388,9 @@ class MainWindow(QMainWindow):
         channel = self.guide_channel_combo.currentText()
         airdate = self.guide_date_combo.currentData()
         
-        # When viewing the grid for a specific date or in All Upcoming continuous mode,
-        # don't trim earlier shows of today so the grid is fully populated.
-        # In list mode, trim ended programs.
-        trim_ended = (self.guide_stack.currentIndex() == 1)
+        # When viewing the grid for a specific date or today, don't trim earlier shows of that day.
+        # In list mode with All Upcoming, trim ended programs.
+        trim_ended = (self.guide_stack.currentIndex() == 1 and airdate is None)
         programs = self.guide_service.search_programs(
             query=query, channel=channel, airdate=airdate, trim_ended=trim_ended
         )
@@ -3260,6 +3401,10 @@ class MainWindow(QMainWindow):
             self._populate_grid_guide(programs, airdate)
         else:
             self._populate_list_guide(programs)
+
+        sync_week = not getattr(self, "_skip_day_nav_sync", False)
+        self._skip_day_nav_sync = False
+        self._update_day_nav_bar(sync_week_with_selection=sync_week)
 
     def _populate_list_guide(self, programs: List[Dict[str, Any]]):
         active_scheduled = self.queue_mgr.get_active_scheduled_map()
@@ -3309,36 +3454,18 @@ class MainWindow(QMainWindow):
         self.guide_grid_table.setVerticalHeaderLabels(channels)
 
         today = date.today()
-        num_days = 14
+        target_date_str = airdate or today.strftime("%Y-%m-%d")
 
-        # Configure columns and headers based on whether "All Upcoming" (multi-day) or a specific date is selected:
-        if airdate is None:
-            # Multi-day continuous grid (e.g. 14 days = 672 half-hour columns)
-            total_cols = num_days * 48
-            if self.guide_grid_table.columnCount() != total_cols:
-                self.guide_grid_table.setColumnCount(total_cols)
-            
-            grid_headers = []
-            for d_idx in range(num_days):
-                cur_d = today + timedelta(days=d_idx)
-                d_label = "Today" if d_idx == 0 else ("Tomorrow" if d_idx == 1 else cur_d.strftime("%a %b %d"))
-                for h in range(24):
-                    for m in (0, 30):
-                        time_str = f"{h%12 or 12}:{m:02d} {'AM' if h < 12 else 'PM'}"
-                        grid_headers.append(f"{d_label} {time_str}")
-            self.guide_grid_table.setHorizontalHeaderLabels(grid_headers)
-            base_dt = datetime.combine(today, datetime.min.time())
-        else:
-            # Single-day 24-hour grid (48 columns)
-            total_cols = 48
-            if self.guide_grid_table.columnCount() != total_cols:
-                self.guide_grid_table.setColumnCount(total_cols)
-            grid_headers = []
-            for h in range(24):
-                for m in (0, 30):
-                    grid_headers.append(f"{h%12 or 12}:{m:02d} {'AM' if h < 12 else 'PM'}")
-            self.guide_grid_table.setHorizontalHeaderLabels(grid_headers)
-            base_dt = datetime.combine(datetime.strptime(airdate, "%Y-%m-%d").date(), datetime.min.time())
+        # Configure columns and headers for single-day 24-hour grid (48 columns)
+        total_cols = 48
+        if self.guide_grid_table.columnCount() != total_cols:
+            self.guide_grid_table.setColumnCount(total_cols)
+        grid_headers = []
+        for h in range(24):
+            for m in (0, 30):
+                grid_headers.append(f"{h%12 or 12}:{m:02d} {'AM' if h < 12 else 'PM'}")
+        self.guide_grid_table.setHorizontalHeaderLabels(grid_headers)
+        base_dt = datetime.combine(datetime.strptime(target_date_str, "%Y-%m-%d").date(), datetime.min.time())
 
         # Color palette for tiles
         tile_bg = QColor("#222838")
@@ -3346,18 +3473,14 @@ class MainWindow(QMainWindow):
         tile_text_color = QColor("#ffffff")
 
         for row_idx, ch in enumerate(channels):
-            if airdate is None:
-                # All upcoming days
-                ch_progs = [p for p in programs if p.get("kaffeine_channel") == ch]
-            else:
-                # Filter specifically to selected airdate
-                ch_progs = [
-                    p for p in programs
-                    if p.get("kaffeine_channel") == ch and (
-                        p.get("airdate") == airdate or
-                        (p.get("start_iso") and p.get("start_iso").startswith(airdate))
-                    )
-                ]
+            # Filter specifically to selected airdate
+            ch_progs = [
+                p for p in programs
+                if p.get("kaffeine_channel") == ch and (
+                    p.get("airdate") == target_date_str or
+                    (p.get("start_iso") and p.get("start_iso").startswith(target_date_str))
+                )
+            ]
             ch_progs.sort(key=lambda x: x.get("start_iso", ""))
 
             current_col = 0
@@ -3440,7 +3563,7 @@ class MainWindow(QMainWindow):
 
         # Auto-scroll based on selected date (unless preserving scroll position):
         if not keep_scroll:
-            if airdate is None or airdate == today.strftime("%Y-%m-%d"):
+            if target_date_str == today.strftime("%Y-%m-%d"):
                 QTimer.singleShot(60, self.jump_guide_to_now)
             else:
                 QTimer.singleShot(60, self.jump_guide_to_start)
