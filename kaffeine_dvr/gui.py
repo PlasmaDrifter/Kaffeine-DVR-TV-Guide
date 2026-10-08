@@ -395,12 +395,14 @@ class ProgramTileDelegate(QStyledItemDelegate):
 
         # Background fill & subtle border
         is_selected = bool(option.state & QStyle.StateFlag.State_Selected)
+        is_scheduled = bool(prog.get("_scheduled_rec"))
+
         if is_selected:
             bg_color = QColor("#2b3e4f")
-            border_color = QColor("#55a84c")
+            border_color = QColor("#ff5252") if is_scheduled else QColor("#55a84c")
         else:
             bg_color = index.data(Qt.ItemDataRole.BackgroundRole) or QColor("#222838")
-            border_color = QColor("#333c4e")
+            border_color = QColor("#e53935") if is_scheduled else QColor("#333c4e")
 
         painter.fillRect(rect, bg_color)
         painter.setPen(border_color)
@@ -411,6 +413,32 @@ class ProgramTileDelegate(QStyledItemDelegate):
         pad_top = 8
         pad_right = 10
         inner_width = max(10, rect.width() - pad_left - pad_right)
+
+        # Draw Scheduled [● REC] badge in upper right corner if scheduled
+        badge_reserved_w = 0
+        if is_scheduled:
+            badge_text = "● REC"
+            badge_font = QFont(option.font)
+            badge_font.setBold(True)
+            badge_font.setPointSize(8)
+            painter.setFont(badge_font)
+            fm_badge = painter.fontMetrics()
+            bw = fm_badge.horizontalAdvance(badge_text) + 8
+            bh = fm_badge.height() + 2
+            bx = rect.right() - pad_right - bw
+            by = rect.top() + pad_top - 1
+            badge_rect = QRect(bx, by, bw, bh)
+
+            # Draw rounded badge background
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor("#c62828"))
+            painter.drawRoundedRect(badge_rect, 3, 3)
+
+            # Draw badge text
+            painter.setPen(QColor("#ffffff"))
+            painter.drawText(badge_rect, Qt.AlignmentFlag.AlignCenter, badge_text)
+
+            badge_reserved_w = bw + 6
 
         # Title Color coding: sports=orange, news=blue, movies=red, tvshows=green
         cat = prog.get("_category") or classify_guide_category(prog)
@@ -435,8 +463,9 @@ class ProgramTileDelegate(QStyledItemDelegate):
         painter.setPen(title_color)
 
         fm_title = painter.fontMetrics()
-        elided_title = fm_title.elidedText(show_title, Qt.TextElideMode.ElideRight, inner_width)
-        line1_rect = QRect(rect.left() + pad_left, rect.top() + pad_top, inner_width, fm_title.height())
+        inner_width_title = max(10, inner_width - badge_reserved_w)
+        elided_title = fm_title.elidedText(show_title, Qt.TextElideMode.ElideRight, inner_width_title)
+        line1_rect = QRect(rect.left() + pad_left, rect.top() + pad_top, inner_width_title, fm_title.height())
         painter.drawText(line1_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, elided_title)
 
         # Line 2: Time Range & Episode Title (crisply aligned with exact same pad_left margin)
@@ -1017,13 +1046,14 @@ class MainWindow(QMainWindow):
 
         # 2. Existing Detailed List Table
         self.guide_table = QTableWidget()
-        self.guide_table.setColumnCount(5)
-        self.guide_table.setHorizontalHeaderLabels(["Start Time", "Channel", "Show Title", "Episode Title", "Duration"])
+        self.guide_table.setColumnCount(6)
+        self.guide_table.setHorizontalHeaderLabels(["REC", "Start Time", "Channel", "Show Title", "Episode Title", "Duration"])
         self.guide_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self.guide_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        self.guide_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        self.guide_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         self.guide_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
-        self.guide_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        self.guide_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
+        self.guide_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
         self.guide_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.guide_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.guide_table.itemSelectionChanged.connect(self.on_guide_selection_changed)
@@ -1051,6 +1081,12 @@ class MainWindow(QMainWindow):
         self.record_guide_btn.setStyleSheet("font-weight: bold;")
         self.record_guide_btn.clicked.connect(self.record_selected_guide_item)
         action_bar.addWidget(self.record_guide_btn)
+
+        self.cancel_guide_btn = QPushButton("Cancel Recording")
+        self.cancel_guide_btn.setStyleSheet("color: #d9534f; font-weight: bold;")
+        self.cancel_guide_btn.setVisible(False)
+        self.cancel_guide_btn.clicked.connect(self.cancel_selected_guide_recording)
+        action_bar.addWidget(self.cancel_guide_btn)
 
         self.add_rule_guide_btn = QPushButton("Auto-Record This Series")
         self.add_rule_guide_btn.clicked.connect(self.add_rule_from_selected_guide_item)
@@ -2333,6 +2369,7 @@ class MainWindow(QMainWindow):
             if self.queue_mgr.update_recording_buffer(int(qid), new_buf):
                 self.status_bar.showMessage(f"Updated buffer for '{rec_title}' to +{new_buf}m.", 4000)
                 self.refresh_recordings()
+                self._refresh_guide_view(keep_scroll=True)
             else:
                 QMessageBox.warning(self, "Update Failed", "Could not update recording buffer.")
 
@@ -2368,6 +2405,7 @@ class MainWindow(QMainWindow):
                 self.dbus_client.remove_recording(k_key)
             self.status_bar.showMessage(f"Cancelled recording '{rec_title}'.", 3000)
             self.refresh_recordings()
+            self._refresh_guide_view(keep_scroll=True)
 
     def add_manual_recording(self):
         channels = sorted(list(set(self.config_mgr.channel_map.values())))
@@ -2465,15 +2503,32 @@ class MainWindow(QMainWindow):
             self._populate_list_guide(programs)
 
     def _populate_list_guide(self, programs: List[Dict[str, Any]]):
+        active_scheduled = self.queue_mgr.get_active_scheduled_map()
         self.guide_table.setRowCount(len(programs))
         for row, p in enumerate(programs):
-            self.guide_table.setItem(row, 0, QTableWidgetItem(p.get("start_time_local", "")))
-            self.guide_table.setItem(row, 1, QTableWidgetItem(p.get("kaffeine_channel", "")))
-            self.guide_table.setItem(row, 2, QTableWidgetItem(p.get("show_title", "")))
-            self.guide_table.setItem(row, 3, QTableWidgetItem(p.get("episode_title", "")))
-            self.guide_table.setItem(row, 4, QTableWidgetItem(p.get("duration_iso", "")))
+            ch = (p.get("kaffeine_channel") or "").strip().lower()
+            start_iso = (p.get("start_iso") or "")[:16]
+            rec_info = active_scheduled.get((ch, start_iso))
 
-    def _populate_grid_guide(self, programs: List[Dict[str, Any]], airdate: Optional[str]):
+            rec_item = QTableWidgetItem("● REC" if rec_info else "")
+            rec_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            if rec_info:
+                rec_item.setForeground(QColor("#ff5252"))
+                rec_item.setFont(QFont("", -1, QFont.Weight.Bold))
+                buf_val = rec_info.get("buffer_mins", 0)
+                buf_tip = f" | +{buf_val}m buffer" if buf_val else ""
+                rec_item.setToolTip(f"Recording Scheduled (Queue #{rec_info.get('id')} - {rec_info.get('status')}{buf_tip})")
+            self.guide_table.setItem(row, 0, rec_item)
+
+            self.guide_table.setItem(row, 1, QTableWidgetItem(p.get("start_time_local", "")))
+            self.guide_table.setItem(row, 2, QTableWidgetItem(p.get("kaffeine_channel", "")))
+            self.guide_table.setItem(row, 3, QTableWidgetItem(p.get("show_title", "")))
+            self.guide_table.setItem(row, 4, QTableWidgetItem(p.get("episode_title", "")))
+            self.guide_table.setItem(row, 5, QTableWidgetItem(p.get("duration_iso", "")))
+
+    def _populate_grid_guide(self, programs: List[Dict[str, Any]], airdate: Optional[str], keep_scroll: bool = False):
+        active_scheduled = self.queue_mgr.get_active_scheduled_map()
+
         # Clear existing spans and items
         self.guide_grid_table.clearSpans()
         self.guide_grid_table.clearContents()
@@ -2553,10 +2608,16 @@ class MainWindow(QMainWindow):
                 end_fmt = end_dt.strftime("%I:%M %p").lstrip("0")
                 time_range = f"{start_fmt} - {end_fmt}"
 
+                # Match active recording
+                ch_key = (ch or "").strip().lower()
+                iso_key = (start_iso or "")[:16]
+                scheduled_rec = active_scheduled.get((ch_key, iso_key))
+
                 # Annotate program metadata for delegate renderer
                 p_copy = dict(p)
                 p_copy["_time_range"] = time_range
                 p_copy["_category"] = classify_guide_category(p)
+                p_copy["_scheduled_rec"] = scheduled_rec
 
                 item = QTableWidgetItem(show_title)
                 item.setData(Qt.ItemDataRole.UserRole, p_copy)
@@ -2579,13 +2640,12 @@ class MainWindow(QMainWindow):
 
                 current_col = start_col + span
 
-        # Auto-scroll based on selected date:
-        # If viewing today, center on the current time slot
-        # If viewing a future date, reset to the first midnight slot (0)
-        if target_date_str == date.today().strftime("%Y-%m-%d"):
-            QTimer.singleShot(60, self.jump_guide_to_now)
-        else:
-            QTimer.singleShot(60, self.jump_guide_to_start)
+        # Auto-scroll based on selected date (unless preserving scroll position):
+        if not keep_scroll:
+            if target_date_str == date.today().strftime("%Y-%m-%d"):
+                QTimer.singleShot(60, self.jump_guide_to_now)
+            else:
+                QTimer.singleShot(60, self.jump_guide_to_start)
 
     def on_grid_cell_clicked(self, row: int, col: int):
         item = self.guide_grid_table.item(row, col)
@@ -2601,6 +2661,10 @@ class MainWindow(QMainWindow):
             self.guide_detail_title.setText("Select a program to view details")
             self.guide_detail_text.clear()
             self.selected_grid_program = None
+            if hasattr(self, "record_guide_btn"):
+                self.record_guide_btn.setText("Record This Program")
+            if hasattr(self, "cancel_guide_btn"):
+                self.cancel_guide_btn.setVisible(False)
             return
 
         prog = item.data(Qt.ItemDataRole.UserRole)
@@ -2616,6 +2680,19 @@ class MainWindow(QMainWindow):
         number = prog.get("number")
         summary = prog.get("summary") or "No description available."
 
+        active_map = self.queue_mgr.get_active_scheduled_map()
+        ch_key = (channel or "").strip().lower()
+        iso_key = (prog.get("start_iso") or "")[:16]
+        rec_info = active_map.get((ch_key, iso_key))
+
+        header_prefix = ""
+        if rec_info:
+            qid = rec_info.get("id")
+            st = rec_info.get("status", "QUEUED")
+            buf_val = rec_info.get("buffer_mins", 0)
+            buf_txt = f" | Buffer: +{buf_val}m" if buf_val else ""
+            header_prefix = f"<span style='color: #ff5252; font-weight: bold;'>[● REC QUEUED #{qid} - {st}{buf_txt}]</span> "
+
         header_str = f"{title}"
         if ep:
             header_str += f" - \"{ep}\""
@@ -2623,14 +2700,27 @@ class MainWindow(QMainWindow):
             header_str += f" (S{season:02d}E{number:02d})"
         header_str += f" on {channel} at {start}"
 
-        self.guide_detail_title.setText(header_str)
+        self.guide_detail_title.setText(header_prefix + header_str)
         self.guide_detail_text.setText(summary)
+
+        if hasattr(self, "record_guide_btn"):
+            if rec_info:
+                self.record_guide_btn.setText("Adjust Buffer...")
+            else:
+                self.record_guide_btn.setText("Record This Program")
+
+        if hasattr(self, "cancel_guide_btn"):
+            self.cancel_guide_btn.setVisible(rec_info is not None)
 
     def on_guide_selection_changed(self):
         row = self.guide_table.currentRow()
         if row < 0 or row >= len(getattr(self, "current_guide_items", [])):
             self.guide_detail_title.setText("Select a program to view details")
             self.guide_detail_text.clear()
+            if hasattr(self, "record_guide_btn"):
+                self.record_guide_btn.setText("Record This Program")
+            if hasattr(self, "cancel_guide_btn"):
+                self.cancel_guide_btn.setVisible(False)
             return
 
         prog = self.current_guide_items[row]
@@ -2645,18 +2735,109 @@ class MainWindow(QMainWindow):
                 return self.current_guide_items[row]
         return None
 
+    def cancel_selected_guide_recording(self):
+        prog = self._get_active_selected_program()
+        if not prog:
+            QMessageBox.warning(self, "Selection Required", "Please select a program from the guide.")
+            return
+
+        active_map = self.queue_mgr.get_active_scheduled_map()
+        ch_key = (prog.get("kaffeine_channel") or "").strip().lower()
+        iso_key = (prog.get("start_iso") or "")[:16]
+        rec_info = active_map.get((ch_key, iso_key))
+        if not rec_info:
+            QMessageBox.information(self, "No Recording Scheduled", "This program does not have an active scheduled recording.")
+            return
+
+        qid = rec_info.get("id")
+        rec_title = rec_info.get("title") or prog.get("show_title", "")
+        confirm = QMessageBox.question(
+            self, "Confirm Cancellation",
+            f"Are you sure you want to cancel the scheduled recording for '{rec_title}' (Queue #{qid})?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if confirm == QMessageBox.StandardButton.Yes:
+            k_key = self.queue_mgr.remove_recording(int(qid))
+            if k_key:
+                self.dbus_client.remove_recording(k_key)
+            self.status_bar.showMessage(f"Cancelled recording '{rec_title}'.", 3000)
+            self.refresh_recordings()
+            self._refresh_guide_view(keep_scroll=True)
+            self._display_program_details(prog)
+
+    def _refresh_guide_view(self, keep_scroll: bool = True):
+        airdate = self.guide_date_combo.currentData() if hasattr(self, "guide_date_combo") else None
+        if hasattr(self, "current_guide_items") and self.current_guide_items is not None:
+            if self.guide_stack.currentIndex() == 0:
+                self._populate_grid_guide(self.current_guide_items, airdate, keep_scroll=keep_scroll)
+            else:
+                self._populate_list_guide(self.current_guide_items)
+        else:
+            self.filter_guide()
+
     def record_selected_guide_item(self):
         prog = self._get_active_selected_program()
         if not prog:
             QMessageBox.warning(self, "Selection Required", "Please select a program from the guide.")
             return
 
-        show = prog.get("show_title", "")
-        ep = prog.get("episode_title", "")
-        rec_title = f"{show} - {ep}" if ep else show
         channel = prog.get("kaffeine_channel", "")
         start_iso = prog.get("start_iso", "")
         duration_iso = prog.get("duration_iso", "")
+        show = prog.get("show_title", "")
+        ep = prog.get("episode_title", "")
+        rec_title = f"{show} - {ep}" if ep else show
+
+        active_map = self.queue_mgr.get_active_scheduled_map()
+        ch_key = (channel or "").strip().lower()
+        iso_key = (start_iso or "")[:16]
+        rec_info = active_map.get((ch_key, iso_key))
+
+        if rec_info:
+            # Already queued: open buffer adjust dialog directly
+            qid = rec_info.get("id")
+            current_buf = rec_info.get("buffer_mins", 0) or 0
+            dlg = QDialog(self)
+            dlg.setWindowTitle("Adjust Recording Buffer")
+            dlg.setMinimumWidth(340)
+            form = QFormLayout(dlg)
+
+            title_lbl = QLabel(f"<b>{rec_title}</b>")
+            title_lbl.setWordWrap(True)
+            form.addRow("Show:", title_lbl)
+
+            buf_spin = QSpinBox()
+            buf_spin.setRange(0, 180)
+            buf_spin.setValue(current_buf)
+            buf_spin.setSuffix(" minutes")
+            form.addRow("End Buffer:", buf_spin)
+
+            presets_box = QHBoxLayout()
+            for m in [0, 15, 30, 45, 60]:
+                btn = QPushButton(f"+{m}m" if m > 0 else "None")
+                btn.clicked.connect(lambda _, val=m: buf_spin.setValue(val))
+                presets_box.addWidget(btn)
+            form.addRow("Presets:", presets_box)
+
+            btns = QHBoxLayout()
+            ok_btn = QPushButton("Save Buffer")
+            cancel_btn = QPushButton("Cancel")
+            ok_btn.clicked.connect(dlg.accept)
+            cancel_btn.clicked.connect(dlg.reject)
+            btns.addWidget(ok_btn)
+            btns.addWidget(cancel_btn)
+            form.addRow(btns)
+
+            if dlg.exec() == QDialog.DialogCode.Accepted:
+                new_buf = buf_spin.value()
+                if self.queue_mgr.update_recording_buffer(int(qid), new_buf):
+                    self.status_bar.showMessage(f"Updated buffer for '{rec_title}' to +{new_buf}m.", 4000)
+                    self.refresh_recordings()
+                    self._refresh_guide_view(keep_scroll=True)
+                    self._display_program_details(prog)
+                else:
+                    QMessageBox.warning(self, "Update Failed", "Could not update recording buffer.")
+            return
 
         is_sports = (classify_guide_category(prog) == "sports")
         if is_sports and self.config_mgr.auto_buffer_sports:
@@ -2683,6 +2864,8 @@ class MainWindow(QMainWindow):
                 f"It is safely queued and will automatically launch Kaffeine and arm the timer {lead} minutes before showtime, preventing restart/shutdown blocks in Kaffeine."
             )
             self.refresh_recordings()
+            self._refresh_guide_view(keep_scroll=True)
+            self._display_program_details(prog)
         except Exception as e:
             QMessageBox.critical(self, "Error Queueing Recording", str(e))
 

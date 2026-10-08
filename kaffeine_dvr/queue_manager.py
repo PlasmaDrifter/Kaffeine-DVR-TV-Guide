@@ -167,6 +167,20 @@ class QueueManager:
         conn.close()
         return rows
 
+    def get_active_scheduled_map(self) -> Dict[Any, Dict[str, Any]]:
+        """
+        Returns a mapping of (channel_lower, start_iso[:16]) -> recording_dict
+        for all active recordings ('QUEUED', 'ARMED', 'RECORDING').
+        """
+        active = self.list_queue(include_completed=False)
+        mapping = {}
+        for r in active:
+            ch = r.get("channel", "").strip().lower()
+            start = r.get("start_iso", "")[:16]
+            if ch and start:
+                mapping[(ch, start)] = r
+        return mapping
+
     def remove_recording(self, queue_id: int) -> Optional[int]:
         """
         Removes/cancels from queue. Returns the kaffeine_key if it was armed.
