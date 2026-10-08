@@ -414,7 +414,7 @@ class ProgramTileDelegate(QStyledItemDelegate):
         pad_right = 10
         inner_width = max(10, rect.width() - pad_left - pad_right)
 
-        # Draw Scheduled [● REC] badge in upper right corner if scheduled
+        # Draw Scheduled [REC] badge in upper right corner if scheduled
         badge_reserved_w = 0
         if is_scheduled:
             badge_font = QFont(option.font)
@@ -426,34 +426,22 @@ class ProgramTileDelegate(QStyledItemDelegate):
             rec_text = "REC"
             rec_w = fm_badge.horizontalAdvance(rec_text)
 
-            # Clean geometric dimensions
-            dot_diam = 5
-            spacing = 4
-            pad_h = 5
-            bw = pad_h + dot_diam + spacing + rec_w + pad_h
+            pad_h = 6
+            bw = rec_w + (pad_h * 2)
             bh = 15
 
             bx = rect.right() - pad_right - bw
             by = rect.top() + pad_top
             badge_rect = QRect(bx, by, bw, bh)
 
-            # Draw rounded badge background with subtle border
+            # Draw curved corners rectangle background with border
             painter.setPen(QColor("#e53935"))
             painter.setBrush(QColor("#b71c1c"))
-            painter.drawRoundedRect(badge_rect, 3, 3)
+            painter.drawRoundedRect(badge_rect, 4, 4)
 
-            # Draw crisp aligned indicator dot
-            dot_x = bx + pad_h
-            dot_y = by + (bh - dot_diam) // 2
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor("#ff5252"))
-            painter.drawEllipse(dot_x, dot_y, dot_diam, dot_diam)
-
-            # Draw "REC" text vertically centered
-            text_x = dot_x + dot_diam + spacing
-            text_rect = QRect(text_x, by, rec_w + 2, bh)
+            # Draw "REC" text perfectly centered
             painter.setPen(QColor("#ffffff"))
-            painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, rec_text)
+            painter.drawText(badge_rect, Qt.AlignmentFlag.AlignCenter, rec_text)
 
             badge_reserved_w = bw + 6
 
