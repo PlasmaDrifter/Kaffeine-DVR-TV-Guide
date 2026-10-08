@@ -1125,7 +1125,7 @@ class MainWindow(QMainWindow):
         ctrl_bar.addWidget(self.adjust_buffer_btn)
 
         self.cancel_rec_btn = QPushButton("Cancel Selected Recording")
-        self.cancel_rec_btn.setStyleSheet("color: #d9534f;")
+        self.cancel_rec_btn.setStyleSheet("color: #ff5252; font-weight: bold;")
         self.cancel_rec_btn.clicked.connect(self.cancel_selected_recording)
         ctrl_bar.addWidget(self.cancel_rec_btn)
 
@@ -1360,7 +1360,7 @@ class MainWindow(QMainWindow):
         action_bar.addWidget(self.record_guide_btn)
 
         self.cancel_guide_btn = QPushButton("Cancel Recording")
-        self.cancel_guide_btn.setStyleSheet("color: #d9534f; font-weight: bold;")
+        self.cancel_guide_btn.setStyleSheet("color: #ff5252; font-weight: bold;")
         self.cancel_guide_btn.setVisible(False)
         self.cancel_guide_btn.clicked.connect(self.cancel_selected_guide_recording)
         action_bar.addWidget(self.cancel_guide_btn)
@@ -1826,7 +1826,7 @@ class MainWindow(QMainWindow):
         # Storage Action Buttons
         storage_btn_row = QHBoxLayout()
         self.run_cleanup_btn = QPushButton("Run Retention Cleanup Now")
-        self.run_cleanup_btn.setStyleSheet("color: #d9534f;")
+        self.run_cleanup_btn.setStyleSheet("color: #ff5252; font-weight: bold;")
         self.run_cleanup_btn.clicked.connect(self.run_manual_cleanup)
         storage_btn_row.addWidget(self.run_cleanup_btn)
 
