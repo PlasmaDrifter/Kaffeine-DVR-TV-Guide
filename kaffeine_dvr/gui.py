@@ -628,64 +628,70 @@ def get_app_icon() -> QIcon:
 APP_STYLESHEET = """
 /* Top-Level Main Tabs */
 QTabWidget#mainTabs::pane {
-    border: 1px solid #363c4e;
+    border: 1px solid #363e52;
     border-radius: 6px;
-    background-color: #1a1e2b;
+    background-color: #181b26;
     top: -1px;
 }
 QTabWidget#mainTabs > QTabBar::tab {
-    background-color: #212635;
-    border: 1px solid #383e50;
+    background-color: #1e2332;
+    border: 1px solid #363e52;
     border-top-left-radius: 6px;
     border-top-right-radius: 6px;
-    padding: 9px 22px;
-    margin-right: 6px;
-    color: #a4b0c2;
+    padding: 10px 24px;
+    margin-right: 5px;
+    color: #94a3b8;
     font-size: 13px;
-    font-weight: 500;
+    font-weight: 600;
 }
 QTabWidget#mainTabs > QTabBar::tab:selected {
-    background-color: #2b3345;
-    border: 1.5px solid #55a84c;
-    border-bottom: 3px solid #55a84c;
+    background-color: #273042;
+    border-top: 3.5px solid #48bb78;
+    border-left: 1px solid #4a5568;
+    border-right: 1px solid #4a5568;
+    border-bottom: 1px solid #273042;
     color: #ffffff;
     font-weight: bold;
 }
 QTabWidget#mainTabs > QTabBar::tab:hover:!selected {
-    background-color: #282f40;
-    border-color: #4c566e;
-    color: #ffffff;
+    background-color: #252c3e;
+    border-color: #4a5568;
+    color: #e2e8f0;
 }
 
-/* Settings Sub-Categories Tabs */
+/* Secondary Subtabs: Recordings & Settings */
+QTabWidget#recordingsSubTabs::pane,
 QTabWidget#settingsSubTabs::pane {
-    border: 1px solid #2e3444;
+    border: 1px solid #2e3547;
     border-radius: 6px;
-    background-color: #171a26;
-    padding: 8px;
+    background-color: #161924;
+    padding: 6px;
     top: -1px;
 }
+QTabWidget#recordingsSubTabs > QTabBar::tab,
 QTabWidget#settingsSubTabs > QTabBar::tab {
-    background-color: #202534;
-    border: 1px solid #383f52;
+    background-color: #1d2230;
+    border: 1px solid #333b4e;
     border-radius: 6px;
-    padding: 8px 20px;
-    margin-right: 8px;
-    margin-bottom: 6px;
-    color: #a0acbd;
+    padding: 7px 20px;
+    margin-right: 6px;
+    margin-bottom: 4px;
+    color: #94a3b8;
     font-size: 12px;
-    font-weight: 500;
+    font-weight: 600;
 }
+QTabWidget#recordingsSubTabs > QTabBar::tab:selected,
 QTabWidget#settingsSubTabs > QTabBar::tab:selected {
-    background-color: #2e374b;
-    border: 1.5px solid #55a84c;
+    background-color: #273145;
+    border: 1.5px solid #38bdf8;
     color: #ffffff;
     font-weight: bold;
 }
+QTabWidget#recordingsSubTabs > QTabBar::tab:hover:!selected,
 QTabWidget#settingsSubTabs > QTabBar::tab:hover:!selected {
-    background-color: #282f42;
-    border-color: #4a546e;
-    color: #ffffff;
+    background-color: #232a3b;
+    border-color: #444f68;
+    color: #e2e8f0;
 }
 
 /* Scroll area background inside settings */
@@ -903,34 +909,7 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(4, 4, 4, 4)
 
         self.recordings_subtabs = QTabWidget()
-        self.recordings_subtabs.setStyleSheet("""
-            QTabWidget::pane {
-                border: 1px solid #333a4d;
-                border-radius: 4px;
-                background-color: #1a1e29;
-            }
-            QTabBar::tab {
-                background: #212635;
-                color: #a4b0c2;
-                padding: 6px 16px;
-                border: 1px solid #333a4d;
-                border-bottom: none;
-                border-top-left-radius: 4px;
-                border-top-right-radius: 4px;
-                margin-right: 2px;
-                font-weight: bold;
-                font-size: 12px;
-            }
-            QTabBar::tab:selected {
-                background: #2b3244;
-                color: #ffffff;
-                border-color: #4a5568;
-            }
-            QTabBar::tab:hover:!selected {
-                background: #262c3d;
-                color: #d1d8e0;
-            }
-        """)
+        self.recordings_subtabs.setObjectName("recordingsSubTabs")
 
         # ----- SUBTAB 1: Active Schedule -----
         active_widget = QWidget()
