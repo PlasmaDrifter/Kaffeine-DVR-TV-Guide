@@ -1077,7 +1077,13 @@ class MainWindow(QMainWindow):
         banner.addWidget(self.guide_status_lbl)
 
         self.sync_guide_btn = QPushButton("Sync Guide Now")
-        self.sync_guide_btn.setStyleSheet("padding: 3px 10px; font-size: 11px;")
+        self.sync_guide_btn.setStyleSheet(
+            "QPushButton { padding: 3px 10px; font-size: 11px; font-weight: 500; "
+            "border: 1px solid #3d465c; border-radius: 4px; background-color: #212635; color: #c8d2df; }"
+            "QPushButton:hover { background-color: #2b3244; border: 1px solid #4f5b77; color: #ffffff; }"
+            "QPushButton:pressed { background-color: #1a1e2b; border: 1px solid #353d50; }"
+            "QPushButton:disabled { background-color: #1a1c26; border: 1px solid #2a3040; color: #5d6778; }"
+        )
         self.sync_guide_btn.clicked.connect(self.sync_guide)
         banner.addWidget(self.sync_guide_btn)
 
@@ -1218,10 +1224,13 @@ class MainWindow(QMainWindow):
         self.guide_view_group.addButton(self.grid_view_btn, 0)
         self.guide_view_group.addButton(self.list_view_btn, 1)
 
-        # Style toggle buttons
+        # Style toggle buttons (subtle outline unselected, calmed/less bright green when selected)
         btn_style = (
-            "QPushButton { padding: 4px 12px; font-weight: bold; border: 1px solid #3d4659; border-radius: 4px; background-color: #212635; color: #a4b0c2; }"
-            "QPushButton:checked { background-color: #2b3d2c; border: 1.5px solid #55a84c; color: #ffffff; }"
+            "QPushButton { padding: 4px 12px; font-weight: bold; font-size: 11px; "
+            "border: 1px solid #3d465c; border-radius: 4px; background-color: #212635; color: #a4b0c2; }"
+            "QPushButton:hover:!checked { background-color: #2b3244; border: 1px solid #4f5b77; color: #ffffff; }"
+            "QPushButton:checked { background-color: #1e2e1f; border: 1.5px solid #3e7e3d; color: #ffffff; }"
+            "QPushButton:checked:hover { background-color: #243725; border: 1.5px solid #478e45; color: #ffffff; }"
         )
         self.grid_view_btn.setStyleSheet(btn_style)
         self.list_view_btn.setStyleSheet(btn_style)
@@ -1242,15 +1251,21 @@ class MainWindow(QMainWindow):
         filter_bar.addSpacing(12)
 
         # Quick Time Jump Controls (useful in Grid View)
+        jump_btn_style = (
+            "QPushButton { padding: 4px 10px; font-size: 11px; font-weight: 500; "
+            "border: 1px solid #3d465c; border-radius: 4px; background-color: #212635; color: #c8d2df; }"
+            "QPushButton:hover { background-color: #2b3244; border: 1px solid #4f5b77; color: #ffffff; }"
+            "QPushButton:pressed { background-color: #1a1e2b; border: 1px solid #353d50; }"
+        )
         self.jump_now_btn = QPushButton("Jump to Now")
         self.jump_now_btn.setToolTip("Scroll guide grid to current time")
-        self.jump_now_btn.setStyleSheet("padding: 4px 10px; font-size: 11px;")
+        self.jump_now_btn.setStyleSheet(jump_btn_style)
         self.jump_now_btn.clicked.connect(self.jump_guide_to_now)
         filter_bar.addWidget(self.jump_now_btn)
 
         self.jump_prime_btn = QPushButton("Prime Time (8 PM)")
         self.jump_prime_btn.setToolTip("Scroll guide grid to 8:00 PM evening prime time")
-        self.jump_prime_btn.setStyleSheet("padding: 4px 10px; font-size: 11px;")
+        self.jump_prime_btn.setStyleSheet(jump_btn_style)
         self.jump_prime_btn.clicked.connect(self.jump_guide_to_primetime)
         filter_bar.addWidget(self.jump_prime_btn)
         filter_bar.addSpacing(14)
