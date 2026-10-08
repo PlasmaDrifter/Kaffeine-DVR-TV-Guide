@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
     QStyle
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QSettings, QByteArray, QEvent, QObject, QPoint, QPointF, QRect
-from PyQt6.QtGui import QColor, QFont, QFontMetrics, QIcon, QWheelEvent, QPainter, QPalette
+from PyQt6.QtGui import QColor, QFont, QFontMetrics, QIcon, QWheelEvent, QPainter, QPalette, QPixmap, QPen
 
 try:
     from .config import ConfigManager, DEFAULT_CHANNEL_MAP
@@ -34,6 +34,50 @@ except (ImportError, ValueError):
     from kaffeine_dvr.queue_manager import QueueManager
     from kaffeine_dvr.watcher import Watcher
     from kaffeine_dvr.storage_manager import StorageManager
+
+
+def _get_checkmark_icon_path() -> str:
+    # First check relative to this source tree
+    base_dir = Path(__file__).resolve().parent.parent
+    asset_path = base_dir / "assets" / "checkmark.png"
+    if not asset_path.parent.exists():
+        try:
+            asset_path.parent.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
+    # If not writable or not found, fallback to user config/cache directory
+    if not asset_path.exists():
+        try:
+            pix = QPixmap(14, 14)
+            pix.fill(Qt.GlobalColor.transparent)
+            p = QPainter(pix)
+            p.setRenderHint(QPainter.RenderHint.Antialiasing)
+            pen = QPen(QColor('#ffffff'), 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+            p.setPen(pen)
+            p.drawLine(2, 7, 5, 11)
+            p.drawLine(5, 11, 12, 3)
+            p.end()
+            pix.save(str(asset_path), 'PNG')
+        except Exception:
+            # Fallback location in user home
+            fallback_dir = Path.home() / ".config" / "kaffeine-dvr" / "assets"
+            fallback_dir.mkdir(parents=True, exist_ok=True)
+            asset_path = fallback_dir / "checkmark.png"
+            if not asset_path.exists():
+                pix = QPixmap(14, 14)
+                pix.fill(Qt.GlobalColor.transparent)
+                p = QPainter(pix)
+                p.setRenderHint(QPainter.RenderHint.Antialiasing)
+                pen = QPen(QColor('#ffffff'), 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+                p.setPen(pen)
+                p.drawLine(2, 7, 5, 11)
+                p.drawLine(5, 11, 12, 3)
+                p.end()
+                pix.save(str(asset_path), 'PNG')
+    return str(asset_path).replace("\\", "/")
+
+
+CHECKMARK_ICON_PATH = _get_checkmark_icon_path()
 
 
 class SyncWorker(QThread):
@@ -212,7 +256,7 @@ class AdjustBufferDialog(QDialog):
         super().__init__(parent)
         self.raw_title = title_text
         self.setWindowTitle("Adjust Recording Buffer")
-        self.setMinimumWidth(380)
+        self.setMinimumWidth(440)
 
         form = QFormLayout(self)
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
@@ -241,14 +285,17 @@ class AdjustBufferDialog(QDialog):
 
         # Presets
         presets_box = QHBoxLayout()
+        presets_box.setSpacing(6)
         for m in [0, 15, 30, 45, 60]:
             btn = QPushButton(f"+{m}m" if m > 0 else "None")
+            btn.setStyleSheet("padding: 4px 6px; font-size: 12px;")
             btn.clicked.connect(lambda _, val=m: self.buf_spin.setValue(val))
             presets_box.addWidget(btn)
         form.addRow("Presets:", presets_box)
 
         # Buttons
         btns = QHBoxLayout()
+        btns.setSpacing(10)
         self.ok_btn = QPushButton("Save Buffer")
         self.cancel_btn = QPushButton("Cancel")
         self.ok_btn.clicked.connect(self.accept)
@@ -595,17 +642,16 @@ class FirstRunWelcomeDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Welcome to Kaffeine DVR & TV Guide")
         self.setMinimumWidth(820)
-        self.resize(850, 680)
         self.config_mgr = config_mgr
-        self.setStyleSheet("""
-            QDialog {
+        self.setStyleSheet(f"""
+            QDialog {{
                 background-color: #191c28;
                 color: #dce1e8;
-            }
-            QLabel {
+            }}
+            QLabel {{
                 color: #dce1e8;
-            }
-            QGroupBox {
+            }}
+            QGroupBox {{
                 background-color: #1e2230;
                 border: 1px solid #333a4c;
                 border-radius: 6px;
@@ -614,34 +660,40 @@ class FirstRunWelcomeDialog(QDialog):
                 font-weight: bold;
                 font-size: 13px;
                 color: #d3dae3;
-            }
-            QGroupBox::title {
+            }}
+            QGroupBox::title {{
                 subcontrol-origin: margin;
                 subcontrol-position: top left;
                 padding: 0 8px;
                 color: #d3dae3;
-            }
-            QCheckBox {
+            }}
+            QCheckBox {{
                 color: #e0e6ed;
                 font-size: 13px;
                 spacing: 8px;
                 background: transparent;
-            }
-            QCheckBox::indicator {
+            }}
+            QCheckBox::indicator {{
                 width: 16px;
                 height: 16px;
                 border: 1px solid #3d465c;
                 border-radius: 3px;
                 background-color: #141620;
-            }
-            QCheckBox::indicator:hover {
+            }}
+            QCheckBox::indicator:hover {{
                 border-color: #505c75;
-            }
-            QCheckBox::indicator:checked {
+            }}
+            QCheckBox::indicator:checked {{
                 background-color: #2d6cd4;
                 border-color: #4a8df5;
-            }
-            QPushButton#primaryActionBtn {
+                image: url("{CHECKMARK_ICON_PATH}");
+            }}
+            QCheckBox::indicator:checked:disabled {{
+                background-color: #238636;
+                border-color: #2ea043;
+                image: url("{CHECKMARK_ICON_PATH}");
+            }}
+            QPushButton#primaryActionBtn {{
                 background-color: #2d6cd4;
                 color: #ffffff;
                 font-weight: bold;
@@ -649,13 +701,13 @@ class FirstRunWelcomeDialog(QDialog):
                 padding: 8px 24px;
                 border-radius: 5px;
                 border: 1px solid #4a8df5;
-            }
-            QPushButton#primaryActionBtn:hover {
+            }}
+            QPushButton#primaryActionBtn:hover {{
                 background-color: #3b7ee8;
-            }
-            QPushButton#primaryActionBtn:pressed {
+            }}
+            QPushButton#primaryActionBtn:pressed {{
                 background-color: #2259b3;
-            }
+            }}
         """)
 
         layout = QVBoxLayout(self)
@@ -780,7 +832,7 @@ def get_app_icon() -> QIcon:
     return QIcon()
 
 
-APP_STYLESHEET = """
+APP_STYLESHEET = f"""
 /* Base Application & Window Styling */
 QWidget {
     background-color: #191c28;
@@ -877,6 +929,12 @@ QCheckBox::indicator:hover {
 QCheckBox::indicator:checked {
     background-color: #2d6cd4;
     border-color: #4a8df5;
+    image: url("{CHECKMARK_ICON_PATH}");
+}
+QCheckBox::indicator:checked:disabled {
+    background-color: #238636;
+    border-color: #2ea043;
+    image: url("{CHECKMARK_ICON_PATH}");
 }
 
 /* Top-Level Main Tabs: Option 4 Browser-Style Curved / Flowing Tabs */
