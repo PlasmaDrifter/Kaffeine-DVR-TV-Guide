@@ -82,6 +82,7 @@ CHECKMARK_ICON_PATH = _get_checkmark_icon_path()
 
 class SyncWorker(QThread):
     progress = pyqtSignal(str)
+    progress_val = pyqtSignal(int)
     finished = pyqtSignal(int, str)
 
     def __init__(self, guide_service: GuideService, days: int):
@@ -89,12 +90,24 @@ class SyncWorker(QThread):
         self.guide_service = guide_service
         self.days = days
 
+    def _on_progress(self, msg: str):
+        self.progress.emit(msg)
+        # Check if message contains step indicators like "(6/15)"
+        import re
+        m = re.search(r"\((\d+)/(\d+)\)", msg)
+        if m:
+            cur, total = int(m.group(1)), int(m.group(2))
+            if total > 0:
+                pct = int((cur / total) * 100)
+                self.progress_val.emit(max(5, min(95, pct)))
+
     def run(self):
         try:
             count = self.guide_service.sync_guide(
                 days=self.days,
-                progress_callback=lambda msg: self.progress.emit(msg)
+                progress_callback=self._on_progress
             )
+            self.progress_val.emit(100)
             self.finished.emit(count, "")
         except Exception as e:
             self.finished.emit(0, str(e))
@@ -1126,6 +1139,24 @@ QTableWidget#guideGridTable QHeaderView::section:vertical {
     border: 1px solid #2b3242;
     border-left: none;
 }
+
+/* Modern Status & Progress Bar */
+QProgressBar#statusBarProgressBar {
+    border: 1px solid #364156;
+    border-radius: 6px;
+    background-color: #12151e;
+    text-align: center;
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: bold;
+    min-height: 18px;
+    max-height: 18px;
+}
+QProgressBar#statusBarProgressBar::chunk {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #1d4ed8, stop:0.6 #2563eb, stop:1 #3b82f6);
+    border-radius: 5px;
+}
 """
 
 
@@ -1220,7 +1251,10 @@ class MainWindow(QMainWindow):
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
         self.progress_bar = QProgressBar()
-        self.progress_bar.setMaximumWidth(200)
+        self.progress_bar.setObjectName("statusBarProgressBar")
+        self.progress_bar.setMaximumWidth(220)
+        self.progress_bar.setMinimumWidth(160)
+        self.progress_bar.setTextVisible(True)
         self.progress_bar.setVisible(False)
         self.status_bar.addPermanentWidget(self.progress_bar)
 
@@ -2678,17 +2712,23 @@ class MainWindow(QMainWindow):
     def sync_guide(self):
         self.sync_guide_btn.setEnabled(False)
         self.progress_bar.setVisible(True)
-        self.progress_bar.setRange(0, 0)
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
         self.status_bar.showMessage("Syncing guide data...")
 
         self.sync_worker = SyncWorker(self.guide_service, self.config_mgr.guide_days_ahead)
         self.sync_worker.progress.connect(lambda msg: self.status_bar.showMessage(msg))
+        self.sync_worker.progress_val.connect(self._on_sync_progress_val)
         self.sync_worker.finished.connect(self.on_sync_finished)
         self.sync_worker.start()
 
+    def _on_sync_progress_val(self, val: int):
+        self.progress_bar.setValue(max(self.progress_bar.value(), val))
+
     def on_sync_finished(self, count: int, error: str):
+        self.progress_bar.setValue(100)
         self.sync_guide_btn.setEnabled(True)
-        self.progress_bar.setVisible(False)
+        QTimer.singleShot(600, lambda: self.progress_bar.setVisible(False))
         if error:
             QMessageBox.critical(self, "Guide Sync Error", f"Failed to sync guide: {error}")
             self.status_bar.showMessage("Guide sync failed.")
