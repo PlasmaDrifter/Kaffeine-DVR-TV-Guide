@@ -90,7 +90,7 @@ class HealthCheckWorker(QThread):
 
 
 class ManualRecordDialog(QDialog):
-    def __init__(self, channels: List[str], parent=None):
+    def __init__(self, channels: List[str], parent=None, default_buffer_mins: int = 0):
         super().__init__(parent)
         self.setWindowTitle("Schedule Manual Recording")
         self.setMinimumWidth(400)
@@ -104,10 +104,16 @@ class ManualRecordDialog(QDialog):
         self.start_input = QLineEdit(now.strftime("%Y-%m-%dT%H:%M:00"))
         self.duration_input = QLineEdit("01:00:00")
 
+        self.buffer_spin = QSpinBox()
+        self.buffer_spin.setRange(0, 180)
+        self.buffer_spin.setValue(default_buffer_mins)
+        self.buffer_spin.setSuffix(" minutes")
+
         layout.addRow("Title:", self.title_input)
         layout.addRow("Channel:", self.channel_combo)
         layout.addRow("Start (ISO):", self.start_input)
         layout.addRow("Duration (HH:MM:SS):", self.duration_input)
+        layout.addRow("End Buffer (Post-Roll):", self.buffer_spin)
 
         btn_box = QHBoxLayout()
         self.ok_btn = QPushButton("Schedule")
@@ -131,8 +137,15 @@ class AddRuleDialog(QDialog):
         self.channel_combo.addItem("All")
         self.channel_combo.addItems(channels)
 
+        self.buffer_spin = QSpinBox()
+        self.buffer_spin.setRange(0, 180)
+        self.buffer_spin.setSpecialValueText("0 (Auto / Default)")
+        self.buffer_spin.setSuffix(" min")
+        self.buffer_spin.setValue(0)
+
         layout.addRow("Show Keyword / Title:", self.keyword_input)
         layout.addRow("Channel:", self.channel_combo)
+        layout.addRow("Custom End Buffer:", self.buffer_spin)
 
         btn_box = QHBoxLayout()
         self.ok_btn = QPushButton("Save Rule")
@@ -145,7 +158,7 @@ class AddRuleDialog(QDialog):
 
 
 class EditRuleDialog(QDialog):
-    def __init__(self, channels: List[str], rule_id: str, keyword: str, channel: str, enabled: bool, parent=None):
+    def __init__(self, channels: List[str], rule_id: str, keyword: str, channel: str, enabled: bool, buffer_mins: Optional[int] = None, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Edit Auto-Record Rule")
         self.setMinimumWidth(380)
@@ -162,12 +175,19 @@ class EditRuleDialog(QDialog):
         else:
             self.channel_combo.setCurrentText(channel)
 
+        self.buffer_spin = QSpinBox()
+        self.buffer_spin.setRange(0, 180)
+        self.buffer_spin.setSpecialValueText("0 (Auto / Default)")
+        self.buffer_spin.setSuffix(" min")
+        self.buffer_spin.setValue(buffer_mins if (buffer_mins is not None and buffer_mins > 0) else 0)
+
         self.enabled_check = QCheckBox("Enable Rule")
         self.enabled_check.setChecked(enabled)
 
         layout.addRow("Rule ID:", self.rule_id_lbl)
         layout.addRow("Show Keyword / Title:", self.keyword_input)
         layout.addRow("Channel:", self.channel_combo)
+        layout.addRow("Custom End Buffer:", self.buffer_spin)
         layout.addRow("Status:", self.enabled_check)
 
         btn_box = QHBoxLayout()
@@ -1065,8 +1085,8 @@ class MainWindow(QMainWindow):
         layout.addLayout(ctrl_bar)
 
         self.rules_table = QTableWidget()
-        self.rules_table.setColumnCount(4)
-        self.rules_table.setHorizontalHeaderLabels(["ID", "Title / Keyword", "Channel", "Enabled"])
+        self.rules_table.setColumnCount(5)
+        self.rules_table.setHorizontalHeaderLabels(["ID", "Title / Keyword", "Channel", "End Buffer", "Enabled"])
         self.rules_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.rules_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.rules_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -1346,6 +1366,34 @@ class MainWindow(QMainWindow):
         form.addRow("Just-In-Time Lead Time:", self.lead_time_spin)
         form.addRow("", lead_time_lbl)
 
+        self.end_buffer_spin = QSpinBox()
+        self.end_buffer_spin.setRange(0, 180)
+        self.end_buffer_spin.setValue(self.config_mgr.end_buffer_mins)
+        self.end_buffer_spin.setSuffix(" minutes")
+        end_buffer_lbl = QLabel(
+            "Extra post-roll buffer added to the end of scheduled recordings to avoid clipping broadcast overruns."
+        )
+        end_buffer_lbl.setStyleSheet("color: #6c757d; font-size: 11px;")
+        form.addRow("Default End Buffer:", self.end_buffer_spin)
+        form.addRow("", end_buffer_lbl)
+
+        self.auto_buffer_sports_check = QCheckBox("Automatically Extend Sports Broadcasts")
+        self.auto_buffer_sports_check.setChecked(self.config_mgr.auto_buffer_sports)
+        self.sports_buffer_spin = QSpinBox()
+        self.sports_buffer_spin.setRange(0, 180)
+        self.sports_buffer_spin.setValue(self.config_mgr.sports_buffer_mins)
+        self.sports_buffer_spin.setSuffix(" minutes")
+        sports_row = QHBoxLayout()
+        sports_row.addWidget(self.auto_buffer_sports_check)
+        sports_row.addSpacing(15)
+        sports_row.addWidget(QLabel("Sports Buffer:"))
+        sports_row.addWidget(self.sports_buffer_spin)
+        sports_row.addStretch()
+        sports_buffer_lbl = QLabel("Applies extended post-roll padding to live sporting events, games, and matches.")
+        sports_buffer_lbl.setStyleSheet("color: #6c757d; font-size: 11px;")
+        form.addRow("Sports Auto-Extend:", sports_row)
+        form.addRow("", sports_buffer_lbl)
+
         self.interval_spin = QSpinBox()
         self.interval_spin.setRange(30, 600)
         self.interval_spin.setSingleStep(30)
@@ -1395,6 +1443,9 @@ class MainWindow(QMainWindow):
         form.addRow("", notify_lbl)
 
         self.lead_time_spin.valueChanged.connect(self._auto_save_automation_settings)
+        self.end_buffer_spin.valueChanged.connect(self._auto_save_automation_settings)
+        self.auto_buffer_sports_check.stateChanged.connect(self._auto_save_automation_settings)
+        self.sports_buffer_spin.valueChanged.connect(self._auto_save_automation_settings)
         self.interval_spin.valueChanged.connect(self._auto_save_automation_settings)
         self.days_spin.valueChanged.connect(self._auto_save_automation_settings)
         self.launch_mode_combo.currentIndexChanged.connect(self._auto_save_automation_settings)
@@ -1935,6 +1986,12 @@ class MainWindow(QMainWindow):
         if not hasattr(self, "lead_time_spin") or not hasattr(self, "cleanup_enable_check"):
             return
         self.config_mgr.lead_time_mins = self.lead_time_spin.value()
+        if hasattr(self, "end_buffer_spin"):
+            self.config_mgr.end_buffer_mins = self.end_buffer_spin.value()
+        if hasattr(self, "auto_buffer_sports_check"):
+            self.config_mgr.auto_buffer_sports = self.auto_buffer_sports_check.isChecked()
+        if hasattr(self, "sports_buffer_spin"):
+            self.config_mgr.sports_buffer_mins = self.sports_buffer_spin.value()
         self.config_mgr.watcher_interval_seconds = self.interval_spin.value()
         self.config_mgr.guide_days_ahead = self.days_spin.value()
         self.config_mgr.launch_mode = self.launch_mode_combo.currentData()
@@ -2172,7 +2229,16 @@ class MainWindow(QMainWindow):
             self.rec_table.setItem(row, 0, title_item)
             self.rec_table.setItem(row, 1, sched_item)
             self.rec_table.setItem(row, 2, QTableWidgetItem(channel))
-            self.rec_table.setItem(row, 3, QTableWidgetItem(duration))
+
+            buf_val = rec.get("buffer_mins", 0) or 0
+            if buf_val > 0:
+                duration_display = f"{duration} (+{buf_val}m)"
+            else:
+                duration_display = duration
+            dur_item = QTableWidgetItem(duration_display)
+            if buf_val > 0:
+                dur_item.setToolTip(f"Includes +{buf_val} minutes post-roll buffer")
+            self.rec_table.setItem(row, 3, dur_item)
 
             status_display = status
             color = "#007bff"
@@ -2244,19 +2310,21 @@ class MainWindow(QMainWindow):
 
     def add_manual_recording(self):
         channels = sorted(list(set(self.config_mgr.channel_map.values())))
-        dlg = ManualRecordDialog(channels, self)
+        dlg = ManualRecordDialog(channels, self, default_buffer_mins=self.config_mgr.end_buffer_mins)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             title = dlg.title_input.text().strip()
             ch = dlg.channel_combo.currentText()
             start = dlg.start_input.text().strip()
             dur = dlg.duration_input.text().strip()
+            buf = dlg.buffer_spin.value()
             if not title or not start or not dur:
                 QMessageBox.warning(self, "Invalid Input", "Please fill in all fields.")
                 return
             try:
                 lead = self.config_mgr.lead_time_mins
-                qid = self.queue_mgr.add_recording(title, ch, start, dur, lead_time_mins=lead)
-                self.status_bar.showMessage(f"Queued recording '{title}' (Queue #{qid})", 4000)
+                qid = self.queue_mgr.add_recording(title, ch, start, dur, lead_time_mins=lead, buffer_mins=buf)
+                buf_msg = f" (+{buf}m buffer)" if buf > 0 else ""
+                self.status_bar.showMessage(f"Queued recording '{title}'{buf_msg} (Queue #{qid})", 4000)
                 self.refresh_recordings()
             except Exception as e:
                 QMessageBox.critical(self, "Scheduling Error", str(e))
@@ -2529,14 +2597,28 @@ class MainWindow(QMainWindow):
         start_iso = prog.get("start_iso", "")
         duration_iso = prog.get("duration_iso", "")
 
+        is_sports = (classify_guide_category(prog) == "sports")
+        if is_sports and self.config_mgr.auto_buffer_sports:
+            buf_mins = self.config_mgr.sports_buffer_mins
+            buf_note = f"\nEnd Buffer: +{buf_mins} minutes (Sports Auto-Extend)"
+        elif self.config_mgr.end_buffer_mins > 0:
+            buf_mins = self.config_mgr.end_buffer_mins
+            buf_note = f"\nEnd Buffer: +{buf_mins} minutes (Default Buffer)"
+        else:
+            buf_mins = 0
+            buf_note = ""
+
         try:
             lead = self.config_mgr.lead_time_mins
-            qid = self.queue_mgr.add_recording(rec_title, channel, start_iso, duration_iso, lead_time_mins=lead)
+            qid = self.queue_mgr.add_recording(
+                rec_title, channel, start_iso, duration_iso,
+                lead_time_mins=lead, buffer_mins=buf_mins
+            )
             QMessageBox.information(
                 self, "Recording Queued",
                 f"Successfully added to DVR Queue (Queue #{qid}):\n\n"
                 f"'{rec_title}' on {channel}\n"
-                f"Airs: {prog.get('start_time_local')}\n\n"
+                f"Airs: {prog.get('start_time_local')}{buf_note}\n\n"
                 f"It is safely queued and will automatically launch Kaffeine and arm the timer {lead} minutes before showtime, preventing restart/shutdown blocks in Kaffeine."
             )
             self.refresh_recordings()
@@ -2551,7 +2633,7 @@ class MainWindow(QMainWindow):
 
         show_title = prog.get("show_title", "")
         ch = prog.get("kaffeine_channel", "All")
-        self.rules_engine.add_rule(show_title, ch)
+        self.rules_engine.add_rule(show_title, ch, buffer_mins=None)
         self.refresh_rules()
         self.tabs.setCurrentIndex(0)
         self.run_rules(silent=False)
@@ -2564,8 +2646,17 @@ class MainWindow(QMainWindow):
             self.rules_table.setItem(row, 0, QTableWidgetItem(str(r.get("id"))))
             self.rules_table.setItem(row, 1, QTableWidgetItem(r.get("title_keyword", "")))
             self.rules_table.setItem(row, 2, QTableWidgetItem(r.get("channel", "All")))
+
+            buf_val = r.get("buffer_mins")
+            buf_str = f"+{buf_val}m" if (buf_val is not None and buf_val > 0) else "Auto / Default"
+            buf_item = QTableWidgetItem(buf_str)
+            buf_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.rules_table.setItem(row, 3, buf_item)
+
             enabled_str = "Yes" if r.get("enabled", True) else "No"
-            self.rules_table.setItem(row, 3, QTableWidgetItem(enabled_str))
+            enabled_item = QTableWidgetItem(enabled_str)
+            enabled_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.rules_table.setItem(row, 4, enabled_item)
 
     def add_rule_dialog(self):
         channels = sorted(list(set(self.config_mgr.channel_map.values())))
@@ -2573,8 +2664,10 @@ class MainWindow(QMainWindow):
         if dlg.exec() == QDialog.DialogCode.Accepted:
             kw = dlg.keyword_input.text().strip()
             ch = dlg.channel_combo.currentText()
+            buf = dlg.buffer_spin.value()
+            rule_buf = buf if buf > 0 else None
             if kw:
-                self.rules_engine.add_rule(kw, ch)
+                self.rules_engine.add_rule(kw, ch, buffer_mins=rule_buf)
                 self.refresh_rules()
                 self.tabs.setCurrentIndex(0)
                 self.run_rules(silent=False)
@@ -2588,7 +2681,10 @@ class MainWindow(QMainWindow):
         rule_id = self.rules_table.item(row, 0).text()
         current_kw = self.rules_table.item(row, 1).text()
         current_ch = self.rules_table.item(row, 2).text()
-        current_enabled = self.rules_table.item(row, 3).text() == "Yes"
+        current_enabled = self.rules_table.item(row, 4).text() == "Yes"
+
+        rule_obj = next((r for r in self.rules_engine.get_rules() if str(r.get("id")) == rule_id), {})
+        current_buffer = rule_obj.get("buffer_mins")
 
         channels = sorted(list(set(self.config_mgr.channel_map.values())))
         dlg = EditRuleDialog(
@@ -2597,18 +2693,22 @@ class MainWindow(QMainWindow):
             keyword=current_kw,
             channel=current_ch,
             enabled=current_enabled,
+            buffer_mins=current_buffer,
             parent=self
         )
         if dlg.exec() == QDialog.DialogCode.Accepted:
             new_kw = dlg.keyword_input.text().strip()
             new_ch = dlg.channel_combo.currentText()
             new_enabled = dlg.enabled_check.isChecked()
+            buf = dlg.buffer_spin.value()
+            new_buffer = buf if buf > 0 else None
             if new_kw:
                 self.rules_engine.update_rule(
                     rule_id=rule_id,
                     title_keyword=new_kw,
                     channel=new_ch,
-                    enabled=new_enabled
+                    enabled=new_enabled,
+                    buffer_mins=new_buffer
                 )
                 self.refresh_rules()
                 self.status_bar.showMessage(f"Rule '{new_kw}' updated.", 4000)

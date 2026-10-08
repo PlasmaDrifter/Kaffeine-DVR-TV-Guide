@@ -23,6 +23,10 @@ Kaffeine is a powerful digital TV viewer for KDE and Linux desktop environments,
   - **Traditional Grid Layout:** Displays channels vertically and 48 half-hour time slots across the 24-hour day, with program tiles spanning their duration.
   - **Genre Color Coding:** Show titles dynamically styled by genre (Sports = Orange, News = Light Blue, Movies = Red, TV Shows = Green).
   - **Smart Timeline Navigation:** Auto-centers on live programming when viewing Today, rewinds to 12:00 AM Midnight for future dates, with quick "Jump to Now" and "Prime Time (8 PM)" buttons.
+- **Configurable Recording End Buffers (Post-Roll Padding):**
+  - **Global Post-Roll Buffer:** Append extra minutes (0-180m) to scheduled recordings to safeguard against broadcast delays.
+  - **Sports Broadcast Auto-Extend:** Automatically adds extended post-roll padding (default: +30 minutes) to live sporting events (NFL, NBA, MLB, NCAA, Premier League, NASCAR, racing, etc.) so overtime and extra innings are never cut short.
+  - **Per-Rule Custom Overrides:** Override end buffer duration on individual series auto-record rules or manual schedule dialogs.
 - **Series Auto-Record Rules:** Define keyword-based auto-record rules (e.g., specific sports leagues, talk shows, or series titles) that automatically schedule upcoming episodes as guide data refreshes.
 - **Automated Video Retention & Storage Management:** Prevents recording drives from filling up:
   - **Age Retention:** Automatically deletes recordings older than *N* days (configurable).
@@ -81,6 +85,7 @@ Kaffeine is a powerful digital TV viewer for KDE and Linux desktop environments,
 > **Note on Timing & Flexibility:**
 > - **Poll Interval (Default: 120s):** How often the background watcher checks the queue database. This is fully configurable via the settings dialog or CLI `--interval` flag.
 > - **Just-In-Time Lead Time (Default: 5 mins):** How early Kaffeine is launched and scheduled before broadcast start. This allows Kaffeine ample time to initialize tuner hardware and buffer without missing the start of a program, and can be customized anywhere from 1 to 60 minutes in the DVR Settings tab.
+> - **Post-Roll Buffers (Default: +30 mins for Sports):** Extra recording duration appended to the end of a scheduled recording so programs that run late or enter overtime are fully captured. Kaffeine is dispatched the total duration (base duration + buffer) via D-Bus.
 
 ---
 

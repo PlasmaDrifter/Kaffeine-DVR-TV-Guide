@@ -27,7 +27,8 @@ class QueueManager:
                 kaffeine_key INTEGER,
                 created_at TEXT,
                 protected INTEGER DEFAULT 0,
-                file_path TEXT
+                file_path TEXT,
+                buffer_mins INTEGER DEFAULT 0
             )
         """)
         # Safe migration for existing databases
@@ -37,21 +38,38 @@ class QueueManager:
             cur.execute("ALTER TABLE recording_queue ADD COLUMN protected INTEGER DEFAULT 0")
         if "file_path" not in existing_cols:
             cur.execute("ALTER TABLE recording_queue ADD COLUMN file_path TEXT")
+        if "buffer_mins" not in existing_cols:
+            cur.execute("ALTER TABLE recording_queue ADD COLUMN buffer_mins INTEGER DEFAULT 0")
 
         cur.execute("CREATE INDEX IF NOT EXISTS idx_queue_status ON recording_queue(status)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_queue_start ON recording_queue(start_iso)")
         conn.commit()
         conn.close()
 
-    def add_recording(self, title: str, channel: str, start_iso: str, duration_iso: str, lead_time_mins: int = 5) -> int:
-        # Calculate end_iso and local display time
+    def add_recording(
+        self,
+        title: str,
+        channel: str,
+        start_iso: str,
+        duration_iso: str,
+        lead_time_mins: int = 5,
+        buffer_mins: int = 0
+    ) -> int:
+        # Calculate end_iso and buffered duration
         try:
             dt_start = datetime.fromisoformat(start_iso)
             h, m, s = map(int, duration_iso.split(":"))
-            dt_end = dt_start + timedelta(hours=h, minutes=m, seconds=s)
+            total_seconds = h * 3600 + m * 60 + s + (buffer_mins * 60)
+            bh = total_seconds // 3600
+            bm = (total_seconds % 3600) // 60
+            bs = total_seconds % 60
+            effective_duration_iso = f"{bh:02d}:{bm:02d}:{bs:02d}"
+
+            dt_end = dt_start + timedelta(seconds=total_seconds)
             end_iso = dt_end.strftime("%Y-%m-%dT%H:%M:%S")
             start_display = dt_start.strftime("%Y-%m-%d %I:%M %p")
         except Exception:
+            effective_duration_iso = duration_iso
             end_iso = start_iso
             start_display = start_iso
 
@@ -72,9 +90,9 @@ class QueueManager:
         cur.execute("""
             INSERT INTO recording_queue (
                 title, channel, start_iso, duration_iso, start_time_local,
-                end_iso, lead_time_mins, status, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'QUEUED', ?)
-        """, (title, channel, start_iso, duration_iso, start_display, end_iso, lead_time_mins, now_str))
+                end_iso, lead_time_mins, status, created_at, buffer_mins
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'QUEUED', ?, ?)
+        """, (title, channel, start_iso, effective_duration_iso, start_display, end_iso, lead_time_mins, now_str, buffer_mins))
         new_id = cur.lastrowid
         conn.commit()
         conn.close()

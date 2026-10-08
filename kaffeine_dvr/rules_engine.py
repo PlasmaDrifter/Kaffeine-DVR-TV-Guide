@@ -5,6 +5,28 @@ from .guide_service import GuideService
 from .config import ConfigManager
 from .queue_manager import QueueManager
 
+def is_sports_program(prog: Dict[str, Any]) -> bool:
+    title = (prog.get("show_title") or "").strip().lower()
+    ep = (prog.get("episode_title") or "").strip().lower()
+    summary = (prog.get("summary") or "").lower()
+
+    sports_kw = [
+        "football", "nfl", "ncaa", "basketball", "nba", "wnba", "baseball", "mlb",
+        "hockey", "nhl", "soccer", "premier league", "nascar", "racing", "pga",
+        "golf", "tennis", "wrestling", "wwe", "ufc", "boxing", "sportswrap",
+        "sports stars", "sports legends", "gametime", "kickoff", "postgame", "pregame",
+        "scoreboard", "flag football", "college football", "college basketball",
+        "usl championship", "volleyball", "championship wrestling", "tailgate",
+        "sports tonight"
+    ]
+    if any(k in title for k in sports_kw):
+        return True
+    if any(k in ep for k in ["premier league", "nfl", "mlb", "nba", " vs. ", " at "]) and (
+        "football" in summary or "game" in summary or "soccer" in summary or "basketball" in summary or "baseball" in summary
+    ):
+        return True
+    return False
+
 class RulesEngine:
     def __init__(self, config_mgr: ConfigManager, dbus_client: KaffeineDbusClient, guide_service: GuideService, queue_mgr: Optional[QueueManager] = None):
         self.config_mgr = config_mgr
@@ -15,13 +37,14 @@ class RulesEngine:
     def get_rules(self) -> List[Dict[str, Any]]:
         return self.config_mgr.rules
 
-    def add_rule(self, title_keyword: str, channel: str = "All") -> Dict[str, Any]:
+    def add_rule(self, title_keyword: str, channel: str = "All", buffer_mins: Optional[int] = None) -> Dict[str, Any]:
         rules = self.config_mgr.rules
         rule = {
             "id": str(uuid.uuid4())[:8],
             "title_keyword": title_keyword.strip(),
             "channel": channel.strip(),
-            "enabled": True
+            "enabled": True,
+            "buffer_mins": buffer_mins
         }
         rules.append(rule)
         self.config_mgr.rules = rules
@@ -31,7 +54,7 @@ class RulesEngine:
         rules = [r for r in self.config_mgr.rules if r.get("id") != rule_id]
         self.config_mgr.rules = rules
 
-    def update_rule(self, rule_id: str, title_keyword: str, channel: str = "All", enabled: bool = True) -> bool:
+    def update_rule(self, rule_id: str, title_keyword: str, channel: str = "All", enabled: bool = True, buffer_mins: Optional[int] = None) -> bool:
         rules = self.config_mgr.rules
         found = False
         for r in rules:
@@ -39,6 +62,7 @@ class RulesEngine:
                 r["title_keyword"] = title_keyword.strip()
                 r["channel"] = channel.strip()
                 r["enabled"] = enabled
+                r["buffer_mins"] = buffer_mins
                 found = True
                 break
         if found:
@@ -103,17 +127,28 @@ class RulesEngine:
                 if sig in scheduled_signatures:
                     continue  # already queued
 
+                # Determine post-roll recording buffer
+                rule_buf = rule.get("buffer_mins")
+                if rule_buf is not None and rule_buf >= 0:
+                    applied_buffer = int(rule_buf)
+                elif self.config_mgr.auto_buffer_sports and is_sports_program(prog):
+                    applied_buffer = int(self.config_mgr.sports_buffer_mins)
+                else:
+                    applied_buffer = int(self.config_mgr.end_buffer_mins)
+
                 # Add to deferred DVR queue
                 try:
+                    buf_note = f" (+{applied_buffer}m buffer)" if applied_buffer > 0 else ""
                     if progress_callback:
-                        progress_callback(f"Queueing: {rec_title} on {prog_channel} ({prog.get('start_time_local')})...")
+                        progress_callback(f"Queueing: {rec_title}{buf_note} on {prog_channel} ({prog.get('start_time_local')})...")
 
                     qid = queue_mgr.add_recording(
                         title=rec_title,
                         channel=prog_channel,
                         start_iso=start_iso,
                         duration_iso=duration_iso,
-                        lead_time_mins=5
+                        lead_time_mins=self.config_mgr.lead_time_mins,
+                        buffer_mins=applied_buffer
                     )
                     scheduled_signatures.add(sig)
                     newly_scheduled.append({

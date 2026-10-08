@@ -58,6 +58,12 @@ class ConfigManager:
                         data["min_free_disk_gb"] = 25
                     if "custom_recording_folder" not in data:
                         data["custom_recording_folder"] = ""
+                    if "end_buffer_mins" not in data:
+                        data["end_buffer_mins"] = 0
+                    if "sports_buffer_mins" not in data:
+                        data["sports_buffer_mins"] = 30
+                    if "auto_buffer_sports" not in data:
+                        data["auto_buffer_sports"] = True
                     return data
             except Exception:
                 pass
@@ -85,7 +91,10 @@ class ConfigManager:
             "auto_cleanup_enabled": False,
             "retention_days": 14,
             "min_free_disk_gb": 25,
-            "custom_recording_folder": ""
+            "custom_recording_folder": "",
+            "end_buffer_mins": 0,
+            "sports_buffer_mins": 30,
+            "auto_buffer_sports": True
         }
         self._save(default_data)
         return default_data
@@ -257,6 +266,33 @@ class ConfigManager:
     @custom_recording_folder.setter
     def custom_recording_folder(self, val: str):
         self.data["custom_recording_folder"] = val
+        self.save()
+
+    @property
+    def end_buffer_mins(self) -> int:
+        return self.data.get("end_buffer_mins", 0)
+
+    @end_buffer_mins.setter
+    def end_buffer_mins(self, val: int):
+        self.data["end_buffer_mins"] = val
+        self.save()
+
+    @property
+    def sports_buffer_mins(self) -> int:
+        return self.data.get("sports_buffer_mins", 30)
+
+    @sports_buffer_mins.setter
+    def sports_buffer_mins(self, val: int):
+        self.data["sports_buffer_mins"] = val
+        self.save()
+
+    @property
+    def auto_buffer_sports(self) -> bool:
+        return self.data.get("auto_buffer_sports", True)
+
+    @auto_buffer_sports.setter
+    def auto_buffer_sports(self, val: bool):
+        self.data["auto_buffer_sports"] = val
         self.save()
 
     def get_scanned_kaffeine_channels(self) -> List[Dict[str, Any]]:
