@@ -1523,13 +1523,6 @@ class MainWindow(QMainWindow):
         storage_layout.addLayout(storage_btn_row)
 
         layout.addWidget(storage_box)
-        layout.addSpacing(10)
-
-        # Save Settings Button
-        save_auto_btn = QPushButton("Save Automation & Storage Settings")
-        save_auto_btn.setStyleSheet("font-weight: bold; padding: 6px;")
-        save_auto_btn.clicked.connect(self.save_automation_settings)
-        layout.addWidget(save_auto_btn)
         layout.addSpacing(15)
 
         # Service Management Section
@@ -2010,10 +2003,6 @@ class MainWindow(QMainWindow):
 
         self.update_storage_status_ui()
         self.flash_save_indicator("Settings Saved")
-
-    def save_automation_settings(self):
-        self._auto_save_automation_settings()
-        QMessageBox.information(self, "Saved", "Automation and storage settings saved successfully.")
 
     def browse_custom_recording_folder(self):
         current = self.custom_folder_input.text().strip() or str(self.storage_mgr.get_recording_folder())
