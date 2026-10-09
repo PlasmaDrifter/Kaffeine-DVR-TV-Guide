@@ -1667,16 +1667,20 @@ class MainWindow(QMainWindow):
         detail_layout.setContentsMargins(0, 4, 0, 0)
         detail_layout.setSpacing(4)
         self.guide_detail_title = QLabel("Select a program to view details")
-        self.guide_detail_title.setStyleSheet("font-weight: bold; font-size: 14px;")
+        self.guide_detail_title.setStyleSheet("font-weight: bold; font-size: 16px;")
         self.guide_detail_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         detail_layout.addWidget(self.guide_detail_title)
 
         self.guide_detail_text = QTextEdit()
         self.guide_detail_text.setReadOnly(True)
+        font = self.guide_detail_text.font()
+        font.setPixelSize(16)
+        self.guide_detail_text.setFont(font)
+        self.guide_detail_text.setStyleSheet("font-size: 16px; line-height: 1.35; padding: 6px 10px;")
         # Size description box to fit approximately 4 lines of text
         line_height = self.guide_detail_text.fontMetrics().lineSpacing()
         doc_margin = int(self.guide_detail_text.document().documentMargin())
-        desc_height = line_height * 4 + doc_margin * 2 + 6
+        desc_height = line_height * 4 + doc_margin * 2 + 16
         self.guide_detail_text.setFixedHeight(desc_height)
         detail_layout.addWidget(self.guide_detail_text)
 
