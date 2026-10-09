@@ -1,5 +1,5 @@
 import sys
-import os
+import html
 import subprocess
 from datetime import datetime, date, timedelta
 from pathlib import Path
@@ -8,14 +8,14 @@ from typing import Optional, List, Dict, Any
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QTabWidget, QLabel, QPushButton, QTableWidget, QTableWidgetItem,
-    QLineEdit, QComboBox, QTextEdit, QHeaderView, QSplitter,
+    QLineEdit, QComboBox, QTextEdit, QHeaderView,
     QMessageBox, QDialog, QFormLayout, QSpinBox, QCheckBox,
     QProgressBar, QStatusBar, QFrame, QGroupBox, QFileDialog,
     QScrollArea, QToolButton, QSizePolicy, QAbstractSpinBox, QSlider,
     QStackedWidget, QButtonGroup, QStyledItemDelegate, QStyleOptionViewItem,
     QStyle, QListWidget, QListWidgetItem, QAbstractItemView
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QSettings, QByteArray, QEvent, QObject, QPoint, QPointF, QRect
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QSettings, QByteArray, QEvent, QObject, QPointF, QRect
 from PyQt6.QtGui import QColor, QFont, QFontMetrics, QIcon, QWheelEvent, QPainter, QPalette, QPixmap, QPen
 
 try:
@@ -3642,7 +3642,6 @@ class MainWindow(QMainWindow):
         else:
             title_color_hex = "#66bb6a"  # Green
 
-        import html
         escaped_title = html.escape(title)
         colored_title = f"<span style='color: {title_color_hex}; font-weight: bold;'>{escaped_title}</span>"
 
