@@ -1518,8 +1518,6 @@ class MainWindow(QMainWindow):
 
         layout.addLayout(filter_bar)
 
-        splitter = QSplitter(Qt.Orientation.Vertical)
-
         # Guide Views Container (Stacked: 0 = Grid View, 1 = List View)
         self.guide_stack = QStackedWidget()
 
@@ -1570,11 +1568,13 @@ class MainWindow(QMainWindow):
         self.day_nav_bar = self._create_day_nav_bar()
         guide_container_layout.addWidget(self.day_nav_bar, 0)
 
-        splitter.addWidget(guide_container)
+        layout.addWidget(guide_container, 1)
 
         # Detail Panel
         detail_widget = QWidget()
         detail_layout = QVBoxLayout(detail_widget)
+        detail_layout.setContentsMargins(0, 4, 0, 0)
+        detail_layout.setSpacing(4)
         self.guide_detail_title = QLabel("Select a program to view details")
         self.guide_detail_title.setStyleSheet("font-weight: bold; font-size: 14px;")
         self.guide_detail_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -1607,12 +1607,7 @@ class MainWindow(QMainWindow):
 
         action_bar.addStretch()
         detail_layout.addLayout(action_bar)
-        splitter.addWidget(detail_widget)
-
-        splitter.setSizes([550, 110])
-        splitter.setCollapsible(0, False)
-        splitter.setCollapsible(1, False)
-        layout.addWidget(splitter)
+        layout.addWidget(detail_widget, 0)
         return widget
 
     # ------------------ TAB 3: AUTO-RECORD RULES ------------------
