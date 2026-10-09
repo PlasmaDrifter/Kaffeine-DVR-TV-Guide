@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
     QStackedWidget, QButtonGroup, QStyledItemDelegate, QStyleOptionViewItem,
     QStyle, QListWidget, QListWidgetItem, QAbstractItemView
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QSettings, QByteArray, QEvent, QObject, QPoint, QPointF, QRect, QSize
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QSettings, QByteArray, QEvent, QObject, QPoint, QPointF, QRect, QRectF, QSize
 from PyQt6.QtGui import QColor, QFont, QFontMetrics, QIcon, QWheelEvent, QPainter, QPalette, QPixmap, QPen, QPolygon, QBrush
 
 try:
@@ -1297,9 +1297,28 @@ class MainWindow(QMainWindow):
         banner.setContentsMargins(0, 0, 0, 0)
         banner.setSpacing(0)
 
-        # Column 0: Left spacer (takes equal stretch as column 2)
-        left_spacer = QWidget()
-        banner.addWidget(left_spacer, 0, 0, Qt.AlignmentFlag.AlignLeft)
+        # Column 0: Far Left Restore Saved Window Size button
+        left_container = QWidget()
+        left_layout = QHBoxLayout(left_container)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(6)
+
+        self.header_restore_btn = QPushButton()
+        self.header_restore_btn.setIcon(self._create_restore_window_icon())
+        self.header_restore_btn.setIconSize(QSize(16, 16))
+        self.header_restore_btn.setFixedSize(28, 26)
+        self.header_restore_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.header_restore_btn.setToolTip("Restore saved window dimensions (also accessible in Settings)")
+        self.header_restore_btn.setStyleSheet(
+            "QPushButton { border: 1px solid #3d465c; border-radius: 4px; background-color: #212635; color: #c8d2df; }"
+            "QPushButton:hover { background-color: #313d56; border: 1px solid #5a80b8; }"
+            "QPushButton:pressed { background-color: #1a1e2b; }"
+        )
+        self.header_restore_btn.clicked.connect(self.restore_saved_window_size)
+        left_layout.addWidget(self.header_restore_btn)
+        left_layout.addStretch()
+
+        banner.addWidget(left_container, 0, 0, Qt.AlignmentFlag.AlignLeft)
 
         # Column 1: Middle auto-save notification indicator (guaranteed true center)
         self.save_indicator_lbl = QLabel("Changes save automatically")
@@ -2158,8 +2177,12 @@ class MainWindow(QMainWindow):
         win_size_btn_row.addWidget(self.reset_win_size_btn)
         win_size_btn_row.addStretch()
 
-        win_size_desc = QLabel("Save your preferred window size to restore automatically or snap back on demand.")
-        win_size_desc.setStyleSheet("color: #94a3b8; font-size: 13px; line-height: 1.3;")
+        win_size_desc = QLabel(
+            "• <b>Save Size:</b> Saves current dimensions to restore automatically on launch.<br>"
+            "• <b>Restore Size:</b> Immediately snaps back to your saved size (also accessible via the restore icon on the far left of the top header bar).<br>"
+            "• <b>Reset Default:</b> Reverts back to standard factory dimensions (1100 × 750)."
+        )
+        win_size_desc.setStyleSheet("color: #94a3b8; font-size: 13px; line-height: 1.4;")
 
         form.addRow("Application Window Size:", self.win_size_lbl)
         form.addRow("", win_size_btn_row)
@@ -3388,6 +3411,27 @@ class MainWindow(QMainWindow):
     def jump_guide_to_primetime(self):
         # 8:00 PM is 20:00 -> slot 40
         self._scroll_grid_to_slot(40, center=False)
+
+    @staticmethod
+    def _create_restore_window_icon() -> QIcon:
+        icon = QIcon()
+        for mode, color in [(QIcon.Mode.Normal, "#c8d2df"), (QIcon.Mode.Disabled, "#414b5d")]:
+            pix = QPixmap(18, 18)
+            pix.fill(Qt.GlobalColor.transparent)
+            p = QPainter(pix)
+            p.setRenderHint(QPainter.RenderHint.Antialiasing)
+            pen = QPen(QColor(color), 1.8)
+            p.setPen(pen)
+            # Main window rectangle
+            p.drawRoundedRect(QRectF(1.5, 4.5, 11, 11), 1.5, 1.5)
+            # Overlapping window top-right
+            p.drawLine(5, 4, 5, 2)
+            p.drawLine(5, 2, 15, 2)
+            p.drawLine(15, 2, 15, 12)
+            p.drawLine(15, 12, 13, 12)
+            p.end()
+            icon.addPixmap(pix, mode)
+        return icon
 
     @staticmethod
     def _create_nav_arrow_icon(direction: str = "left") -> QIcon:
