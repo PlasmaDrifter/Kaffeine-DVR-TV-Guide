@@ -188,3 +188,12 @@ kaffeine-dvr --watch
 ## License
 
 GPL-3.0-or-later. See LICENSE for details.
+
+---
+
+## Community & Discussions
+
+Got questions, setup ideas, or feedback?
+
+* Join our subreddit at [**r/PlasmaDrifterProjects**](https://reddit.com/r/PlasmaDrifterProjects) to discuss updates, get support, and share configurations.
+* Contact directly via email at [**plasmadrifter121@gmail.com**](mailto:plasmadrifter121@gmail.com).
