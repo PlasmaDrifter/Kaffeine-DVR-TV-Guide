@@ -1275,7 +1275,6 @@ class MainWindow(QMainWindow):
         self.tabs.setObjectName("mainTabs")
         self.tabs.addTab(self.create_recordings_tab(), "Recordings Schedule")
         self.tabs.addTab(self.create_guide_tab(), "Web TV Guide Browser")
-        self.tabs.addTab(self.create_rules_tab(), "Auto-Record Rules")
         self.tabs.addTab(self.create_settings_tab(), "Settings")
         self.tabs.addTab(self.create_help_tab(), "Help and Information")
         self.tabs.currentChanged.connect(self._on_main_tab_changed)
@@ -1377,8 +1376,9 @@ class MainWindow(QMainWindow):
         active_layout.addWidget(self.rec_table)
 
         self.recordings_subtabs.addTab(active_widget, "Active Schedule")
+        self.recordings_subtabs.addTab(self.create_rules_tab(), "Auto-Record Rules")
 
-        # ----- SUBTAB 2: History -----
+        # ----- SUBTAB 3: History -----
         history_widget = QWidget()
         history_layout = QVBoxLayout(history_widget)
 
@@ -3866,6 +3866,8 @@ class MainWindow(QMainWindow):
         self.rules_engine.add_rule(show_title, ch, buffer_mins=None)
         self.refresh_rules()
         self.tabs.setCurrentIndex(0)
+        if hasattr(self, "recordings_subtabs"):
+            self.recordings_subtabs.setCurrentIndex(1)
         self.run_rules(silent=False)
 
     # ------------------ RULES LOGIC ------------------
@@ -3900,6 +3902,8 @@ class MainWindow(QMainWindow):
                 self.rules_engine.add_rule(kw, ch, buffer_mins=rule_buf)
                 self.refresh_rules()
                 self.tabs.setCurrentIndex(0)
+                if hasattr(self, "recordings_subtabs"):
+                    self.recordings_subtabs.setCurrentIndex(1)
                 self.run_rules(silent=False)
 
     def edit_rule_dialog(self):
