@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 
 from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QTabWidget, QLabel, QPushButton, QTableWidget, QTableWidgetItem,
     QLineEdit, QComboBox, QTextEdit, QHeaderView,
     QMessageBox, QDialog, QFormLayout, QSpinBox, QCheckBox,
@@ -1291,29 +1291,32 @@ class MainWindow(QMainWindow):
         self.progress_bar.setVisible(False)
         self.status_bar.addPermanentWidget(self.progress_bar)
 
-    def create_status_banner(self) -> QHBoxLayout:
-        banner = QHBoxLayout()
+    def create_status_banner(self) -> QGridLayout:
+        banner = QGridLayout()
+        banner.setContentsMargins(0, 0, 0, 0)
+        banner.setSpacing(0)
 
-        # Left stretch to center the save indicator
-        banner.addStretch(1)
+        # Column 0: Left spacer (takes equal stretch as column 2)
+        left_spacer = QWidget()
+        banner.addWidget(left_spacer, 0, 0, Qt.AlignmentFlag.AlignLeft)
 
-        # Middle: auto-save notification indicator
+        # Column 1: Middle auto-save notification indicator (guaranteed true center)
         self.save_indicator_lbl = QLabel("Changes save automatically")
         self.save_indicator_lbl.setStyleSheet(
             "color: #8c98aa; font-size: 11px; padding: 4px 6px; background: transparent;"
         )
         self.save_indicator_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        banner.addWidget(self.save_indicator_lbl)
+        banner.addWidget(self.save_indicator_lbl, 0, 1, Qt.AlignmentFlag.AlignCenter)
 
-        # Stretch between middle indicator and far-right guide controls
-        banner.addStretch(1)
+        # Column 2: Far Right Guide status label and sync button
+        right_container = QWidget()
+        right_layout = QHBoxLayout(right_container)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(6)
 
-        # Far Right: Guide status label and sync button
         self.guide_status_lbl = QLabel("TV Guide: Checking...")
         self.guide_status_lbl.setStyleSheet("font-size: 12px; color: #a4b0c2; font-weight: 500;")
-        banner.addWidget(self.guide_status_lbl)
-
-        banner.addSpacing(6)
+        right_layout.addWidget(self.guide_status_lbl)
 
         self.sync_guide_btn = QPushButton("Sync Guide Now")
         self.sync_guide_btn.setStyleSheet(
@@ -1324,7 +1327,14 @@ class MainWindow(QMainWindow):
             "QPushButton:disabled { background-color: #1a1c26; border: 1px solid #2a3040; color: #5d6778; }"
         )
         self.sync_guide_btn.clicked.connect(self.sync_guide)
-        banner.addWidget(self.sync_guide_btn)
+        right_layout.addWidget(self.sync_guide_btn)
+
+        banner.addWidget(right_container, 0, 2, Qt.AlignmentFlag.AlignRight)
+
+        # Guarantee true horizontal centering by making col 0 and col 2 stretch equally
+        banner.setColumnStretch(0, 1)
+        banner.setColumnStretch(1, 0)
+        banner.setColumnStretch(2, 1)
 
         return banner
 
