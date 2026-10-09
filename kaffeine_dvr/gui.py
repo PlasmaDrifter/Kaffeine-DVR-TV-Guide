@@ -1343,16 +1343,17 @@ class MainWindow(QMainWindow):
         self.adjust_buffer_btn.clicked.connect(self.adjust_selected_buffer)
         ctrl_bar.addWidget(self.adjust_buffer_btn)
 
-        self.cancel_rec_btn = QPushButton("Cancel Selected Recording")
-        self.cancel_rec_btn.setStyleSheet("color: #ff5252; font-weight: bold;")
-        self.cancel_rec_btn.clicked.connect(self.cancel_selected_recording)
-        ctrl_bar.addWidget(self.cancel_rec_btn)
-
         self.protect_rec_btn = QPushButton("Protect / Keep Forever")
         self.protect_rec_btn.clicked.connect(self.toggle_protect_selected_recording)
         ctrl_bar.addWidget(self.protect_rec_btn)
 
         ctrl_bar.addStretch()
+
+        self.cancel_rec_btn = QPushButton("Cancel Selected Recording")
+        self.cancel_rec_btn.setStyleSheet("color: #ff5252; font-weight: bold;")
+        self.cancel_rec_btn.clicked.connect(self.cancel_selected_recording)
+        ctrl_bar.addWidget(self.cancel_rec_btn)
+
         active_layout.addLayout(ctrl_bar)
 
         # Active Schedule Table
@@ -3162,7 +3163,7 @@ class MainWindow(QMainWindow):
             if sel_date == today_str or sel_date is None:
                 QTimer.singleShot(60, self.jump_guide_to_now)
             else:
-                QTimer.singleShot(60, self.jump_guide_to_start)
+                QTimer.singleShot(60, self.jump_guide_to_noon)
 
     def _update_time_jump_buttons_visibility(self):
         is_grid = self.guide_stack.currentIndex() == 0
@@ -3224,6 +3225,10 @@ class MainWindow(QMainWindow):
     def jump_guide_to_start(self):
         self._scroll_grid_to_slot(0, center=False)
 
+    def jump_guide_to_noon(self):
+        # 12:00 PM (Noon) is hour 12 -> slot 24
+        self._scroll_grid_to_slot(24, center=False)
+
     def jump_guide_to_primetime(self):
         # 8:00 PM is 20:00 -> slot 40
         self._scroll_grid_to_slot(40, center=False)
@@ -3236,7 +3241,7 @@ class MainWindow(QMainWindow):
         nav_layout.setSpacing(6)
 
         arrow_style = (
-            "QPushButton { font-size: 13px; font-weight: bold; "
+            "QPushButton { font-size: 15px; font-weight: bold; "
             "border: 1px solid #303746; border-radius: 4px; background-color: #1e2330; color: #a4b0c2; }"
             "QPushButton:hover { background-color: #262e3f; border: 1px solid #455470; color: #e2e8f0; }"
             "QPushButton:disabled { background-color: #161a22; border: 1px solid #242935; color: #434a58; }"
@@ -3244,31 +3249,23 @@ class MainWindow(QMainWindow):
 
         self.day_nav_prev_btn = QPushButton("◀")
         self.day_nav_prev_btn.setToolTip("Previous week (Sun - Sat)")
-        self.day_nav_prev_btn.setFixedWidth(34)
-        self.day_nav_prev_btn.setFixedHeight(34)
+        self.day_nav_prev_btn.setFixedWidth(36)
+        self.day_nav_prev_btn.setFixedHeight(44)
         self.day_nav_prev_btn.setStyleSheet(arrow_style)
         self.day_nav_prev_btn.clicked.connect(self._on_day_nav_prev)
         nav_layout.addWidget(self.day_nav_prev_btn)
 
         # Standard upcoming unselected day
         self._day_style_unselected = (
-            "QPushButton { padding: 5px 3px; font-size: 11px; font-weight: 500; "
+            "QPushButton { padding: 4px 2px; font-size: 13px; font-weight: 500; line-height: 1.2; "
             "border: 1px solid #303746; border-radius: 4px; background-color: #1e2330; color: #a4b0c2; }"
             "QPushButton:hover { background-color: #262e3f; border: 1px solid #455470; color: #e2e8f0; }"
             "QPushButton:pressed { background-color: #161a24; }"
         )
 
-        # Past unselected day (earlier this week) - subtly dimmed
-        self._day_style_past = (
-            "QPushButton { padding: 5px 3px; font-size: 11px; font-weight: normal; "
-            "border: 1px solid #262b37; border-radius: 4px; background-color: #181c25; color: #626d7f; }"
-            "QPushButton:hover { background-color: #202633; border: 1px solid #384255; color: #8a96a8; }"
-            "QPushButton:pressed { background-color: #13161e; }"
-        )
-
         # Today's day (when NOT currently selected) - understated dark green tint & border
         self._day_style_today_unselected = (
-            "QPushButton { padding: 5px 3px; font-size: 11px; font-weight: 600; "
+            "QPushButton { padding: 4px 2px; font-size: 13px; font-weight: 600; line-height: 1.2; "
             "border: 1px solid #2e5937; border-radius: 4px; background-color: #16261b; color: #7ec788; }"
             "QPushButton:hover { background-color: #1e3324; border: 1px solid #3d7349; color: #9cdba4; }"
             "QPushButton:pressed { background-color: #111e15; }"
@@ -3276,7 +3273,7 @@ class MainWindow(QMainWindow):
 
         # Today's day (when ALSO currently selected) - subdued dark forest green with clean accent
         self._day_style_today_selected = (
-            "QPushButton { padding: 5px 3px; font-size: 11px; font-weight: 600; "
+            "QPushButton { padding: 4px 2px; font-size: 13px; font-weight: 600; line-height: 1.2; "
             "border: 1px solid #438450; border-radius: 4px; background-color: #223f2a; color: #e8f5e9; }"
             "QPushButton:hover { background-color: #2a4c33; border: 1px solid #529c62; color: #ffffff; }"
             "QPushButton:pressed { background-color: #1a3221; }"
@@ -3284,7 +3281,7 @@ class MainWindow(QMainWindow):
 
         # Selected day (when it is NOT Today) - subdued dark warm amber with soft border
         self._day_style_selected = (
-            "QPushButton { padding: 5px 3px; font-size: 11px; font-weight: 600; "
+            "QPushButton { padding: 4px 2px; font-size: 13px; font-weight: 600; line-height: 1.2; "
             "border: 1px solid #b86e28; border-radius: 4px; background-color: #3b2818; color: #ffd8a8; }"
             "QPushButton:hover { background-color: #4a3320; border: 1px solid #d48332; color: #ffe3c2; }"
             "QPushButton:pressed { background-color: #2e1f13; }"
@@ -3293,7 +3290,7 @@ class MainWindow(QMainWindow):
         self.day_nav_buttons = []
         for i in range(7):
             btn = QPushButton()
-            btn.setFixedHeight(34)
+            btn.setFixedHeight(44)
             btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             btn.clicked.connect(self._make_day_nav_handler(btn))
             nav_layout.addWidget(btn, 1)
@@ -3301,8 +3298,8 @@ class MainWindow(QMainWindow):
 
         self.day_nav_next_btn = QPushButton("▶")
         self.day_nav_next_btn.setToolTip("Next week (Sun - Sat)")
-        self.day_nav_next_btn.setFixedWidth(34)
-        self.day_nav_next_btn.setFixedHeight(34)
+        self.day_nav_next_btn.setFixedWidth(36)
+        self.day_nav_next_btn.setFixedHeight(44)
         self.day_nav_next_btn.setStyleSheet(arrow_style)
         self.day_nav_next_btn.clicked.connect(self._on_day_nav_next)
         nav_layout.addWidget(self.day_nav_next_btn)
@@ -3367,25 +3364,27 @@ class MainWindow(QMainWindow):
             btn_date = today + timedelta(days=days_ahead)
             btn_date_str = btn_date.strftime("%Y-%m-%d")
 
-            day_label = btn_date.strftime("%A, %b ") + str(btn_date.day)
-            btn.setText(day_label)
+            day_name = btn_date.strftime("%A")
+            short_date = btn_date.strftime("%b ") + str(btn_date.day)
+            btn.setText(f"{day_name}\n{short_date}")
             btn.setProperty("date_str", btn_date_str)
 
             is_today = (btn_date_str == today_str)
             is_selected = (btn_date_str == selected_date_str)
 
+            full_label = f"{day_name}, {short_date}"
             if is_today and is_selected:
                 btn.setStyleSheet(self._day_style_today_selected)
-                btn.setToolTip(f"{day_label} (Current Day - Selected)")
+                btn.setToolTip(f"{full_label} (Current Day - Selected)")
             elif is_today:
                 btn.setStyleSheet(self._day_style_today_unselected)
-                btn.setToolTip(f"{day_label} (Current Day)")
+                btn.setToolTip(f"{full_label} (Current Day)")
             elif is_selected:
                 btn.setStyleSheet(self._day_style_selected)
-                btn.setToolTip(f"{day_label} (Selected)")
+                btn.setToolTip(f"{full_label} (Selected)")
             else:
                 btn.setStyleSheet(self._day_style_unselected)
-                btn.setToolTip(day_label)
+                btn.setToolTip(full_label)
 
         if hasattr(self, "day_nav_prev_btn"):
             self.day_nav_prev_btn.setEnabled(self.day_nav_offset > 0)
@@ -3581,7 +3580,7 @@ class MainWindow(QMainWindow):
             if target_date_str == today.strftime("%Y-%m-%d"):
                 QTimer.singleShot(60, self.jump_guide_to_now)
             else:
-                QTimer.singleShot(60, self.jump_guide_to_start)
+                QTimer.singleShot(60, self.jump_guide_to_noon)
 
     def on_grid_cell_clicked(self, row: int, col: int):
         item = self.guide_grid_table.item(row, col)
