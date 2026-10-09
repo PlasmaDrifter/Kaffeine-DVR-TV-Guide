@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kaffeine-dvr"
-version = "0.7.7"
+version = "0.7.8"
 description = "Modern TV Guide browser, auto-record series rules scheduler, and safe Just-In-Time DVR daemon for Kaffeine."
 readme = "README.md"
 requires-python = ">=3.9"
