@@ -15,7 +15,7 @@ except (ImportError, ValueError):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Kaffeine DVR & Web TV Guide CLI Manager")
+    parser = argparse.ArgumentParser(description="Kaffeine DVR & TV Guide CLI Manager")
     parser.add_argument("--gui", action="store_true", help="Launch the TV Guide & DVR graphical user interface")
     parser.add_argument("--sync", action="store_true", help="Sync web TV guide cache")
     parser.add_argument("--days", type=int, default=7, help="Number of days to sync (default: 7)")

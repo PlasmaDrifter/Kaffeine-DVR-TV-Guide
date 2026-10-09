@@ -727,7 +727,7 @@ class FirstRunWelcomeDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
 
-        title_lbl = QLabel("<b>Welcome to Kaffeine DVR & Web TV Guide</b>")
+        title_lbl = QLabel("<b>Welcome to Kaffeine DVR & TV Guide</b>")
         title_lbl.setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff; background: transparent;")
         layout.addWidget(title_lbl)
 
@@ -1218,7 +1218,7 @@ def setup_dark_theme(app: Optional[QApplication]):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Kaffeine DVR & Web TV Guide")
+        self.setWindowTitle("Kaffeine DVR & TV Guide")
         self.setWindowIcon(get_app_icon())
         app_inst = QApplication.instance()
         if app_inst:
