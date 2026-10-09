@@ -2048,7 +2048,7 @@ class MainWindow(QMainWindow):
             "Minutes before show start time to auto-launch Kaffeine and arm recording timer.\n"
             "Keeping this low (e.g. 5m) prevents Kaffeine from blocking system reboots and shutdowns."
         )
-        lead_time_lbl.setStyleSheet("color: #6c757d; font-size: 11px;")
+        lead_time_lbl.setStyleSheet("color: #94a3b8; font-size: 13px; line-height: 1.3;")
         form.addRow("Just-In-Time Lead Time:", self.lead_time_spin)
         form.addRow("", lead_time_lbl)
 
@@ -2060,7 +2060,7 @@ class MainWindow(QMainWindow):
         end_buffer_lbl = QLabel(
             "Extra post-roll buffer added to the end of scheduled recordings to avoid clipping broadcast overruns."
         )
-        end_buffer_lbl.setStyleSheet("color: #6c757d; font-size: 11px;")
+        end_buffer_lbl.setStyleSheet("color: #94a3b8; font-size: 13px; line-height: 1.3;")
         form.addRow("Default End Buffer:", self.end_buffer_spin)
         form.addRow("", end_buffer_lbl)
 
@@ -2078,7 +2078,7 @@ class MainWindow(QMainWindow):
         sports_row.addWidget(self.sports_buffer_spin)
         sports_row.addStretch()
         sports_buffer_lbl = QLabel("Applies extended post-roll padding to live sporting events, games, and matches.")
-        sports_buffer_lbl.setStyleSheet("color: #6c757d; font-size: 11px;")
+        sports_buffer_lbl.setStyleSheet("color: #94a3b8; font-size: 13px; line-height: 1.3;")
         form.addRow("Sports Auto-Extend:", sports_row)
         form.addRow("", sports_buffer_lbl)
 
@@ -2089,7 +2089,7 @@ class MainWindow(QMainWindow):
         self.interval_spin.setSuffix(" seconds")
         self.interval_spin.setFixedWidth(160)
         interval_lbl = QLabel("How often the background watcher service checks the DVR queue for upcoming shows.")
-        interval_lbl.setStyleSheet("color: #6c757d; font-size: 11px;")
+        interval_lbl.setStyleSheet("color: #94a3b8; font-size: 13px; line-height: 1.3;")
         form.addRow("Watcher Polling Frequency:", self.interval_spin)
         form.addRow("", interval_lbl)
 
@@ -2099,7 +2099,7 @@ class MainWindow(QMainWindow):
         self.days_spin.setSuffix(" days")
         self.days_spin.setFixedWidth(160)
         days_lbl = QLabel("How many future days to query and cache in the local SQLite guide database.")
-        days_lbl.setStyleSheet("color: #6c757d; font-size: 11px;")
+        days_lbl.setStyleSheet("color: #94a3b8; font-size: 13px; line-height: 1.3;")
         form.addRow("Guide Cache Horizon:", self.days_spin)
         form.addRow("", days_lbl)
 
@@ -2119,7 +2119,7 @@ class MainWindow(QMainWindow):
             "• Minimize to System Tray: Starts in minimal mode (-m) and docks into the KDE tray (if enabled in Kaffeine).\n"
             "• Normal Window: Opens as an active visible window on your desktop."
         )
-        launch_mode_lbl.setStyleSheet("color: #8c98aa; font-size: 11px;")
+        launch_mode_lbl.setStyleSheet("color: #94a3b8; font-size: 13px; line-height: 1.4;")
         form.addRow("Window Launch Mode:", self.launch_mode_combo)
         form.addRow("", launch_mode_lbl)
 
@@ -2129,13 +2129,13 @@ class MainWindow(QMainWindow):
             "Sends a desktop notification via notify-send when Kaffeine is launched and armed for a scheduled show.\n"
             "The notification persists in your notification center until explicitly dismissed."
         )
-        notify_lbl.setStyleSheet("color: #6c757d; font-size: 11px;")
+        notify_lbl.setStyleSheet("color: #94a3b8; font-size: 13px; line-height: 1.3;")
         form.addRow("Notifications:", self.notify_check)
         form.addRow("", notify_lbl)
 
         # Application Window Dimensions
         self.win_size_lbl = QLabel(self._get_window_size_label_text())
-        self.win_size_lbl.setStyleSheet("color: #a0b2c6; font-size: 11px;")
+        self.win_size_lbl.setStyleSheet("color: #a0b2c6; font-size: 13px;")
         win_size_row = QHBoxLayout()
         win_size_row.addWidget(self.win_size_lbl)
         win_size_row.addSpacing(12)
@@ -2153,7 +2153,7 @@ class MainWindow(QMainWindow):
         win_size_row.addStretch()
 
         win_size_desc = QLabel("Resize the application to your preferred width and height, then click 'Save Current Window Size' to lock it in.")
-        win_size_desc.setStyleSheet("color: #6c757d; font-size: 11px;")
+        win_size_desc.setStyleSheet("color: #94a3b8; font-size: 13px; line-height: 1.3;")
         form.addRow("Application Window Size:", win_size_row)
         form.addRow("", win_size_desc)
 
@@ -2175,7 +2175,7 @@ class MainWindow(QMainWindow):
 
         # Disk space status display
         self.storage_status_lbl = QLabel("Checking storage space...")
-        self.storage_status_lbl.setStyleSheet("font-weight: bold; font-size: 12px; color: #55a84c;")
+        self.storage_status_lbl.setStyleSheet("font-weight: bold; font-size: 13px; color: #55a84c;")
         storage_layout.addWidget(self.storage_status_lbl)
 
         storage_form = QFormLayout()
@@ -2191,7 +2191,7 @@ class MainWindow(QMainWindow):
         self.retention_days_spin.setFixedWidth(160)
         self.retention_days_spin.valueChanged.connect(self._auto_save_automation_settings)
         retention_lbl = QLabel("Delete recordings older than this age. Set to 0 to disable age-based pruning.")
-        retention_lbl.setStyleSheet("color: #6c757d; font-size: 11px;")
+        retention_lbl.setStyleSheet("color: #94a3b8; font-size: 13px; line-height: 1.3;")
         storage_form.addRow("Retention Window:", self.retention_days_spin)
         storage_form.addRow("", retention_lbl)
 
@@ -2203,7 +2203,7 @@ class MainWindow(QMainWindow):
         self.min_free_spin.setFixedWidth(160)
         self.min_free_spin.valueChanged.connect(self._auto_save_automation_settings)
         free_lbl = QLabel("If free disk space drops below this limit, oldest unprotected recordings are purged first.")
-        free_lbl.setStyleSheet("color: #6c757d; font-size: 11px;")
+        free_lbl.setStyleSheet("color: #94a3b8; font-size: 13px; line-height: 1.3;")
         storage_form.addRow("Minimum Free Space:", self.min_free_spin)
         storage_form.addRow("", free_lbl)
 
@@ -2243,14 +2243,14 @@ class MainWindow(QMainWindow):
         service_layout = QVBoxLayout(service_box)
         
         self.service_status_lbl = QLabel("Checking service status...")
-        self.service_status_lbl.setStyleSheet("font-weight: bold; font-size: 12px;")
+        self.service_status_lbl.setStyleSheet("font-weight: bold; font-size: 13px;")
         service_layout.addWidget(self.service_status_lbl)
 
         svc_desc = QLabel(
             "The background daemon dispatches recordings just-in-time and synchronizes guide data periodically.\n"
             "It runs under systemd user mode and persists automatically across system reboots."
         )
-        svc_desc.setStyleSheet("color: #8c98aa; font-size: 11px;")
+        svc_desc.setStyleSheet("color: #94a3b8; font-size: 13px; line-height: 1.3;")
         service_layout.addWidget(svc_desc)
 
         svc_btn_row = QHBoxLayout()
