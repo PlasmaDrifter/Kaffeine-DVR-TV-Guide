@@ -1294,10 +1294,26 @@ class MainWindow(QMainWindow):
     def create_status_banner(self) -> QHBoxLayout:
         banner = QHBoxLayout()
 
-        # Guide status label
+        # Left stretch to center the save indicator
+        banner.addStretch(1)
+
+        # Middle: auto-save notification indicator
+        self.save_indicator_lbl = QLabel("Changes save automatically")
+        self.save_indicator_lbl.setStyleSheet(
+            "color: #8c98aa; font-size: 11px; padding: 4px 6px; background: transparent;"
+        )
+        self.save_indicator_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        banner.addWidget(self.save_indicator_lbl)
+
+        # Stretch between middle indicator and far-right guide controls
+        banner.addStretch(1)
+
+        # Far Right: Guide status label and sync button
         self.guide_status_lbl = QLabel("TV Guide: Checking...")
         self.guide_status_lbl.setStyleSheet("font-size: 12px; color: #a4b0c2; font-weight: 500;")
         banner.addWidget(self.guide_status_lbl)
+
+        banner.addSpacing(6)
 
         self.sync_guide_btn = QPushButton("Sync Guide Now")
         self.sync_guide_btn.setStyleSheet(
@@ -1310,14 +1326,6 @@ class MainWindow(QMainWindow):
         self.sync_guide_btn.clicked.connect(self.sync_guide)
         banner.addWidget(self.sync_guide_btn)
 
-        banner.addStretch()
-
-        # Upper-right corner auto-save notification indicator
-        self.save_indicator_lbl = QLabel("Changes save automatically")
-        self.save_indicator_lbl.setStyleSheet(
-            "color: #8c98aa; font-size: 11px; padding: 4px 6px; background: transparent;"
-        )
-        banner.addWidget(self.save_indicator_lbl)
         return banner
 
     # ------------------ TAB 1: RECORDINGS ------------------
