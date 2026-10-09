@@ -2146,13 +2146,18 @@ class MainWindow(QMainWindow):
         self.save_win_size_btn.clicked.connect(self.save_current_window_size)
         win_size_row.addWidget(self.save_win_size_btn)
 
+        self.restore_win_size_btn = QPushButton("Restore Saved Size")
+        self.restore_win_size_btn.setToolTip("Immediately resizes the window back to your saved dimensions without restarting the application")
+        self.restore_win_size_btn.clicked.connect(self.restore_saved_window_size)
+        win_size_row.addWidget(self.restore_win_size_btn)
+
         self.reset_win_size_btn = QPushButton("Reset to Default (1100 × 750)")
         self.reset_win_size_btn.setToolTip("Resets the saved window dimensions to standard default")
         self.reset_win_size_btn.clicked.connect(self.reset_window_size_to_default)
         win_size_row.addWidget(self.reset_win_size_btn)
         win_size_row.addStretch()
 
-        win_size_desc = QLabel("Resize the application to your preferred width and height, then click 'Save Current Window Size' to lock it in.")
+        win_size_desc = QLabel("Resize the application to your preferred width and height, then click 'Save Current Window Size' to lock it in. Click 'Restore Saved Size' anytime to snap back.")
         win_size_desc.setStyleSheet("color: #94a3b8; font-size: 13px; line-height: 1.3;")
         form.addRow("Application Window Size:", win_size_row)
         form.addRow("", win_size_desc)
@@ -2710,6 +2715,18 @@ class MainWindow(QMainWindow):
         if hasattr(self, "win_size_lbl"):
             self.win_size_lbl.setText(self._get_window_size_label_text())
         self.flash_save_indicator(f"Window Size Saved ({cur_w} × {cur_h})")
+
+    def restore_saved_window_size(self):
+        saved_w = self.settings.value("custom_window_width", type=int) if hasattr(self, "settings") else 0
+        saved_h = self.settings.value("custom_window_height", type=int) if hasattr(self, "settings") else 0
+        if saved_w and saved_h:
+            self.resize(saved_w, saved_h)
+            self.flash_save_indicator(f"Restored Saved Size ({saved_w} × {saved_h})")
+        else:
+            self.resize(1100, 750)
+            self.flash_save_indicator("Restored Default Size (1100 × 750)")
+        if hasattr(self, "win_size_lbl"):
+            self.win_size_lbl.setText(self._get_window_size_label_text())
 
     def reset_window_size_to_default(self):
         self.settings.remove("custom_window_width")
