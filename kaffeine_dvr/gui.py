@@ -1815,7 +1815,10 @@ class MainWindow(QMainWindow):
         save_pass_btn = QPushButton("Save Station IDs")
         save_pass_btn.setObjectName("primaryActionBtn")
         save_pass_btn.clicked.connect(self.save_tvpassport_settings)
-        pass_layout.addWidget(save_pass_btn)
+        pass_btn_row = QHBoxLayout()
+        pass_btn_row.addWidget(save_pass_btn)
+        pass_btn_row.addStretch()
+        pass_layout.addLayout(pass_btn_row)
         self.pass_collapsible.setContentLayout(pass_layout)
         layout.addWidget(self.pass_collapsible)
 
@@ -1844,7 +1847,10 @@ class MainWindow(QMainWindow):
         save_xml_btn = QPushButton("Save XMLTV Setting")
         save_xml_btn.setObjectName("primaryActionBtn")
         save_xml_btn.clicked.connect(self.save_xmltv_settings)
-        xml_layout.addRow(save_xml_btn)
+        xml_btn_row = QHBoxLayout()
+        xml_btn_row.addWidget(save_xml_btn)
+        xml_btn_row.addStretch()
+        xml_layout.addRow(xml_btn_row)
         self.xml_collapsible.setContentLayout(xml_layout)
         layout.addWidget(self.xml_collapsible)
 
