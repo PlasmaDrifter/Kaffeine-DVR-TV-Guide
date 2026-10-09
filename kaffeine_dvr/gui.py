@@ -2135,31 +2135,34 @@ class MainWindow(QMainWindow):
 
         # Application Window Dimensions
         self.win_size_lbl = QLabel(self._get_window_size_label_text())
-        self.win_size_lbl.setStyleSheet("color: #a0b2c6; font-size: 13px;")
-        win_size_row = QHBoxLayout()
-        win_size_row.addWidget(self.win_size_lbl)
-        win_size_row.addSpacing(12)
+        self.win_size_lbl.setStyleSheet("color: #a0b2c6; font-size: 13px; font-weight: 500;")
 
-        self.save_win_size_btn = QPushButton("Save Current Window Size")
+        win_size_btn_row = QHBoxLayout()
+        win_size_btn_row.setContentsMargins(0, 2, 0, 0)
+        win_size_btn_row.setSpacing(10)
+
+        self.save_win_size_btn = QPushButton("Save Size")
         self.save_win_size_btn.setObjectName("primaryActionBtn")
-        self.save_win_size_btn.setToolTip("Saves the current width and height of this window to restore whenever the app opens")
+        self.save_win_size_btn.setToolTip("Save current window dimensions to restore automatically on launch")
         self.save_win_size_btn.clicked.connect(self.save_current_window_size)
-        win_size_row.addWidget(self.save_win_size_btn)
+        win_size_btn_row.addWidget(self.save_win_size_btn)
 
-        self.restore_win_size_btn = QPushButton("Restore Saved Size")
-        self.restore_win_size_btn.setToolTip("Immediately resizes the window back to your saved dimensions without restarting the application")
+        self.restore_win_size_btn = QPushButton("Restore Size")
+        self.restore_win_size_btn.setToolTip("Resize back to your saved dimensions without restarting")
         self.restore_win_size_btn.clicked.connect(self.restore_saved_window_size)
-        win_size_row.addWidget(self.restore_win_size_btn)
+        win_size_btn_row.addWidget(self.restore_win_size_btn)
 
-        self.reset_win_size_btn = QPushButton("Reset to Default (1100 × 750)")
-        self.reset_win_size_btn.setToolTip("Resets the saved window dimensions to standard default")
+        self.reset_win_size_btn = QPushButton("Reset Default")
+        self.reset_win_size_btn.setToolTip("Reset window dimensions to default (1100 × 750)")
         self.reset_win_size_btn.clicked.connect(self.reset_window_size_to_default)
-        win_size_row.addWidget(self.reset_win_size_btn)
-        win_size_row.addStretch()
+        win_size_btn_row.addWidget(self.reset_win_size_btn)
+        win_size_btn_row.addStretch()
 
-        win_size_desc = QLabel("Resize the application to your preferred width and height, then click 'Save Current Window Size' to lock it in. Click 'Restore Saved Size' anytime to snap back.")
+        win_size_desc = QLabel("Save your preferred window size to restore automatically or snap back on demand.")
         win_size_desc.setStyleSheet("color: #94a3b8; font-size: 13px; line-height: 1.3;")
-        form.addRow("Application Window Size:", win_size_row)
+
+        form.addRow("Application Window Size:", self.win_size_lbl)
+        form.addRow("", win_size_btn_row)
         form.addRow("", win_size_desc)
 
         self.lead_time_spin.valueChanged.connect(self._auto_save_automation_settings)
