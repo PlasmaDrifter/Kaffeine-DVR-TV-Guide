@@ -1577,6 +1577,7 @@ class MainWindow(QMainWindow):
         detail_layout = QVBoxLayout(detail_widget)
         self.guide_detail_title = QLabel("Select a program to view details")
         self.guide_detail_title.setStyleSheet("font-weight: bold; font-size: 14px;")
+        self.guide_detail_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         detail_layout.addWidget(self.guide_detail_title)
 
         self.guide_detail_text = QTextEdit()
