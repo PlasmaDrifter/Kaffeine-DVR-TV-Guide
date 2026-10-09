@@ -1581,6 +1581,11 @@ class MainWindow(QMainWindow):
 
         self.guide_detail_text = QTextEdit()
         self.guide_detail_text.setReadOnly(True)
+        # Size description box to fit approximately 4 lines of text
+        line_height = self.guide_detail_text.fontMetrics().lineSpacing()
+        doc_margin = int(self.guide_detail_text.document().documentMargin())
+        desc_height = line_height * 4 + doc_margin * 2 + 6
+        self.guide_detail_text.setFixedHeight(desc_height)
         detail_layout.addWidget(self.guide_detail_text)
 
         action_bar = QHBoxLayout()
@@ -1603,7 +1608,9 @@ class MainWindow(QMainWindow):
         detail_layout.addLayout(action_bar)
         splitter.addWidget(detail_widget)
 
-        splitter.setSizes([450, 150])
+        splitter.setSizes([550, 110])
+        splitter.setCollapsible(0, False)
+        splitter.setCollapsible(1, False)
         layout.addWidget(splitter)
         return widget
 
@@ -3628,14 +3635,30 @@ class MainWindow(QMainWindow):
             buf_txt = f" | Buffer: +{buf_val}m" if buf_val else ""
             header_prefix = f"<span style='color: #ff5252; font-weight: bold;'>[● REC QUEUED #{qid} - {st}{buf_txt}]</span> "
 
-        header_str = f"{title}"
-        if ep:
-            header_str += f" - \"{ep}\""
-        if season and number:
-            header_str += f" (S{season:02d}E{number:02d})"
-        header_str += f" on {channel} at {start}"
+        # Color-code the show title by its category (sports=orange, news=blue, movies=red, tvshows=green)
+        cat = prog.get("_category") or classify_guide_category(prog)
+        if cat == "sports":
+            title_color_hex = "#ffa028"  # Orange
+        elif cat == "news":
+            title_color_hex = "#4fc3f7"  # Blue
+        elif cat == "movies":
+            title_color_hex = "#ff5c5c"  # Red
+        else:
+            title_color_hex = "#66bb6a"  # Green
 
-        self.guide_detail_title.setText(header_prefix + header_str)
+        import html
+        escaped_title = html.escape(title)
+        colored_title = f"<span style='color: {title_color_hex}; font-weight: bold;'>{escaped_title}</span>"
+
+        details_parts = []
+        if ep:
+            details_parts.append(f" - &quot;{html.escape(ep)}&quot;")
+        if season and number:
+            details_parts.append(f" (S{season:02d}E{number:02d})")
+        details_parts.append(f" on {html.escape(str(channel))} at {html.escape(str(start))}")
+        rest_of_header = "".join(details_parts)
+
+        self.guide_detail_title.setText(header_prefix + colored_title + rest_of_header)
         self.guide_detail_text.setText(summary)
 
         if hasattr(self, "record_guide_btn"):
