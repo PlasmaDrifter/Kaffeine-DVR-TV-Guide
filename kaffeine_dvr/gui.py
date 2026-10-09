@@ -310,6 +310,7 @@ class AdjustBufferDialog(QDialog):
         btns = QHBoxLayout()
         btns.setSpacing(10)
         self.ok_btn = QPushButton("Save Buffer")
+        self.ok_btn.setObjectName("primaryActionBtn")
         self.cancel_btn = QPushButton("Cancel")
         self.ok_btn.clicked.connect(self.accept)
         self.cancel_btn.clicked.connect(self.reject)
@@ -1709,6 +1710,7 @@ class MainWindow(QMainWindow):
         prov_layout.addWidget(self.provider_combo)
 
         save_prov_btn = QPushButton("Save Active Provider")
+        save_prov_btn.setObjectName("primaryActionBtn")
         save_prov_btn.clicked.connect(self.save_active_provider)
         prov_layout.addWidget(save_prov_btn)
         prov_layout.addStretch()
@@ -1811,6 +1813,7 @@ class MainWindow(QMainWindow):
         pass_layout.addWidget(self.passport_stations_text)
 
         save_pass_btn = QPushButton("Save Station IDs")
+        save_pass_btn.setObjectName("primaryActionBtn")
         save_pass_btn.clicked.connect(self.save_tvpassport_settings)
         pass_layout.addWidget(save_pass_btn)
         self.pass_collapsible.setContentLayout(pass_layout)
@@ -1839,6 +1842,7 @@ class MainWindow(QMainWindow):
         xml_layout.addRow("Feed Path / URL:", file_row)
 
         save_xml_btn = QPushButton("Save XMLTV Setting")
+        save_xml_btn.setObjectName("primaryActionBtn")
         save_xml_btn.clicked.connect(self.save_xmltv_settings)
         xml_layout.addRow(save_xml_btn)
         self.xml_collapsible.setContentLayout(xml_layout)
@@ -1869,6 +1873,7 @@ class MainWindow(QMainWindow):
         sd_btn_row.addWidget(verify_sd_btn)
 
         save_sd_btn = QPushButton("Save Schedules Direct Credentials")
+        save_sd_btn.setObjectName("primaryActionBtn")
         save_sd_btn.clicked.connect(self.save_sd_settings)
         sd_btn_row.addWidget(save_sd_btn)
         sd_btn_row.addStretch()
@@ -2128,6 +2133,7 @@ class MainWindow(QMainWindow):
         win_size_row.addSpacing(12)
 
         self.save_win_size_btn = QPushButton("Save Current Window Size")
+        self.save_win_size_btn.setObjectName("primaryActionBtn")
         self.save_win_size_btn.setToolTip("Saves the current width and height of this window to restore whenever the app opens")
         self.save_win_size_btn.clicked.connect(self.save_current_window_size)
         win_size_row.addWidget(self.save_win_size_btn)
