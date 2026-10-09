@@ -886,14 +886,6 @@ QLineEdit, QTextEdit, QSpinBox, QComboBox {
 QLineEdit:focus, QTextEdit:focus, QSpinBox:focus, QComboBox:focus {
     border-color: #4a8df5;
 }
-QSpinBox {
-    qproperty-buttonSymbols: NoButtons;
-}
-QSpinBox::up-button, QSpinBox::down-button {
-    width: 0px;
-    height: 0px;
-    border: none;
-}
 
 /* Buttons */
 QPushButton {
@@ -1409,6 +1401,19 @@ class MainWindow(QMainWindow):
         self.refresh_hist_btn = QPushButton("Refresh History")
         self.refresh_hist_btn.clicked.connect(self.refresh_history)
         hist_ctrl_bar.addWidget(self.refresh_hist_btn)
+
+        hist_ctrl_bar.addSpacing(10)
+        hist_limit_lbl = QLabel("Max entries to keep:")
+        hist_limit_lbl.setStyleSheet("font-size: 12px; color: #a4b0c2;")
+        hist_ctrl_bar.addWidget(hist_limit_lbl)
+
+        self.hist_max_spin = QSpinBox()
+        self.hist_max_spin.setRange(5, 500)
+        self.hist_max_spin.setSingleStep(5)
+        self.hist_max_spin.setValue(self.config_mgr.max_history_entries)
+        self.hist_max_spin.setToolTip("Maximum number of completed recording history entries to retain")
+        self.hist_max_spin.valueChanged.connect(self.on_max_history_changed)
+        hist_ctrl_bar.addWidget(self.hist_max_spin)
 
         hist_ctrl_bar.addSpacing(16)
         self.clear_hist_entry_btn = QPushButton("Clear Entry")
