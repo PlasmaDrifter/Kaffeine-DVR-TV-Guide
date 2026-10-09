@@ -1740,7 +1740,8 @@ class MainWindow(QMainWindow):
         self.health_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.health_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.health_table.verticalHeader().setVisible(False)
-        self.health_table.setMinimumHeight(175)
+        self.health_table.setFixedHeight(120)
+        self.health_table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.health_table.cellDoubleClicked.connect(lambda r, c: self.test_all_sources_health(silent=False))
         health_layout.addWidget(self.health_table)
 
@@ -2459,9 +2460,8 @@ class MainWindow(QMainWindow):
         self.health_table.resizeRowsToContents()
         total_rows_h = sum(self.health_table.rowHeight(r) for r in range(self.health_table.rowCount()))
         header_h = self.health_table.horizontalHeader().height()
-        needed_h = header_h + total_rows_h + 12
-        if needed_h > 180:
-            self.health_table.setMinimumHeight(needed_h)
+        needed_h = header_h + total_rows_h + 6
+        self.health_table.setFixedHeight(needed_h)
 
         if not silent:
             self.status_bar.showMessage("Source health check completed.", 4000)
