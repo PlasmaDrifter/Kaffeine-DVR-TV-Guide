@@ -1626,9 +1626,12 @@ class MainWindow(QMainWindow):
         self.guide_channel_combo.currentIndexChanged.connect(self.filter_guide)
         filter_bar.addWidget(self.guide_channel_combo)
 
+        filter_bar.addStretch()
+
         filter_bar.addWidget(QLabel("Search:"))
         self.guide_search_input = QLineEdit()
         self.guide_search_input.setPlaceholderText("Filter shows...")
+        self.guide_search_input.setFixedWidth(130)
         self.guide_search_input.textChanged.connect(self.filter_guide)
         filter_bar.addWidget(self.guide_search_input)
 
