@@ -2218,14 +2218,18 @@ class MainWindow(QMainWindow):
         # Custom recording folder override
         detected_folder = str(self.storage_mgr.get_recording_folder())
         folder_row = QHBoxLayout()
+        folder_row.setContentsMargins(0, 0, 0, 0)
+        folder_row.setSpacing(10)
         self.custom_folder_input = QLineEdit()
         self.custom_folder_input.setText(self.config_mgr.custom_recording_folder)
         self.custom_folder_input.setPlaceholderText(f"Auto-detected from Kaffeine: {detected_folder}")
+        self.custom_folder_input.setFixedWidth(520)
         self.custom_folder_input.textChanged.connect(self._auto_save_automation_settings)
         folder_row.addWidget(self.custom_folder_input)
         self.browse_folder_btn = QPushButton("Browse...")
         self.browse_folder_btn.clicked.connect(self.browse_custom_recording_folder)
         folder_row.addWidget(self.browse_folder_btn)
+        folder_row.addStretch()
         storage_form.addRow("Recording Folder:", folder_row)
 
         storage_layout.addLayout(storage_form)
