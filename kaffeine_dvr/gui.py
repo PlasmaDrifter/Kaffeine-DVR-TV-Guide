@@ -1224,11 +1224,16 @@ class MainWindow(QMainWindow):
             setup_dark_theme(app_inst)
 
         self.settings = QSettings("KaffeineDVR", "TVGuide")
-        geo = self.settings.value("geometry")
-        if geo and isinstance(geo, QByteArray) and not geo.isEmpty():
-            self.restoreGeometry(geo)
+        saved_w = self.settings.value("custom_window_width", type=int)
+        saved_h = self.settings.value("custom_window_height", type=int)
+        if saved_w and saved_h and saved_w >= 400 and saved_h >= 300:
+            self.resize(saved_w, saved_h)
         else:
-            self.resize(1100, 750)
+            geo = self.settings.value("geometry")
+            if geo and isinstance(geo, QByteArray) and not geo.isEmpty():
+                self.restoreGeometry(geo)
+            else:
+                self.resize(1100, 750)
 
         self.config_mgr = ConfigManager()
         self.dbus_client = KaffeineDbusClient()
@@ -2097,6 +2102,29 @@ class MainWindow(QMainWindow):
         form.addRow("Notifications:", self.notify_check)
         form.addRow("", notify_lbl)
 
+        # Application Window Dimensions
+        self.win_size_lbl = QLabel(self._get_window_size_label_text())
+        self.win_size_lbl.setStyleSheet("color: #a0b2c6; font-size: 11px;")
+        win_size_row = QHBoxLayout()
+        win_size_row.addWidget(self.win_size_lbl)
+        win_size_row.addSpacing(12)
+
+        self.save_win_size_btn = QPushButton("Save Current Window Size")
+        self.save_win_size_btn.setToolTip("Saves the current width and height of this window to restore whenever the app opens")
+        self.save_win_size_btn.clicked.connect(self.save_current_window_size)
+        win_size_row.addWidget(self.save_win_size_btn)
+
+        self.reset_win_size_btn = QPushButton("Reset to Default (1100 × 750)")
+        self.reset_win_size_btn.setToolTip("Resets the saved window dimensions to standard default")
+        self.reset_win_size_btn.clicked.connect(self.reset_window_size_to_default)
+        win_size_row.addWidget(self.reset_win_size_btn)
+        win_size_row.addStretch()
+
+        win_size_desc = QLabel("Resize the application to your preferred width and height, then click 'Save Current Window Size' to lock it in.")
+        win_size_desc.setStyleSheet("color: #6c757d; font-size: 11px;")
+        form.addRow("Application Window Size:", win_size_row)
+        form.addRow("", win_size_desc)
+
         self.lead_time_spin.valueChanged.connect(self._auto_save_automation_settings)
         self.end_buffer_spin.valueChanged.connect(self._auto_save_automation_settings)
         self.auto_buffer_sports_check.stateChanged.connect(self._auto_save_automation_settings)
@@ -2629,6 +2657,41 @@ class MainWindow(QMainWindow):
             self.save_indicator_lbl.setStyleSheet(
                 "color: #8c98aa; font-size: 11px; padding: 4px 6px; background: transparent;"
             )
+
+    def _get_window_size_label_text(self) -> str:
+        cur_w = self.width() if self.isVisible() else (self.size().width() or 1100)
+        cur_h = self.height() if self.isVisible() else (self.size().height() or 750)
+        saved_w = self.settings.value("custom_window_width", type=int) if hasattr(self, "settings") else 0
+        saved_h = self.settings.value("custom_window_height", type=int) if hasattr(self, "settings") else 0
+        if saved_w and saved_h:
+            return f"Current Size: {cur_w} × {cur_h}  (Saved: {saved_w} × {saved_h})"
+        return f"Current Size: {cur_w} × {cur_h}  (Default: 1100 × 750)"
+
+    def save_current_window_size(self):
+        cur_w = self.width()
+        cur_h = self.height()
+        self.settings.setValue("custom_window_width", cur_w)
+        self.settings.setValue("custom_window_height", cur_h)
+        self.settings.setValue("geometry", self.saveGeometry())
+        self.settings.sync()
+        if hasattr(self, "win_size_lbl"):
+            self.win_size_lbl.setText(self._get_window_size_label_text())
+        self.flash_save_indicator(f"Window Size Saved ({cur_w} × {cur_h})")
+
+    def reset_window_size_to_default(self):
+        self.settings.remove("custom_window_width")
+        self.settings.remove("custom_window_height")
+        self.settings.remove("geometry")
+        self.settings.sync()
+        self.resize(1100, 750)
+        if hasattr(self, "win_size_lbl"):
+            self.win_size_lbl.setText(self._get_window_size_label_text())
+        self.flash_save_indicator("Window Size Reset (1100 × 750)")
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, "win_size_lbl"):
+            self.win_size_lbl.setText(self._get_window_size_label_text())
 
     def _auto_save_automation_settings(self):
         """Silently persist automation and storage retention settings whenever any control is changed."""
