@@ -300,6 +300,12 @@ class TVPassportProvider:
             duration_mins = int(dur_m.group(1)) if dur_m and dur_m.group(1).isdigit() else 30
             ep_title = html.unescape(ep_m.group(1).strip()) if ep_m else ""
             desc = html.unescape(desc_m.group(1).strip()) if desc_m else ""
+
+            # If generic movie placeholder, elevate episode_title (actual film title) to show_name
+            if show_name.strip().lower() in ("movie", "feature film", "tv movie", "television movie") and ep_title:
+                show_name = ep_title
+                ep_title = ""
+
             listing_id = int(id_m.group(1)) if id_m and id_m.group(1).isdigit() else abs(hash(f"{station_id}_{start_time_raw}_{show_name}")) % 100000000
 
             ep_num_m = re.search(r'data-episodeNumber=\"([^\"]+)\"', it)
@@ -491,6 +497,11 @@ class XMLTVProvider:
             ep_elem = prog.find("sub-title")
             ep_title = ep_elem.text.strip() if (ep_elem is not None and ep_elem.text) else ""
 
+            # If generic movie placeholder, elevate sub-title to show_title
+            if show_title.strip().lower() in ("movie", "feature film", "tv movie", "television movie") and ep_title:
+                show_title = ep_title
+                ep_title = ""
+
             desc_elem = prog.find("desc")
             desc = desc_elem.text.strip() if (desc_elem is not None and desc_elem.text) else ""
 
@@ -631,6 +642,15 @@ class GuideService:
         cur.execute("CREATE INDEX IF NOT EXISTS idx_guide_airdate ON guide_programs(airdate)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_guide_channel ON guide_programs(kaffeine_channel)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_guide_title ON guide_programs(show_title)")
+
+        # Migration: Promote actual movie titles from episode_title into show_title
+        cur.execute("""
+            UPDATE guide_programs
+            SET show_title = episode_title, episode_title = ''
+            WHERE LOWER(TRIM(show_title)) IN ('movie', 'feature film', 'tv movie', 'television movie')
+              AND episode_title IS NOT NULL AND TRIM(episode_title) != ''
+        """)
+
         conn.commit()
         conn.close()
 

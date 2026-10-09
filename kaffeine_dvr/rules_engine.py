@@ -120,7 +120,13 @@ class RulesEngine:
                 start_iso = prog.get("start_iso", "")
                 duration_iso = prog.get("duration_iso", "")
                 episode_title = prog.get("episode_title") or ""
-                rec_title = f"{show_title} - {episode_title}" if episode_title else show_title
+
+                if is_sports_program(prog) and episode_title:
+                    rec_title = f"{show_title}: {episode_title}" if show_title else episode_title
+                elif episode_title:
+                    rec_title = f"{show_title} - {episode_title}"
+                else:
+                    rec_title = show_title
 
                 # Determine post-roll recording buffer
                 rule_buf = rule.get("buffer_mins")

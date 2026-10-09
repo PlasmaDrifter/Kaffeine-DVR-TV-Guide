@@ -522,21 +522,75 @@ def classify_guide_category(prog: Dict[str, Any]) -> str:
     if any(k in title_lower for k in news_kw):
         return "news"
 
-    # 3. Movies: title starts with 'Movie', or explicit film indicators
+    # 3. Movies: explicit indicators or standalone feature film heuristics
     if (
-        title_lower == "movie"
+        prog.get("_is_movie")
+        or title_lower == "movie"
         or title_lower.startswith("movie:")
         or title_lower.startswith("film:")
         or title_lower.endswith(" (movie)")
         or "feature film" in summary
         or " motion picture" in summary
+        or ("directed by" in summary or "stars as" in summary) and prog.get("runtime_mins", 0) >= 75 and not prog.get("season")
     ):
         return "movies"
-    if ("directed by" in summary or "stars as" in summary) and prog.get("runtime_mins", 0) >= 75 and not prog.get("season"):
-        return "movies"
+
+    # Standalone feature films / documentaries (>=80 mins, no season/episode, not recurring news/sports)
+    runtime = prog.get("runtime_mins") or 0
+    if runtime >= 80 and not prog.get("season") and not ep:
+        non_movie_words = [
+            "news", "today", "morning", "football", "baseball", "basketball", "soccer",
+            "hockey", "volleyball", "nascar", "pbr", "wrestling", "wwe", "voice", "dance",
+            "awards", "survivor", "amazing race", "frontline", "masters", "lens", "pov",
+            "reframed", "midsomer", "phoenix suns", "rock, pop", "mannheim", "dolly",
+            "dateline", "20/20", "saturday night live", "big noon", "to be announced"
+        ]
+        if not any(w in title_lower for w in non_movie_words):
+            return "movies"
 
     # 4. TV Shows / Series / Daytime
     return "tvshows"
+
+
+def get_program_display_titles(prog: Dict[str, Any]) -> Tuple[str, str]:
+    """
+    Returns (primary_title, secondary_subtitle) optimized for EPG grid tiles and list views.
+    - Movies: returns (Movie Title, "")
+    - Sports with Matchups (e.g. 'Ravens at Falcons'): returns (Matchup, League/Sport)
+    - Sports without Matchups: returns (League / Sport + ' (Teams TBA)', "")
+    - Standard Shows / Series: returns (Show Title, Episode Title)
+    """
+    show = (prog.get("show_title") or "").strip()
+    ep = (prog.get("episode_title") or "").strip()
+    cat = prog.get("_category") or classify_guide_category(prog)
+
+    if cat == "sports":
+        has_matchup = False
+        if ep:
+            ep_lower = ep.lower()
+            if " at " in ep_lower or " vs. " in ep_lower or " vs " in ep_lower:
+                has_matchup = True
+            elif any(k in show.lower() for k in ["football", "baseball", "basketball", "soccer", "hockey"]):
+                # If it's a known sport and has an episode title, it's typically the matchup or event
+                has_matchup = True
+
+        if has_matchup:
+            # Primary is the specific matchup, secondary is the sport / league
+            return ep, show
+        elif not ep:
+            # Broadcast does not list specific matchup (e.g. NFL Football on Fox)
+            show_lower = show.lower()
+            if show_lower in ("nfl football", "college football", "mlb baseball", "nba basketball", "nhl hockey"):
+                return f"{show} (Teams TBA)", ""
+            return show, ""
+
+    elif cat == "movies":
+        # Movie title is already in show_title; don't redundantly display subtitle if empty or 'Movie'
+        if ep.lower() in ("movie", "feature film", "tv movie", "television movie"):
+            return show, ""
+        return show, ep
+
+    return show, ep
 
 
 class ProgramTileDelegate(QStyledItemDelegate):
@@ -618,11 +672,10 @@ class ProgramTileDelegate(QStyledItemDelegate):
         else:
             title_color = QColor("#66bb6a")  # Vibrant Green
 
-        show_title = prog.get("show_title", "")
+        primary_title, secondary_sub = get_program_display_titles(prog)
         time_range = prog.get("_time_range", "")
-        ep_title = prog.get("episode_title", "")
 
-        # Line 1: Show Title (bold, color-coded)
+        # Line 1: Primary Title (bold, color-coded)
         font_title = QFont(option.font)
         font_title.setBold(True)
         font_title.setPointSize(10)
@@ -631,11 +684,11 @@ class ProgramTileDelegate(QStyledItemDelegate):
 
         fm_title = painter.fontMetrics()
         inner_width_title = max(10, inner_width - badge_reserved_w)
-        elided_title = fm_title.elidedText(show_title, Qt.TextElideMode.ElideRight, inner_width_title)
+        elided_title = fm_title.elidedText(primary_title, Qt.TextElideMode.ElideRight, inner_width_title)
         line1_rect = QRect(rect.left() + pad_left, rect.top() + pad_top, inner_width_title, fm_title.height())
         painter.drawText(line1_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, elided_title)
 
-        # Line 2: Time Range & Episode Title (crisply aligned with exact same pad_left margin)
+        # Line 2: Time Range & Subtitle (crisply aligned with exact same pad_left margin)
         font_sub = QFont(option.font)
         font_sub.setBold(False)
         font_sub.setPointSize(9)
@@ -643,7 +696,7 @@ class ProgramTileDelegate(QStyledItemDelegate):
         painter.setPen(QColor("#a4b0c2"))
 
         fm_sub = painter.fontMetrics()
-        subtext = f"{time_range} • {ep_title}" if ep_title else time_range
+        subtext = f"{time_range} • {secondary_sub}" if secondary_sub else time_range
         elided_sub = fm_sub.elidedText(subtext, Qt.TextElideMode.ElideRight, inner_width)
         line2_rect = QRect(rect.left() + pad_left, rect.top() + pad_top + fm_title.height() + 4, inner_width, fm_sub.height())
         painter.drawText(line2_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, elided_sub)
@@ -3691,8 +3744,10 @@ class MainWindow(QMainWindow):
 
             self.guide_table.setItem(row, 1, QTableWidgetItem(p.get("start_time_local", "")))
             self.guide_table.setItem(row, 2, QTableWidgetItem(p.get("kaffeine_channel", "")))
-            self.guide_table.setItem(row, 3, QTableWidgetItem(p.get("show_title", "")))
-            self.guide_table.setItem(row, 4, QTableWidgetItem(p.get("episode_title", "")))
+
+            disp_title, disp_sub = get_program_display_titles(p)
+            self.guide_table.setItem(row, 3, QTableWidgetItem(disp_title))
+            self.guide_table.setItem(row, 4, QTableWidgetItem(disp_sub))
             self.guide_table.setItem(row, 5, QTableWidgetItem(p.get("duration_iso", "")))
 
     def _populate_grid_guide(self, programs: List[Dict[str, Any]], airdate: Optional[str], keep_scroll: bool = False):
@@ -3890,12 +3945,16 @@ class MainWindow(QMainWindow):
         else:
             title_color_hex = "#66bb6a"  # Green
 
-        escaped_title = html.escape(title)
+        primary_title, secondary_sub = get_program_display_titles(prog)
+        escaped_title = html.escape(primary_title)
         colored_title = f"<span style='color: {title_color_hex}; font-weight: bold;'>{escaped_title}</span>"
 
         details_parts = []
-        if ep:
-            details_parts.append(f" - &quot;{html.escape(ep)}&quot;")
+        if cat == "sports" and secondary_sub:
+            details_parts.append(f" ({html.escape(secondary_sub)})")
+        elif cat != "movies" and secondary_sub and secondary_sub != primary_title:
+            details_parts.append(f" - &quot;{html.escape(secondary_sub)}&quot;")
+
         if season and number:
             details_parts.append(f" (S{season:02d}E{number:02d})")
         details_parts.append(f" on {html.escape(str(channel))} at {html.escape(str(start))}")
@@ -3987,7 +4046,14 @@ class MainWindow(QMainWindow):
         duration_iso = prog.get("duration_iso", "")
         show = prog.get("show_title", "")
         ep = prog.get("episode_title", "")
-        rec_title = f"{show} - {ep}" if ep else show
+
+        cat = prog.get("_category") or classify_guide_category(prog)
+        if cat == "movies":
+            rec_title = show
+        elif cat == "sports" and ep:
+            rec_title = f"{show}: {ep}" if show else ep
+        else:
+            rec_title = f"{show} - {ep}" if ep else show
 
         active_map = self.queue_mgr.get_active_scheduled_map()
         ch_key = (channel or "").strip().lower()
