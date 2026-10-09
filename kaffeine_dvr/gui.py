@@ -1348,8 +1348,8 @@ class MainWindow(QMainWindow):
         # Main Tabs
         self.tabs = QTabWidget()
         self.tabs.setObjectName("mainTabs")
-        self.tabs.addTab(self.create_recordings_tab(), "Recordings Schedule")
         self.tabs.addTab(self.create_guide_tab(), "Web TV Guide Browser")
+        self.tabs.addTab(self.create_recordings_tab(), "Recordings Schedule")
         self.tabs.addTab(self.create_settings_tab(), "Settings")
         self.tabs.addTab(self.create_help_tab(), "Help and Information")
         self.tabs.currentChanged.connect(self._on_main_tab_changed)
@@ -3433,8 +3433,6 @@ class MainWindow(QMainWindow):
 
     def _on_main_tab_changed(self, index: int):
         if index == 0:
-            self._adjust_table_columns()
-        elif index == 1:
             self.refresh_date_dropdown()
             sel_date = self.guide_date_combo.currentData()
             today_str = date.today().strftime("%Y-%m-%d")
@@ -3442,6 +3440,8 @@ class MainWindow(QMainWindow):
                 QTimer.singleShot(60, self.jump_guide_to_now)
             else:
                 QTimer.singleShot(60, self.jump_guide_to_noon)
+        elif index == 1:
+            self._adjust_table_columns()
 
     def _update_time_jump_buttons_visibility(self):
         is_grid = self.guide_stack.currentIndex() == 0
@@ -4192,7 +4192,7 @@ class MainWindow(QMainWindow):
         ch = prog.get("kaffeine_channel", "All")
         self.rules_engine.add_rule(show_title, ch, buffer_mins=None)
         self.refresh_rules()
-        self.tabs.setCurrentIndex(0)
+        self.tabs.setCurrentIndex(1)
         if hasattr(self, "recordings_subtabs"):
             self.recordings_subtabs.setCurrentIndex(1)
         self.run_rules(silent=False)
@@ -4228,7 +4228,7 @@ class MainWindow(QMainWindow):
             if kw:
                 self.rules_engine.add_rule(kw, ch, buffer_mins=rule_buf)
                 self.refresh_rules()
-                self.tabs.setCurrentIndex(0)
+                self.tabs.setCurrentIndex(1)
                 if hasattr(self, "recordings_subtabs"):
                     self.recordings_subtabs.setCurrentIndex(1)
                 self.run_rules(silent=False)
