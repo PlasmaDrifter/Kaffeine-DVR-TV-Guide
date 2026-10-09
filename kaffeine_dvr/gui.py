@@ -15,8 +15,8 @@ from PyQt6.QtWidgets import (
     QStackedWidget, QButtonGroup, QStyledItemDelegate, QStyleOptionViewItem,
     QStyle, QListWidget, QListWidgetItem, QAbstractItemView
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QSettings, QByteArray, QEvent, QObject, QPointF, QRect
-from PyQt6.QtGui import QColor, QFont, QFontMetrics, QIcon, QWheelEvent, QPainter, QPalette, QPixmap, QPen
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QSettings, QByteArray, QEvent, QObject, QPoint, QPointF, QRect, QSize
+from PyQt6.QtGui import QColor, QFont, QFontMetrics, QIcon, QWheelEvent, QPainter, QPalette, QPixmap, QPen, QPolygon, QBrush
 
 try:
     from .config import ConfigManager, DEFAULT_CHANNEL_MAP
@@ -3357,6 +3357,30 @@ class MainWindow(QMainWindow):
         # 8:00 PM is 20:00 -> slot 40
         self._scroll_grid_to_slot(40, center=False)
 
+    @staticmethod
+    def _create_nav_arrow_icon(direction: str = "left") -> QIcon:
+        icon = QIcon()
+        # Create crisp pixmaps for Normal and Disabled states
+        states = [
+            (QIcon.Mode.Normal, "#c5d1de"),
+            (QIcon.Mode.Disabled, "#414b5d"),
+        ]
+        for mode, color in states:
+            pix = QPixmap(24, 24)
+            pix.fill(Qt.GlobalColor.transparent)
+            p = QPainter(pix)
+            p.setRenderHint(QPainter.RenderHint.Antialiasing)
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QBrush(QColor(color)))
+            if direction == "left":
+                pts = [QPoint(15, 6), QPoint(7, 12), QPoint(15, 18)]
+            else:
+                pts = [QPoint(9, 6), QPoint(17, 12), QPoint(9, 18)]
+            p.drawPolygon(QPolygon(pts))
+            p.end()
+            icon.addPixmap(pix, mode)
+        return icon
+
     def _create_day_nav_bar(self) -> QWidget:
         container = QWidget()
         container.setObjectName("dayNavBar")
@@ -3365,13 +3389,17 @@ class MainWindow(QMainWindow):
         nav_layout.setSpacing(6)
 
         arrow_style = (
-            "QPushButton { font-size: 15px; font-weight: bold; "
-            "border: 1px solid #303746; border-radius: 4px; background-color: #1e2330; color: #a4b0c2; }"
-            "QPushButton:hover { background-color: #262e3f; border: 1px solid #455470; color: #e2e8f0; }"
-            "QPushButton:disabled { background-color: #161a22; border: 1px solid #242935; color: #434a58; }"
+            "QPushButton { "
+            "border: 1px solid #303746; border-radius: 4px; background-color: #1e2330; }"
+            "QPushButton:hover { background-color: #262e3f; border: 1px solid #455470; }"
+            "QPushButton:pressed { background-color: #161a24; }"
+            "QPushButton:disabled { background-color: #161a22; border: 1px solid #242935; }"
         )
 
-        self.day_nav_prev_btn = QPushButton("◀")
+        self.day_nav_prev_btn = QPushButton()
+        self.day_nav_prev_btn.setIcon(self._create_nav_arrow_icon("left"))
+        self.day_nav_prev_btn.setIconSize(QSize(20, 20))
+        self.day_nav_prev_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.day_nav_prev_btn.setToolTip("Previous week (Sun - Sat)")
         self.day_nav_prev_btn.setFixedWidth(36)
         self.day_nav_prev_btn.setFixedHeight(44)
@@ -3416,11 +3444,15 @@ class MainWindow(QMainWindow):
             btn = QPushButton()
             btn.setFixedHeight(44)
             btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
             btn.clicked.connect(self._make_day_nav_handler(btn))
             nav_layout.addWidget(btn, 1)
             self.day_nav_buttons.append(btn)
 
-        self.day_nav_next_btn = QPushButton("▶")
+        self.day_nav_next_btn = QPushButton()
+        self.day_nav_next_btn.setIcon(self._create_nav_arrow_icon("right"))
+        self.day_nav_next_btn.setIconSize(QSize(20, 20))
+        self.day_nav_next_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.day_nav_next_btn.setToolTip("Next week (Sun - Sat)")
         self.day_nav_next_btn.setFixedWidth(36)
         self.day_nav_next_btn.setFixedHeight(44)
@@ -3449,12 +3481,33 @@ class MainWindow(QMainWindow):
             self.filter_guide()
 
     def _on_day_nav_prev(self):
-        self.day_nav_offset = max(0, getattr(self, "day_nav_offset", 0) - 7)
+        new_offset = max(0, getattr(self, "day_nav_offset", 0) - 7)
+        if new_offset == getattr(self, "day_nav_offset", 0):
+            return
+        self.day_nav_offset = new_offset
         self._update_day_nav_bar(sync_week_with_selection=False)
+        target_btn = None
+        if new_offset == 0:
+            today_str = date.today().strftime("%Y-%m-%d")
+            for btn in self.day_nav_buttons:
+                if btn.property("date_str") == today_str:
+                    target_btn = btn
+                    break
+        if not target_btn and self.day_nav_buttons:
+            target_btn = self.day_nav_buttons[0]
+        if target_btn and target_btn.property("date_str"):
+            self._on_day_nav_clicked(target_btn.property("date_str"))
 
     def _on_day_nav_next(self):
-        self.day_nav_offset = min(7, getattr(self, "day_nav_offset", 0) + 7)
+        new_offset = min(7, getattr(self, "day_nav_offset", 0) + 7)
+        if new_offset == getattr(self, "day_nav_offset", 0):
+            return
+        self.day_nav_offset = new_offset
         self._update_day_nav_bar(sync_week_with_selection=False)
+        if self.day_nav_buttons:
+            first_btn = self.day_nav_buttons[0]
+            if first_btn.property("date_str"):
+                self._on_day_nav_clicked(first_btn.property("date_str"))
 
     def _update_day_nav_bar(self, sync_week_with_selection: bool = False):
         if not hasattr(self, "day_nav_buttons") or not self.day_nav_buttons:
@@ -3470,13 +3523,12 @@ class MainWindow(QMainWindow):
 
         # If sync_week_with_selection is requested (e.g. when selected from dropdown),
         # adjust offset to display the week containing the selected date.
+        sunday_of_current_week = today - timedelta(days=today_idx)
         if sync_week_with_selection and selected_date_str:
             try:
                 sel_date = datetime.strptime(selected_date_str, "%Y-%m-%d").date()
-                days_ahead = (sel_date - today).days
-                day_of_week_idx = (sel_date.weekday() + 1) % 7
-                nominal_offset0 = (day_of_week_idx - today_idx) % 7
-                if days_ahead >= nominal_offset0 + 7:
+                days_from_sunday = (sel_date - sunday_of_current_week).days
+                if days_from_sunday >= 7:
                     self.day_nav_offset = 7
                 else:
                     self.day_nav_offset = 0
@@ -3484,8 +3536,7 @@ class MainWindow(QMainWindow):
                 pass
 
         for i, btn in enumerate(self.day_nav_buttons):
-            days_ahead = (i - today_idx) % 7 + self.day_nav_offset
-            btn_date = today + timedelta(days=days_ahead)
+            btn_date = sunday_of_current_week + timedelta(days=self.day_nav_offset + i)
             btn_date_str = btn_date.strftime("%Y-%m-%d")
 
             day_name = btn_date.strftime("%A")
