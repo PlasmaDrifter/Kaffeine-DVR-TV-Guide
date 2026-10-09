@@ -1584,9 +1584,34 @@ class MainWindow(QMainWindow):
         filter_bar.addWidget(QLabel("View:"))
         filter_bar.addWidget(self.grid_view_btn)
         filter_bar.addWidget(self.list_view_btn)
-        filter_bar.addSpacing(12)
+        filter_bar.addSpacing(14)
 
-        # Quick Time Jump Controls (useful in Grid View)
+        # Date & Channel Dropdowns immediately to the right of List View
+        filter_bar.addWidget(QLabel("Date:"))
+        self.guide_date_combo = QComboBox()
+        self.guide_date_combo.addItem("All Upcoming", None)
+        today = date.today()
+        for i in range(14):
+            d = today + timedelta(days=i)
+            label = "Today" if i == 0 else ("Tomorrow" if i == 1 else d.strftime("%a, %b %d"))
+            self.guide_date_combo.addItem(label, d.strftime("%Y-%m-%d"))
+        self.guide_date_combo.setCurrentIndex(1)
+        self.guide_date_combo.currentIndexChanged.connect(self.filter_guide)
+        filter_bar.addWidget(self.guide_date_combo)
+        filter_bar.addSpacing(6)
+
+        filter_bar.addWidget(QLabel("Channel:"))
+        self.guide_channel_combo = QComboBox()
+        self.guide_channel_combo.addItem("All")
+        channels = self.config_mgr.get_ordered_channels()
+        self.guide_channel_combo.addItems(channels)
+        self.guide_channel_combo.currentIndexChanged.connect(self.filter_guide)
+        filter_bar.addWidget(self.guide_channel_combo)
+
+        # Dynamic stretch before Jump and Prime Time buttons
+        filter_bar.addStretch(1)
+
+        # Quick Time Jump Controls centrally between Channel dropdown and Search box
         jump_btn_style = (
             "QPushButton { padding: 4px 10px; font-size: 11px; font-weight: 500; "
             "border: 1px solid #3d465c; border-radius: 4px; background-color: #212635; color: #c8d2df; }"
@@ -1604,30 +1629,11 @@ class MainWindow(QMainWindow):
         self.jump_prime_btn.setStyleSheet(jump_btn_style)
         self.jump_prime_btn.clicked.connect(self.jump_guide_to_primetime)
         filter_bar.addWidget(self.jump_prime_btn)
-        filter_bar.addSpacing(14)
 
-        filter_bar.addWidget(QLabel("Date:"))
-        self.guide_date_combo = QComboBox()
-        self.guide_date_combo.addItem("All Upcoming", None)
-        today = date.today()
-        for i in range(14):
-            d = today + timedelta(days=i)
-            label = "Today" if i == 0 else ("Tomorrow" if i == 1 else d.strftime("%a, %b %d"))
-            self.guide_date_combo.addItem(label, d.strftime("%Y-%m-%d"))
-        self.guide_date_combo.setCurrentIndex(1)
-        self.guide_date_combo.currentIndexChanged.connect(self.filter_guide)
-        filter_bar.addWidget(self.guide_date_combo)
+        # Dynamic stretch after Jump and Prime Time buttons
+        filter_bar.addStretch(1)
 
-        filter_bar.addWidget(QLabel("Channel:"))
-        self.guide_channel_combo = QComboBox()
-        self.guide_channel_combo.addItem("All")
-        channels = self.config_mgr.get_ordered_channels()
-        self.guide_channel_combo.addItems(channels)
-        self.guide_channel_combo.currentIndexChanged.connect(self.filter_guide)
-        filter_bar.addWidget(self.guide_channel_combo)
-
-        filter_bar.addStretch()
-
+        # Search box anchored to the far right
         filter_bar.addWidget(QLabel("Search:"))
         self.guide_search_input = QLineEdit()
         self.guide_search_input.setPlaceholderText("Filter shows...")
