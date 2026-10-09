@@ -1383,12 +1383,8 @@ class MainWindow(QMainWindow):
         self.rec_table = QTableWidget()
         self.rec_table.setColumnCount(6)
         self.rec_table.setHorizontalHeaderLabels(["Title", "Schedule", "Channel", "Duration", "Status", "Retain"])
-        self.rec_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        self.rec_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        self.rec_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        self.rec_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        self.rec_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
-        self.rec_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+        for i in range(6):
+            self.rec_table.horizontalHeader().setSectionResizeMode(i, QHeaderView.ResizeMode.Interactive)
         self.rec_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.rec_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.rec_table.itemDoubleClicked.connect(self._on_rec_table_double_clicked)
@@ -1438,15 +1434,14 @@ class MainWindow(QMainWindow):
         self.history_table = QTableWidget()
         self.history_table.setColumnCount(4)
         self.history_table.setHorizontalHeaderLabels(["Title", "Date / Time", "Channel", "Runtime"])
-        self.history_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        self.history_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        self.history_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        self.history_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        for i in range(4):
+            self.history_table.horizontalHeader().setSectionResizeMode(i, QHeaderView.ResizeMode.Interactive)
         self.history_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.history_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         history_layout.addWidget(self.history_table)
 
         self.recordings_subtabs.addTab(history_widget, "History")
+        self.recordings_subtabs.currentChanged.connect(lambda: self._adjust_table_columns())
 
         layout.addWidget(self.recordings_subtabs)
         return widget
@@ -2722,6 +2717,37 @@ class MainWindow(QMainWindow):
         super().resizeEvent(event)
         if hasattr(self, "win_size_lbl"):
             self.win_size_lbl.setText(self._get_window_size_label_text())
+        self._adjust_table_columns()
+
+    def _adjust_table_columns(self):
+        """Dynamically distributes column widths based on available window width."""
+        # 1. Active Schedule Table
+        if hasattr(self, "rec_table"):
+            rec_w = self.rec_table.viewport().width()
+            if rec_w > 100:
+                # Title, Schedule, Channel, Duration, Status, Retain
+                base_widths = [360, 140, 80, 130, 220, 70]
+                shares = [0.38, 0.16, 0.06, 0.12, 0.22, 0.06]
+                extra = max(0, rec_w - sum(base_widths))
+                final_widths = [b + int(extra * s) for b, s in zip(base_widths, shares)]
+                final_widths[0] += rec_w - sum(final_widths)
+                h = self.rec_table.horizontalHeader()
+                for i, fw in enumerate(final_widths):
+                    h.resizeSection(i, fw)
+
+        # 2. History Table
+        if hasattr(self, "history_table"):
+            hist_w = self.history_table.viewport().width()
+            if hist_w > 100:
+                # Title, Date / Time, Channel, Runtime
+                base_widths = [450, 220, 120, 130]
+                shares = [0.45, 0.25, 0.15, 0.15]
+                extra = max(0, hist_w - sum(base_widths))
+                final_widths = [b + int(extra * s) for b, s in zip(base_widths, shares)]
+                final_widths[0] += hist_w - sum(final_widths)
+                h = self.history_table.horizontalHeader()
+                for i, fw in enumerate(final_widths):
+                    h.resizeSection(i, fw)
 
     def _auto_save_automation_settings(self):
         """Silently persist automation and storage retention settings whenever any control is changed."""
@@ -3124,6 +3150,8 @@ class MainWindow(QMainWindow):
             self.history_table.setItem(row, 1, dt_item)
             self.history_table.setItem(row, 2, chan_item)
             self.history_table.setItem(row, 3, dur_item)
+
+        self._adjust_table_columns()
 
     def on_max_history_changed(self, val: int):
         self.config_mgr.max_history_entries = val
