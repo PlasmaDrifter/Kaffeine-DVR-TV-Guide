@@ -477,6 +477,27 @@ class NoWheelEventFilter(QObject):
         return super().eventFilter(obj, event)
 
 
+class TableViewportResizeFilter(QObject):
+    """
+    Listens for resize events on table viewports to dynamically recalculate
+    and stretch column widths to match the available table geometry.
+    """
+    def __init__(self, callback, parent=None):
+        super().__init__(parent)
+        self.callback = callback
+        self._busy = False
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.Resize:
+            if not self._busy:
+                self._busy = True
+                try:
+                    self.callback()
+                finally:
+                    self._busy = False
+        return super().eventFilter(obj, event)
+
+
 def classify_guide_category(prog: Dict[str, Any]) -> str:
     """
     Classifies a program into 'sports', 'news', 'movies', or 'tvshows'.
@@ -1461,6 +1482,8 @@ class MainWindow(QMainWindow):
         self.rec_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.rec_table.itemDoubleClicked.connect(self._on_rec_table_double_clicked)
         active_layout.addWidget(self.rec_table)
+        self.rec_table_resize_filter = TableViewportResizeFilter(self._adjust_table_columns, self)
+        self.rec_table.viewport().installEventFilter(self.rec_table_resize_filter)
 
         self.recordings_subtabs.addTab(active_widget, "Active Schedule")
         self.recordings_subtabs.addTab(self.create_rules_tab(), "Auto-Record Rules")
@@ -1511,6 +1534,8 @@ class MainWindow(QMainWindow):
         self.history_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.history_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         history_layout.addWidget(self.history_table)
+        self.history_table_resize_filter = TableViewportResizeFilter(self._adjust_table_columns, self)
+        self.history_table.viewport().installEventFilter(self.history_table_resize_filter)
 
         self.recordings_subtabs.addTab(history_widget, "History")
         self.recordings_subtabs.currentChanged.connect(lambda: self._adjust_table_columns())
@@ -2825,6 +2850,11 @@ class MainWindow(QMainWindow):
             self.win_size_lbl.setText(self._get_window_size_label_text())
         self.flash_save_indicator("Window Size Reset (1100 × 750)")
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        QTimer.singleShot(0, self._adjust_table_columns)
+        QTimer.singleShot(100, self._adjust_table_columns)
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if hasattr(self, "win_size_lbl"):
@@ -2832,19 +2862,20 @@ class MainWindow(QMainWindow):
         self._adjust_table_columns()
 
     def _adjust_table_columns(self):
-        """Dynamically distributes column widths based on available window width."""
+        """Dynamically distributes column widths proportionally based on available table viewport width."""
         # 1. Active Schedule Table
         if hasattr(self, "rec_table"):
             rec_w = self.rec_table.viewport().width()
             if rec_w > 100:
                 # Title, Schedule, Channel, Duration, Status, Retain
-                base_widths = [360, 140, 80, 130, 220, 70]
-                shares = [0.38, 0.16, 0.06, 0.12, 0.22, 0.06]
-                extra = max(0, rec_w - sum(base_widths))
-                final_widths = [b + int(extra * s) for b, s in zip(base_widths, shares)]
-                final_widths[0] += rec_w - sum(final_widths)
+                min_widths = [200, 130, 65, 115, 170, 55]
+                shares = [0.36, 0.17, 0.08, 0.13, 0.20, 0.06]
+                allocated = [max(mw, int(rec_w * s)) for mw, s in zip(min_widths, shares)]
+                diff = rec_w - sum(allocated)
+                if diff > 0:
+                    allocated[0] += diff
                 h = self.rec_table.horizontalHeader()
-                for i, fw in enumerate(final_widths):
+                for i, fw in enumerate(allocated):
                     h.resizeSection(i, fw)
 
         # 2. History Table
@@ -2852,13 +2883,14 @@ class MainWindow(QMainWindow):
             hist_w = self.history_table.viewport().width()
             if hist_w > 100:
                 # Title, Date / Time, Channel, Runtime
-                base_widths = [450, 220, 120, 130]
-                shares = [0.45, 0.25, 0.15, 0.15]
-                extra = max(0, hist_w - sum(base_widths))
-                final_widths = [b + int(extra * s) for b, s in zip(base_widths, shares)]
-                final_widths[0] += hist_w - sum(final_widths)
+                min_widths = [220, 160, 80, 90]
+                shares = [0.44, 0.26, 0.15, 0.15]
+                allocated = [max(mw, int(hist_w * s)) for mw, s in zip(min_widths, shares)]
+                diff = hist_w - sum(allocated)
+                if diff > 0:
+                    allocated[0] += diff
                 h = self.history_table.horizontalHeader()
-                for i, fw in enumerate(final_widths):
+                for i, fw in enumerate(allocated):
                     h.resizeSection(i, fw)
 
     def _auto_save_automation_settings(self):
@@ -3391,8 +3423,9 @@ class MainWindow(QMainWindow):
                 QMessageBox.critical(self, "Scheduling Error", str(e))
 
     def _on_main_tab_changed(self, index: int):
-        # When switching to the TV Guide Browser tab (index 1)
-        if index == 1:
+        if index == 0:
+            self._adjust_table_columns()
+        elif index == 1:
             self.refresh_date_dropdown()
             sel_date = self.guide_date_combo.currentData()
             today_str = date.today().strftime("%Y-%m-%d")
