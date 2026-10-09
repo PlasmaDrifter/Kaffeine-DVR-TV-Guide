@@ -2043,6 +2043,7 @@ class MainWindow(QMainWindow):
         self.lead_time_spin.setRange(1, 60)
         self.lead_time_spin.setValue(self.config_mgr.lead_time_mins)
         self.lead_time_spin.setSuffix(" minutes")
+        self.lead_time_spin.setFixedWidth(160)
         lead_time_lbl = QLabel(
             "Minutes before show start time to auto-launch Kaffeine and arm recording timer.\n"
             "Keeping this low (e.g. 5m) prevents Kaffeine from blocking system reboots and shutdowns."
@@ -2055,6 +2056,7 @@ class MainWindow(QMainWindow):
         self.end_buffer_spin.setRange(0, 180)
         self.end_buffer_spin.setValue(self.config_mgr.end_buffer_mins)
         self.end_buffer_spin.setSuffix(" minutes")
+        self.end_buffer_spin.setFixedWidth(160)
         end_buffer_lbl = QLabel(
             "Extra post-roll buffer added to the end of scheduled recordings to avoid clipping broadcast overruns."
         )
@@ -2068,6 +2070,7 @@ class MainWindow(QMainWindow):
         self.sports_buffer_spin.setRange(0, 180)
         self.sports_buffer_spin.setValue(self.config_mgr.sports_buffer_mins)
         self.sports_buffer_spin.setSuffix(" minutes")
+        self.sports_buffer_spin.setFixedWidth(140)
         sports_row = QHBoxLayout()
         sports_row.addWidget(self.auto_buffer_sports_check)
         sports_row.addSpacing(15)
@@ -2084,6 +2087,7 @@ class MainWindow(QMainWindow):
         self.interval_spin.setSingleStep(30)
         self.interval_spin.setValue(self.config_mgr.watcher_interval_seconds)
         self.interval_spin.setSuffix(" seconds")
+        self.interval_spin.setFixedWidth(160)
         interval_lbl = QLabel("How often the background watcher service checks the DVR queue for upcoming shows.")
         interval_lbl.setStyleSheet("color: #6c757d; font-size: 11px;")
         form.addRow("Watcher Polling Frequency:", self.interval_spin)
@@ -2093,6 +2097,7 @@ class MainWindow(QMainWindow):
         self.days_spin.setRange(1, 14)
         self.days_spin.setValue(self.config_mgr.guide_days_ahead)
         self.days_spin.setSuffix(" days")
+        self.days_spin.setFixedWidth(160)
         days_lbl = QLabel("How many future days to query and cache in the local SQLite guide database.")
         days_lbl.setStyleSheet("color: #6c757d; font-size: 11px;")
         form.addRow("Guide Cache Horizon:", self.days_spin)
@@ -2102,6 +2107,7 @@ class MainWindow(QMainWindow):
         self.launch_mode_combo.addItem("Minimized to Taskbar (Panel)", "taskbar")
         self.launch_mode_combo.addItem("Minimize to System Tray (-m minimal mode)", "tray")
         self.launch_mode_combo.addItem("Normal Window (Visible on desktop)", "normal")
+        self.launch_mode_combo.setFixedWidth(340)
         cur_mode = self.config_mgr.launch_mode
         mode_idx = self.launch_mode_combo.findData(cur_mode)
         if mode_idx >= 0:
@@ -2182,6 +2188,7 @@ class MainWindow(QMainWindow):
         self.retention_days_spin.setRange(0, 365)
         self.retention_days_spin.setValue(self.config_mgr.retention_days)
         self.retention_days_spin.setSuffix(" days")
+        self.retention_days_spin.setFixedWidth(160)
         self.retention_days_spin.valueChanged.connect(self._auto_save_automation_settings)
         retention_lbl = QLabel("Delete recordings older than this age. Set to 0 to disable age-based pruning.")
         retention_lbl.setStyleSheet("color: #6c757d; font-size: 11px;")
@@ -2193,6 +2200,7 @@ class MainWindow(QMainWindow):
         self.min_free_spin.setSingleStep(5)
         self.min_free_spin.setValue(self.config_mgr.min_free_disk_gb)
         self.min_free_spin.setSuffix(" GB")
+        self.min_free_spin.setFixedWidth(160)
         self.min_free_spin.valueChanged.connect(self._auto_save_automation_settings)
         free_lbl = QLabel("If free disk space drops below this limit, oldest unprotected recordings are purged first.")
         free_lbl.setStyleSheet("color: #6c757d; font-size: 11px;")
