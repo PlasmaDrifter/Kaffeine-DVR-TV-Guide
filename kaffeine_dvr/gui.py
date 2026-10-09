@@ -3615,13 +3615,27 @@ class MainWindow(QMainWindow):
             return
         self.day_nav_offset = new_offset
         self._update_day_nav_bar(sync_week_with_selection=False)
+
+        current_sel = self.guide_date_combo.currentData() if hasattr(self, "guide_date_combo") else None
         target_btn = None
-        if new_offset == 0:
+        if current_sel:
+            try:
+                curr_dt = datetime.strptime(current_sel, "%Y-%m-%d").date()
+                target_date_str = (curr_dt - timedelta(days=7)).strftime("%Y-%m-%d")
+                for btn in self.day_nav_buttons:
+                    if btn.property("date_str") == target_date_str:
+                        target_btn = btn
+                        break
+            except Exception:
+                pass
+
+        if not target_btn and new_offset == 0:
             today_str = date.today().strftime("%Y-%m-%d")
             for btn in self.day_nav_buttons:
                 if btn.property("date_str") == today_str:
                     target_btn = btn
                     break
+
         if not target_btn and self.day_nav_buttons:
             target_btn = self.day_nav_buttons[0]
         if target_btn and target_btn.property("date_str"):
@@ -3633,10 +3647,24 @@ class MainWindow(QMainWindow):
             return
         self.day_nav_offset = new_offset
         self._update_day_nav_bar(sync_week_with_selection=False)
-        if self.day_nav_buttons:
-            first_btn = self.day_nav_buttons[0]
-            if first_btn.property("date_str"):
-                self._on_day_nav_clicked(first_btn.property("date_str"))
+
+        current_sel = self.guide_date_combo.currentData() if hasattr(self, "guide_date_combo") else None
+        target_btn = None
+        if current_sel:
+            try:
+                curr_dt = datetime.strptime(current_sel, "%Y-%m-%d").date()
+                target_date_str = (curr_dt + timedelta(days=7)).strftime("%Y-%m-%d")
+                for btn in self.day_nav_buttons:
+                    if btn.property("date_str") == target_date_str:
+                        target_btn = btn
+                        break
+            except Exception:
+                pass
+
+        if not target_btn and self.day_nav_buttons:
+            target_btn = self.day_nav_buttons[0]
+        if target_btn and target_btn.property("date_str"):
+            self._on_day_nav_clicked(target_btn.property("date_str"))
 
     def _update_day_nav_bar(self, sync_week_with_selection: bool = False):
         if not hasattr(self, "day_nav_buttons") or not self.day_nav_buttons:
@@ -3652,12 +3680,13 @@ class MainWindow(QMainWindow):
 
         # If sync_week_with_selection is requested (e.g. when selected from dropdown),
         # adjust offset to display the week containing the selected date.
-        sunday_of_current_week = today - timedelta(days=today_idx)
         if sync_week_with_selection and selected_date_str:
             try:
                 sel_date = datetime.strptime(selected_date_str, "%Y-%m-%d").date()
-                days_from_sunday = (sel_date - sunday_of_current_week).days
-                if days_from_sunday >= 7:
+                sel_weekday_idx = (sel_date.weekday() + 1) % 7
+                nominal_days = (sel_weekday_idx - today_idx) % 7
+                actual_days = (sel_date - today).days
+                if actual_days >= nominal_days + 7:
                     self.day_nav_offset = 7
                 else:
                     self.day_nav_offset = 0
@@ -3665,7 +3694,8 @@ class MainWindow(QMainWindow):
                 pass
 
         for i, btn in enumerate(self.day_nav_buttons):
-            btn_date = sunday_of_current_week + timedelta(days=self.day_nav_offset + i)
+            days_ahead = (i - today_idx) % 7 + self.day_nav_offset
+            btn_date = today + timedelta(days=days_ahead)
             btn_date_str = btn_date.strftime("%Y-%m-%d")
 
             day_name = btn_date.strftime("%A")
