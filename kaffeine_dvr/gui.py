@@ -3771,7 +3771,7 @@ class MainWindow(QMainWindow):
             try:
                 lead = self.config_mgr.lead_time_mins
                 qid = self.queue_mgr.add_recording(title, ch, start, dur, lead_time_mins=lead, buffer_mins=buf)
-                armed = self.watcher.check_and_dispatch()
+                armed = self.watcher.check_and_dispatch(notify=False)
                 buf_msg = f" (+{buf}m buffer)" if buf > 0 else ""
                 if armed > 0:
                     self.status_bar.showMessage(f"Armed recording '{title}'{buf_msg} in Kaffeine (Queue #{qid})", 4000)
@@ -4918,23 +4918,11 @@ class MainWindow(QMainWindow):
                 lead_time_mins=lead, buffer_mins=buf_mins
             )
             # Check if this program is immediately due (e.g. live or starting within lead time)
-            armed = self.watcher.check_and_dispatch()
+            armed = self.watcher.check_and_dispatch(notify=False)
             if armed > 0:
-                QMessageBox.information(
-                    self, "Recording Armed",
-                    f"Recording armed in Kaffeine (Queue #{qid}):\n\n"
-                    f"'{rec_title}' on {channel}\n"
-                    f"Airs: {prog.get('start_time_local')}{buf_note}\n\n"
-                    f"Kaffeine has been launched and the recording timer is armed and active."
-                )
+                self.status_bar.showMessage(f"Armed recording in Kaffeine: '{rec_title}' on {channel}", 4000)
             else:
-                QMessageBox.information(
-                    self, "Recording Queued",
-                    f"Successfully added to DVR Queue (Queue #{qid}):\n\n"
-                    f"'{rec_title}' on {channel}\n"
-                    f"Airs: {prog.get('start_time_local')}{buf_note}\n\n"
-                    f"It is safely queued and will automatically launch Kaffeine and arm the timer {lead} minutes before showtime, preventing restart/shutdown blocks in Kaffeine."
-                )
+                self.status_bar.showMessage(f"Queued recording: '{rec_title}' on {channel}", 4000)
             self.refresh_recordings()
             self._refresh_guide_view(keep_scroll=True)
             self._display_program_details(prog)
@@ -5060,7 +5048,7 @@ class MainWindow(QMainWindow):
             msg = f"Rule check completed. {len(scheduled)} new recordings scheduled."
             self.status_bar.showMessage(msg, 5000)
             if scheduled:
-                self.watcher.check_and_dispatch()
+                self.watcher.check_and_dispatch(notify=False)
                 self.refresh_recordings()
                 if not silent:
                     details = "\n".join([f"- {s['title']} ({s['channel']} at {s['start_time']})" for s in scheduled])

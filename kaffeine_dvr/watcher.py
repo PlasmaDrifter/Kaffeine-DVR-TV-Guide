@@ -47,7 +47,7 @@ class Watcher:
             except (ChildProcessError, OSError):
                 break
 
-    def check_and_dispatch(self) -> int:
+    def check_and_dispatch(self, notify: bool = True) -> int:
         self.reap_children()
         due = self.queue_mgr.get_due_to_arm()
         armed_count = 0
@@ -74,8 +74,8 @@ class Watcher:
                     print(f"[{now_str}] Successfully armed recording in Kaffeine (D-Bus Key: {key}).", flush=True)
                     armed_count += 1
 
-                    # Send persistent desktop notification if enabled
-                    if cfg.enable_desktop_notifications:
+                    # Send persistent desktop notification if enabled and not triggered manually
+                    if notify and cfg.enable_desktop_notifications:
                         send_desktop_notification(title, channel, start_local)
                 else:
                     print(f"[{now_str}] Warning: schedule_recording returned invalid key {key} for '{title}'.", flush=True)
