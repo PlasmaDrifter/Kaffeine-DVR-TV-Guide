@@ -641,6 +641,13 @@ class ProgramTileDelegate(QStyledItemDelegate):
         "tvshows": QColor("#66bb6a"),
     }
 
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.zoom_delta = 0
+
+    def set_zoom_delta(self, delta: int):
+        self.zoom_delta = delta
+
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index):
         prog = index.data(Qt.ItemDataRole.UserRole)
         if not prog:
@@ -715,7 +722,7 @@ class ProgramTileDelegate(QStyledItemDelegate):
         # Line 1: Primary Title (bold, color-coded)
         font_title = QFont(option.font)
         font_title.setBold(True)
-        font_title.setPointSize(10)
+        font_title.setPointSize(max(8, 10 + self.zoom_delta))
         painter.setFont(font_title)
         painter.setPen(title_color)
 
@@ -728,7 +735,7 @@ class ProgramTileDelegate(QStyledItemDelegate):
         # Line 2: Time Range & Subtitle (crisply aligned with exact same pad_left margin)
         font_sub = QFont(option.font)
         font_sub.setBold(False)
-        font_sub.setPointSize(9)
+        font_sub.setPointSize(max(7, 9 + self.zoom_delta))
         painter.setFont(font_sub)
         painter.setPen(self.COLOR_SUBTEXT)
 
@@ -1820,7 +1827,30 @@ class MainWindow(QMainWindow):
         self.jump_prime_btn.clicked.connect(self.jump_guide_to_primetime)
         filter_bar.addWidget(self.jump_prime_btn)
 
-        # Dynamic stretch after Jump and Prime Time buttons
+        # Dynamic stretch before Zoom (+ / -) controls to center between Prime Time and Search
+        filter_bar.addStretch(1)
+
+        # Guide Font / Box Size Zoom (+ / -) Controls
+        zoom_btn_style = (
+            "QPushButton { min-width: 28px; max-width: 28px; min-height: 24px; max-height: 24px; "
+            "padding: 0px; font-size: 14px; font-weight: bold; "
+            "border: 1px solid #3d465c; border-radius: 4px; background-color: #212635; color: #c8d2df; }"
+            "QPushButton:hover { background-color: #313d56; border: 1px solid #5a80b8; color: #ffffff; }"
+            "QPushButton:pressed { background-color: #1a1e2b; border: 1px solid #353d50; }"
+        )
+        self.zoom_out_btn = QPushButton("-")
+        self.zoom_out_btn.setToolTip("Decrease guide font and box size")
+        self.zoom_out_btn.setStyleSheet(zoom_btn_style)
+        self.zoom_out_btn.clicked.connect(self.zoom_out_guide)
+        filter_bar.addWidget(self.zoom_out_btn)
+
+        self.zoom_in_btn = QPushButton("+")
+        self.zoom_in_btn.setToolTip("Increase guide font and box size")
+        self.zoom_in_btn.setStyleSheet(zoom_btn_style)
+        self.zoom_in_btn.clicked.connect(self.zoom_in_guide)
+        filter_bar.addWidget(self.zoom_in_btn)
+
+        # Dynamic stretch after Zoom controls to maintain centering
         filter_bar.addStretch(1)
 
         # Search box anchored to the far right
@@ -1849,7 +1879,8 @@ class MainWindow(QMainWindow):
         self.guide_grid_table.horizontalHeader().setHighlightSections(False)
         self.guide_grid_table.verticalHeader().setDefaultSectionSize(62)
         self.guide_grid_table.verticalHeader().setHighlightSections(False)
-        self.guide_grid_table.setItemDelegate(ProgramTileDelegate(self.guide_grid_table))
+        self.grid_tile_delegate = ProgramTileDelegate(self.guide_grid_table)
+        self.guide_grid_table.setItemDelegate(self.grid_tile_delegate)
         self.guide_grid_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.guide_grid_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self.guide_grid_table.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
@@ -1875,6 +1906,10 @@ class MainWindow(QMainWindow):
         self.guide_table.itemSelectionChanged.connect(self.on_guide_selection_changed)
         self.guide_table.itemDoubleClicked.connect(self.on_guide_table_double_clicked)
         self.guide_stack.addWidget(self.guide_table)
+
+        # Initialize guide zoom level from settings (-3 to +5, default 0)
+        self.guide_zoom_level = self.settings.value("guide_zoom_level", 0, type=int)
+        self._apply_guide_zoom()
 
         # Set initial stack page
         self.guide_stack.setCurrentIndex(1 if saved_view == "list" else 0)
@@ -3724,6 +3759,65 @@ class MainWindow(QMainWindow):
     def jump_guide_to_primetime(self):
         # 8:00 PM is 20:00 -> slot 40
         self._scroll_grid_to_slot(40, center=False)
+
+    def zoom_in_guide(self):
+        """Increase font and box size for both grid and list views."""
+        if not hasattr(self, "guide_zoom_level"):
+            self.guide_zoom_level = 0
+        if self.guide_zoom_level < 5:
+            self.guide_zoom_level += 1
+            self.settings.setValue("guide_zoom_level", self.guide_zoom_level)
+            self._apply_guide_zoom()
+
+    def zoom_out_guide(self):
+        """Decrease font and box size for both grid and list views."""
+        if not hasattr(self, "guide_zoom_level"):
+            self.guide_zoom_level = 0
+        if self.guide_zoom_level > -3:
+            self.guide_zoom_level -= 1
+            self.settings.setValue("guide_zoom_level", self.guide_zoom_level)
+            self._apply_guide_zoom()
+
+    def _apply_guide_zoom(self):
+        """Apply the current guide zoom level to Grid and List views."""
+        lvl = getattr(self, "guide_zoom_level", 0)
+
+        # Update enable state of buttons
+        if hasattr(self, "zoom_in_btn"):
+            self.zoom_in_btn.setEnabled(lvl < 5)
+        if hasattr(self, "zoom_out_btn"):
+            self.zoom_out_btn.setEnabled(lvl > -3)
+
+        # 1. Grid View sizing
+        # Base dimensions: col_width = 165, row_height = 62
+        col_w = max(110, 165 + (lvl * 25))
+        row_h = max(44, 62 + (lvl * 10))
+
+        if hasattr(self, "guide_grid_table"):
+            self.guide_grid_table.horizontalHeader().setDefaultSectionSize(col_w)
+            self.guide_grid_table.verticalHeader().setDefaultSectionSize(row_h)
+
+            # Update delegate font delta and trigger repaint
+            if hasattr(self, "grid_tile_delegate"):
+                self.grid_tile_delegate.set_zoom_delta(lvl)
+
+            # Dynamic header font size
+            hdr_font_sz = max(9, 11 + lvl)
+            v_hdr_font_sz = max(10, 12 + lvl)
+            self.guide_grid_table.setStyleSheet(
+                f"QTableWidget#guideGridTable QHeaderView::section:horizontal {{ font-size: {hdr_font_sz}px; }} "
+                f"QTableWidget#guideGridTable QHeaderView::section:vertical {{ font-size: {v_hdr_font_sz}px; }}"
+            )
+            self.guide_grid_table.viewport().update()
+
+        # 2. List View sizing
+        # Base row height = 28, base font = 12px
+        if hasattr(self, "guide_table"):
+            list_font_sz = max(9, 12 + lvl)
+            list_row_h = max(22, 28 + (lvl * 5))
+            self.guide_table.verticalHeader().setDefaultSectionSize(list_row_h)
+            self.guide_table.setStyleSheet(f"QTableWidget {{ font-size: {list_font_sz}px; }}")
+            self.guide_table.viewport().update()
 
     @staticmethod
     def _create_restore_window_icon() -> QIcon:
