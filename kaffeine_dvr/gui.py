@@ -1262,14 +1262,14 @@ class FirstRunWelcomeDialog(QDialog):
             "<div style='margin-bottom: 8px;'>"
             "  <div style='color: #60a5fa; font-weight: bold; font-size: 13px; margin-bottom: 2px;'>• National Networks (TVMaze — Zero Setup)</div>"
             "  <div style='color: #c9d4e2; font-size: 12px; margin-left: 14px; line-height: 1.45;'>"
-            "    Covers major national broadcast feeds (<b>FOX, CBS, NBC, ABC, PBS, The CW</b>) out of the box with zero configuration.<br>"
+            "    Covers major national broadcast feeds (<b>FOX, CBS, NBC, ABC</b>) out of the box with zero configuration.<br>"
             "    <span style='color: #94a3b8; font-style: italic;'>Note: TVMaze tracks national schedules only and does not include local news, daytime programming, or regional subchannels.</span>"
             "  </div>"
             "</div>"
             "<div style='margin-bottom: 8px;'>"
-            "  <div style='color: #c084fc; font-weight: bold; font-size: 13px; margin-bottom: 2px;'>• 24/7 Local Affiliates & Regional Channels (TV Passport)</div>"
+            "  <div style='color: #c084fc; font-weight: bold; font-size: 13px; margin-bottom: 2px;'>• 24/7 Local Affiliates, PBS, CW & Regional Channels (TV Passport)</div>"
             "  <div style='color: #c9d4e2; font-size: 12px; margin-left: 14px; line-height: 1.45;'>"
-            "    Provides complete 24/7 schedules with local news and regional programming. Find your numeric station ID on "
+            "    Provides complete 24/7 schedules with local news, PBS member stations, CW syndication, and regional programming. Find your numeric station ID on "
             "    <a href='https://www.tvpassport.com' style='color: #93c5fd; font-weight: bold; text-decoration: none;'>tvpassport.com</a> "
             "    and enter <code style='color: #52b788;'>Channel = StationID</code> under <b>Settings &gt; Guide Sources &amp; Health</b>."
             "  </div>"
@@ -1290,11 +1290,19 @@ class FirstRunWelcomeDialog(QDialog):
         # Check for unconfigured regional channels
         unconfigured_regional = self.config_mgr.get_unconfigured_regional_channels()
         if unconfigured_regional:
-            ch_list_str = ", ".join(unconfigured_regional)
+            max_display = 4
+            full_title = ", ".join(unconfigured_regional)
+            if len(unconfigured_regional) > max_display:
+                shown_str = ", ".join(unconfigured_regional[:max_display])
+                extra = len(unconfigured_regional) - max_display
+                ch_display_str = f"{shown_str}, and {extra} more"
+            else:
+                ch_display_str = full_title
+
             notice_lbl = QLabel(
                 f"<div style='border-left: 3px solid #f59e0b; border-radius: 4px; background-color: #211c14; padding: 10px 14px; margin-top: 4px; color: #fbbf24; font-size: 12px; line-height: 1.45;'>"
                 f"  <b>Notice:</b> TVMaze only covers national broadcast feeds. The following local/regional channel(s) require TV Passport: "
-                f"  <b style='color: #ffffff; background: #3d2c16; padding: 1px 6px; border-radius: 3px;'>{ch_list_str}</b>.<br>"
+                f"  <b style='color: #ffffff; background: #3d2c16; padding: 1px 6px; border-radius: 3px;' title='Full list: {full_title}'>{ch_display_str}</b>.<br>"
                 f"  Configure their numeric station ID on <a href='https://www.tvpassport.com' style='color: #93c5fd; font-weight: bold; text-decoration: none;'>tvpassport.com</a> "
                 f"  under <b>Settings &gt; Guide Sources &amp; Health</b> after startup."
                 f"</div>"
@@ -3066,9 +3074,9 @@ class MainWindow(QMainWindow):
         s3_lay.setContentsMargins(15, 15, 15, 15)
         s3_text = QLabel(
             "• <b style='color: #c084fc;'>National Networks (TVMaze - Zero Configuration):</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;– Works out of the box with zero configuration for major national broadcast networks (FOX, CBS, NBC, ABC, PBS, CW).<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Works out of the box with zero configuration for major national broadcast networks (FOX, CBS, NBC, ABC).<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;– <i>Note:</i> TVMaze tracks national feeds only and <b>does not provide local programming</b> (local news, regional daytime talk shows, and independent subchannels). To receive local programming, TV Passport will need to be configured.<br><br>"
-            "• <b style='color: #c084fc;'>Full 24/7 Local Affiliates & Regional Subchannels (TV Passport):</b><br>"
+            "• <b style='color: #c084fc;'>Full 24/7 Local Affiliates, PBS, CW & Regional Channels (TV Passport):</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;1. Open <a href='https://www.tvpassport.com' style='color: #64b5f6; font-weight: bold;'>tvpassport.com</a> and find your city's local affiliate station.<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;2. Copy the numeric station ID from the URL (e.g. <code>1809</code> for Fox Phoenix).<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;3. Go to <b>Settings &gt; Guide Sources &amp; Health</b>, expand <b>TV Passport Station IDs</b>, and enter: <code>Fox = 1809</code> (or <code>KSAZ-HD = 1809</code>).<br>"
@@ -3141,12 +3149,12 @@ class MainWindow(QMainWindow):
         sources_text = QLabel(
             "• <b style='color: #4ade80;'>National Broadcast Networks (TVMaze API):</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;– Works out of the box with zero setup (no account, fees, or API keys required).<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;– Covers major broadcast networks: FOX, CBS, NBC, ABC, PBS, and The CW.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Covers major broadcast networks: FOX, CBS, NBC, and ABC.<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;– Automatically fetches up to 7 days of prime-time listings upon launch.<br><br>"
             "• <b style='color: #4ade80;'>National Feeds vs. Local Daytime Programming:</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;– TVMaze provides national schedules (prime-time series, national sports, and network specials).<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;– Daytime syndication (local news, talk shows, game shows, and independent subchannels) is delegated to regional affiliates and requires TV Passport.<br><br>"
-            "• <b style='color: #4ade80;'>24/7 Local Affiliate Schedules & Regional Subchannels (TV Passport):</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Daytime syndication, local news, PBS member stations, CW affiliates, and regional subchannels require TV Passport.<br><br>"
+            "• <b style='color: #4ade80;'>24/7 Local Affiliate Schedules, PBS, CW & Regional Subchannels (TV Passport):</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;1. Look up your local affiliate station on <a href='https://www.tvpassport.com' style='color: #64b5f6; font-weight: bold;'>tvpassport.com</a>.<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;2. Copy the numeric station ID from the URL and enter <code>ChannelName = StationID</code> in <i>Settings &gt; TV Passport</i>.<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;3. Click <i>Save Station IDs</i> to automatically download full 24/7 local affiliate listings.<br><br>"

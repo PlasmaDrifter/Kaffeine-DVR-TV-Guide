@@ -372,8 +372,8 @@ class ConfigManager:
             return []
 
     def get_unconfigured_regional_channels(self) -> List[str]:
-        """Detect any scanned channels that are not national networks and lack TV Passport station IDs."""
-        national_keys = {"FOX", "CBS", "NBC", "ABC", "PBS", "CW", "THE CW"}
+        """Detect any scanned channels that are not national commercial networks and lack TV Passport station IDs."""
+        national_keys = {"FOX", "CBS", "NBC", "ABC"}
         scanned = self.get_scanned_kaffeine_channels()
         configured_passport = {k.strip().upper() for k in self.tvpassport_stations.keys()}
 
