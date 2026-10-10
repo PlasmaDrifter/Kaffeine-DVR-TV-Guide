@@ -149,7 +149,7 @@ To also purge user configuration and cached database files:
 
 ### In-App Updates
 You can check for and apply updates directly inside the application under **Settings > Updates and Maintenance**:
-- **Automatic Monthly Checks**: Disabled by default. When enabled, Kaffeine DVR checks once every 30 days and displays a subtle green notification badge in the top header with a dismissal button.
+- **Automatic Monthly Checks**: Disabled by default. When enabled, Kaffeine DVR checks once every 30 days and displays a green notification badge in the top header with a dismissal button.
 - **One-Click Update**: Click **Check for Updates Now** and **Install Update Now** to update and restart without needing terminal commands.
 
 ---
