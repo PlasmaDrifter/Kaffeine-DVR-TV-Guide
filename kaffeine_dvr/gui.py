@@ -2570,7 +2570,7 @@ class MainWindow(QMainWindow):
         import_kaffeine_btn.clicked.connect(lambda: self.import_channels_from_kaffeine(silent=False))
         btn_row.addWidget(import_kaffeine_btn)
 
-        save_mapping_btn = QPushButton("Save Channel Lineup")
+        save_mapping_btn = QPushButton("Save Channels")
         save_mapping_btn.setObjectName("primaryActionBtn")
         save_mapping_btn.clicked.connect(self.save_channel_mapping)
         btn_row.addWidget(save_mapping_btn)
@@ -3032,7 +3032,7 @@ class MainWindow(QMainWindow):
             "&nbsp;&nbsp;&nbsp;&nbsp;– Online schedules use network names (e.g. <code>Fox</code>), while your antenna scans station callsigns (e.g. <code>KSAZ-HD</code>).<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;– Example: <code style='color: #52b788;'>Fox = KSAZ-HD</code> maps Fox schedule listings to tune <code>KSAZ-HD</code> on your antenna.<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;– If channels in Kaffeine already match, leave them as <code style='color: #52b788;'>Fox = Fox</code>.<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;– Click <b>Save Channel Lineup</b> when finished.<br><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Click <b>Save Channels</b> when finished.<br><br>"
             "• <b style='color: #4ade80;'>3. TV Guide Channel Order (Right Panel):</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;– Drag and drop channels or use <b>Move Up</b> / <b>Move Down</b> / <b>Sort A-Z</b> to prioritize how channels are stacked in your EPG TV Guide grid."
         )
@@ -3433,7 +3433,7 @@ class MainWindow(QMainWindow):
             QMessageBox.information(
                 self, "Channels Imported",
                 f"Successfully imported {len(channels)} channel(s) from Kaffeine:\n{names_str}\n\n"
-                f"Review the mappings above and click 'Save Channel Lineup' to persist."
+                f"Review the mappings above and click 'Save Channels' to persist."
             )
         return len(channels)
 
