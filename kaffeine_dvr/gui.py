@@ -2959,6 +2959,137 @@ class MainWindow(QMainWindow):
 
     # ------------------ TAB 5: HELP AND INFORMATION ------------------
     def create_help_tab(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        self.help_subtabs = QTabWidget()
+        self.help_subtabs.setObjectName("helpSubTabs")
+        self.help_subtabs.addTab(self.create_help_setup_guide_tab(), "Quick Setup Guide")
+        self.help_subtabs.addTab(self.create_help_reference_tab(), "System Architecture && Reference")
+        layout.addWidget(self.help_subtabs)
+
+        return widget
+
+    def create_help_setup_guide_tab(self) -> QWidget:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setSpacing(14)
+
+        # Header Title
+        title_box = QWidget()
+        title_layout = QVBoxLayout(title_box)
+        title_layout.setContentsMargins(0, 0, 0, 0)
+        h1 = QLabel("<b>Step-by-Step Channel &amp; Guide Setup Walkthrough</b>")
+        h1.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        h1.setStyleSheet("font-size: 20px; font-weight: bold; color: #ffffff;")
+        title_layout.addWidget(h1)
+        layout.addWidget(title_box)
+
+        # Base style helper
+        make_card_style = lambda color: (
+            "QGroupBox { font-size: 15px; font-weight: bold; margin-top: 6px; padding-top: 14px; } "
+            f"QGroupBox::title {{ subcontrol-origin: margin; subcontrol-position: top center; padding: 0 4px; color: {color}; }}"
+        )
+        body_style = "color: #d8e2ee; font-size: 14px; line-height: 1.6;"
+
+        # Step 1: Physical Channels & Antenna Scan (Kaffeine)
+        s1_box = QGroupBox("Step 1: Antenna Scan in Kaffeine")
+        s1_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        s1_box.setStyleSheet(make_card_style("#38bdf8"))
+        s1_lay = QVBoxLayout(s1_box)
+        s1_text = QLabel(
+            "• <b style='color: #38bdf8;'>Scan Channels with Your Digital TV Tuner:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;1. Open the native Kaffeine application.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;2. Go to <b>Television &gt; Channels</b> and run an automated scan for your ATSC/DVB antenna.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;3. Verify channels play properly. You can leave channels named with station callsigns (e.g. <code>KSAZ-HD</code>) or friendly names.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;4. Close Kaffeine once scanning is finished."
+        )
+        s1_text.setWordWrap(True)
+        s1_text.setStyleSheet(body_style)
+        s1_lay.addWidget(s1_text)
+        layout.addWidget(s1_box)
+
+        # Step 2: Import Channels into Kaffeine DVR
+        s2_box = QGroupBox("Step 2: Import Channels into Kaffeine DVR")
+        s2_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        s2_box.setStyleSheet(make_card_style("#4ade80"))
+        s2_lay = QVBoxLayout(s2_box)
+        s2_text = QLabel(
+            "• <b style='color: #4ade80;'>One-Click Database Import:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;1. In this app, click the <b>Settings</b> tab, then select the <b>Channel Source</b> subtab.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;2. Click the emerald green button at the bottom: <b style='color: #4ade80;'>Import Channels from Kaffeine</b>.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;3. The app instantly connects to <code>~/.local/share/kaffeine/sqlite.db</code>, populating your channel order list and guide mapping area automatically."
+        )
+        s2_text.setWordWrap(True)
+        s2_text.setStyleSheet(body_style)
+        s2_lay.addWidget(s2_text)
+        layout.addWidget(s2_box)
+
+        # Step 3: Organize Guide Order & Network Mapping
+        s3_box = QGroupBox("Step 3: Organize Channel Priority && Network Mapping")
+        s3_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        s3_box.setStyleSheet(make_card_style("#facc15"))
+        s3_lay = QVBoxLayout(s3_box)
+        s3_text = QLabel(
+            "• <b style='color: #facc15;'>TV Guide Channel Order (Left Panel):</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Drag and drop channels or use <b>Move Up</b> / <b>Move Down</b> / <b>Sort A-Z</b> to prioritize how channels are stacked in your EPG TV Guide grid.<br><br>"
+            "• <b style='color: #facc15;'>Guide Network Mapping (Right Panel - Format: Guide Name = Tuned Channel):</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Online schedules use network names (e.g. <code>Fox</code>), while your antenna scans station callsigns (e.g. <code>KSAZ-HD</code>).<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Example: <code style='color: #52b788;'>Fox = KSAZ-HD</code> maps Fox schedule listings to tune <code>KSAZ-HD</code> on your antenna.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– If channels in Kaffeine already match, leave them as <code style='color: #52b788;'>Fox = Fox</code>.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Click <b style='color: #facc15;'>Save Channel Lineup</b> when finished."
+        )
+        s3_text.setWordWrap(True)
+        s3_text.setStyleSheet(body_style)
+        s3_lay.addWidget(s3_text)
+        layout.addWidget(s3_box)
+
+        # Step 4: Choose & Configure Your Guide Feed
+        s4_box = QGroupBox("Step 4: Guide Source Setup (National && Local Affiliates)")
+        s4_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        s4_box.setStyleSheet(make_card_style("#c084fc"))
+        s4_lay = QVBoxLayout(s4_box)
+        s4_text = QLabel(
+            "• <b style='color: #c084fc;'>National Networks (TVMaze - Zero Configuration):</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Works out of the box with zero configuration for major national broadcast networks (FOX, CBS, NBC, ABC, PBS, CW).<br><br>"
+            "• <b style='color: #c084fc;'>Full 24/7 Local Affiliates & Regional Subchannels (TV Passport):</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;1. Open <a href='https://www.tvpassport.com' style='color: #64b5f6; font-weight: bold;'>tvpassport.com</a> and find your city's local affiliate station.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;2. Copy the numeric station ID from the URL (e.g. <code>1809</code> for Fox Phoenix).<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;3. Go to <b>Settings &gt; Guide Sources &amp; Health</b>, expand <b>TV Passport Station IDs</b>, and enter: <code>Fox = 1809</code> (or <code>KSAZ-HD = 1809</code>).<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;4. Click <b>Save Station IDs</b> to download 24/7 listings with local news, daytime syndication, and sports."
+        )
+        s4_text.setWordWrap(True)
+        s4_text.setOpenExternalLinks(True)
+        s4_text.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
+        s4_text.setStyleSheet(body_style)
+        s4_lay.addWidget(s4_text)
+        layout.addWidget(s4_box)
+
+        # Step 5: Test Live TV & Schedule Recordings
+        s5_box = QGroupBox("Step 5: Test Live TV && Schedule Recordings")
+        s5_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        s5_box.setStyleSheet(make_card_style("#60a5fa"))
+        s5_lay = QVBoxLayout(s5_box)
+        s5_text = QLabel(
+            "• <b style='color: #60a5fa;'>Watching Live TV:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Switch to <b>Web TV Guide Browser</b>. Double-click any live show tile or click <b>Watch Live</b> to tune Kaffeine.<br><br>"
+            "• <b style='color: #60a5fa;'>Scheduling DVR Recordings:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Double-click upcoming shows or click <b>Record This Program</b> to queue a one-off recording.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Click <b>Auto-Record This Series</b> to create keyword auto-record rules that automatically capture all future airings.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– The unified background service (<code>kaffeine-dvr-watcher.service</code>) safely dispatches timers Just-In-Time without locking up system reboots."
+        )
+        s5_text.setWordWrap(True)
+        s5_text.setStyleSheet(body_style)
+        s5_lay.addWidget(s5_text)
+        layout.addWidget(s5_box)
+
+        layout.addStretch()
+        scroll.setWidget(container)
+        return scroll
+
+    def create_help_reference_tab(self) -> QWidget:
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         container = QWidget()
