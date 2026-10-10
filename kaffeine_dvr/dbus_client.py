@@ -280,7 +280,7 @@ class KaffeineDbusClient:
     def tune_channel(self, channel: str, raise_window: bool = True, view_mode: Optional[str] = None) -> bool:
         """
         Tune Kaffeine to the specified TV channel name or number.
-        view_mode options: 'minimal', 'minimal_alwaysontop', 'fullscreen', 'alwaysontop', 'normal'
+        view_mode options: 'minimal', 'fullscreen', 'normal'
         If Kaffeine is not running, launches it with view mode flags and tuned to the channel.
         If Kaffeine is already running, tunes via D-Bus and applies window mode if requested.
         """
@@ -291,8 +291,7 @@ class KaffeineDbusClient:
             tuned = False
             # Method 1: Use org.kde.KDBusService CommandLine interface.
             # This activates the TV tab in Kaffeine, tunes the exact channel requested,
-            # applies view mode flags (--minimal, --fullscreen, etc.), and activates/raises the window,
-            # avoiding any number key simulation.
+            # applies view mode flags (--minimal, --fullscreen), and activates/raises the window.
             try:
                 import dbus
                 bus = dbus.SessionBus()
@@ -300,7 +299,7 @@ class KaffeineDbusClient:
                 app_iface = dbus.Interface(app_proxy, "org.kde.KDBusService")
 
                 cmd_args = ["kaffeine"]
-                if view_mode in ("minimal", "minimal_alwaysontop"):
+                if view_mode == "minimal":
                     cmd_args.append("--minimal")
                 elif view_mode == "fullscreen":
                     cmd_args.append("--fullscreen")
@@ -325,7 +324,7 @@ class KaffeineDbusClient:
                     # Method 3: Fallback to calling kaffeine CLI with --channel
                     env = self._get_display_env()
                     cmd = [self.get_kaffeine_bin()]
-                    if view_mode in ("minimal", "minimal_alwaysontop"):
+                    if view_mode == "minimal":
                         cmd.append("--minimal")
                     elif view_mode == "fullscreen":
                         cmd.append("--fullscreen")
@@ -333,30 +332,19 @@ class KaffeineDbusClient:
                     subprocess.Popen(cmd, env=env)
                     tuned = True
 
-            always_on_top = view_mode in ("minimal_alwaysontop", "alwaysontop")
             if raise_window:
-                self.raise_window(always_on_top=always_on_top)
-            elif always_on_top:
-                self.set_always_on_top(True)
+                self.raise_window()
             return tuned
         else:
             env = self._get_display_env()
             cmd = [self.get_kaffeine_bin()]
-            if view_mode in ("minimal", "minimal_alwaysontop"):
+            if view_mode == "minimal":
                 cmd.append("--minimal")
             elif view_mode == "fullscreen":
                 cmd.append("--fullscreen")
             cmd.extend(["--channel", str(channel)])
             try:
                 subprocess.Popen(cmd, env=env)
-                if view_mode in ("minimal_alwaysontop", "alwaysontop"):
-                    # Give Kaffeine a moment to map its window, then set always-on-top via window manager
-                    def _delayed_ontop():
-                        import time
-                        time.sleep(1.0)
-                        self.set_always_on_top(True)
-                    import threading
-                    threading.Thread(target=_delayed_ontop, daemon=True).start()
                 return True
             except Exception as e:
                 print(f"Error launching Kaffeine for channel {channel}: {e}")
@@ -366,40 +354,8 @@ class KaffeineDbusClient:
         """Switch view mode if needed without pressing numeric channel keys."""
         pass
 
-    def set_always_on_top(self, enable: bool = True):
-        """Toggle always-on-top on Kaffeine's top-level window via the window manager."""
-        import shutil
-        kdotool_bin = shutil.which("kdotool")
-        xdotool_bin = shutil.which("xdotool")
-        env = self._get_display_env()
-        state_flag = "ABOVE" if enable else ""
-        try:
-            if kdotool_bin:
-                action = "--add" if enable else "--remove"
-                subprocess.run(
-                    [kdotool_bin, "search", "--class", "kaffeine", "windowstate", action, "ABOVE"],
-                    env=env,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    timeout=1.5
-                )
-            elif xdotool_bin:
-                # Fallback using wmctrl or xdotool
-                wmctrl_bin = shutil.which("wmctrl")
-                if wmctrl_bin:
-                    action = "add" if enable else "remove"
-                    subprocess.run(
-                        [wmctrl_bin, "-r", "kaffeine", "-b", f"{action},above"],
-                        env=env,
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                        timeout=1.5
-                    )
-        except Exception:
-            pass
-
-    def raise_window(self, always_on_top: bool = False):
-        """Unminimize and raise Kaffeine window to the foreground, optionally keeping it on top."""
+    def raise_window(self):
+        """Unminimize and raise Kaffeine window to the foreground."""
         import shutil
         kdotool_bin = shutil.which("kdotool")
         xdotool_bin = shutil.which("xdotool")
@@ -416,9 +372,7 @@ class KaffeineDbusClient:
                 )
                 wids = [w.strip() for w in res.stdout.strip().splitlines() if w.strip()]
                 for wid in wids:
-                    subprocess.run([kdotool_bin, "windowstate", "--remove", "MINIMIZED"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
-                    if always_on_top:
-                        subprocess.run([kdotool_bin, "windowstate", "--add", "ABOVE", wid], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
+                    subprocess.run([kdotool_bin, "windowstate", "--remove", "MINIMIZED", wid], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
                     subprocess.run([kdotool_bin, "windowactivate", wid], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
             elif xdotool_bin:
                 res = subprocess.run(
@@ -432,8 +386,6 @@ class KaffeineDbusClient:
                 wids = [w.strip() for w in res.stdout.strip().splitlines() if w.strip()]
                 for wid in wids:
                     subprocess.run([xdotool_bin, "windowactivate", wid], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
-                if always_on_top:
-                    self.set_always_on_top(True)
         except Exception:
             pass
 

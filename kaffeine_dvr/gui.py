@@ -2872,23 +2872,21 @@ class MainWindow(QMainWindow):
 
         self.guide_watch_combo = QComboBox()
         self.guide_watch_combo.addItem("Minimal Mode (-m clean player)", "minimal")
-        self.guide_watch_combo.addItem("Minimal + Always On Top (-m -t)", "minimal_alwaysontop")
         self.guide_watch_combo.addItem("Full Screen (-f fullscreen)", "fullscreen")
-        self.guide_watch_combo.addItem("Always On Top (-t always on top)", "alwaysontop")
         self.guide_watch_combo.addItem("Normal Window (Full KDE controls)", "normal")
         self.guide_watch_combo.setFixedWidth(290)
         cur_watch_mode = self.config_mgr.guide_watch_mode
         watch_idx = self.guide_watch_combo.findData(cur_watch_mode)
         if watch_idx >= 0:
             self.guide_watch_combo.setCurrentIndex(watch_idx)
+        else:
+            self.guide_watch_combo.setCurrentIndex(0)
         dvr_layout.addRow(
             make_setting_label(
                 "Guide Live TV View Mode:",
                 "Controls window display mode when watching live TV directly from the Guide:\n"
                 "• Minimal Mode: Hides toolbars and menus for clean playback.\n"
-                "• Minimal + Always On Top: Borderless minimal player pinned on top.\n"
                 "• Full Screen: Expands to full screen immediately.\n"
-                "• Always On Top: Keeps video pinned on top of other windows.\n"
                 "• Normal Window: Standard window with playback bars."
             ),
             self.guide_watch_combo
