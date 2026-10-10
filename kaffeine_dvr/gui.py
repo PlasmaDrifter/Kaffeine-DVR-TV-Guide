@@ -262,19 +262,84 @@ class EditRuleDialog(QDialog):
         layout.addRow(btn_box)
 
 
+class HelpPopup(QFrame):
+    """Clean popover displaying setting help text on click, dismissing on click outside."""
+    _active_popup = None
+
+    def __init__(self, text: str, parent=None):
+        super().__init__(parent, Qt.WindowType.ToolTip | Qt.WindowType.FramelessWindowHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(12, 9, 12, 9)
+        lbl = QLabel(text)
+        lbl.setWordWrap(True)
+        lbl.setStyleSheet("color: #f8fafc; font-size: 12px; line-height: 1.35; background: transparent;")
+        lay.addWidget(lbl)
+        self.setStyleSheet(
+            "HelpPopup {"
+            "  background-color: #0f172a;"
+            "  border: 1px solid #475569;"
+            "  border-radius: 6px;"
+            "}"
+        )
+        self.setMaximumWidth(340)
+        self.adjustSize()
+
+    @classmethod
+    def show_for_widget(cls, widget: QWidget, text: str):
+        if cls._active_popup:
+            is_same = getattr(cls._active_popup, "_origin_widget", None) == widget
+            cls.hide_active()
+            if is_same:
+                return
+
+        win = widget.window()
+        popup = cls(text, win)
+        popup._origin_widget = widget
+        cls._active_popup = popup
+
+        app = QApplication.instance()
+        if app:
+            app.installEventFilter(popup)
+
+        # Position just below the badge, offset slightly to the right
+        pos = widget.mapToGlobal(QPoint(widget.width() // 2, widget.height() + 4))
+        popup.move(pos)
+        popup.show()
+
+    @classmethod
+    def hide_active(cls):
+        if cls._active_popup:
+            try:
+                app = QApplication.instance()
+                if app:
+                    app.removeEventFilter(cls._active_popup)
+                cls._active_popup.close()
+                cls._active_popup.deleteLater()
+            except Exception:
+                pass
+            cls._active_popup = None
+
+    def eventFilter(self, watched, event):
+        if event.type() in (QEvent.Type.MouseButtonPress, QEvent.Type.MouseButtonRelease):
+            if watched != self and watched != getattr(self, "_origin_widget", None):
+                HelpPopup.hide_active()
+        return super().eventFilter(watched, event)
+
+
 class HelpBadge(QLabel):
-    """Subtle circular '?' badge that shows helpful tooltip only when clicked."""
+    """White circular '?' badge that displays help info popover on click."""
     def __init__(self, tooltip_text: str, parent=None):
         super().__init__("?", parent)
         self._tooltip_text = tooltip_text
         self.setCursor(Qt.CursorShape.ArrowCursor)
         self.setStyleSheet(
             "QLabel {"
-            "  color: #94a3b8;"
+            "  color: #ffffff;"
             "  background-color: #1e293b;"
-            "  border: 1px solid #334155;"
+            "  border: 1px solid #64748b;"
             "  border-radius: 8px;"
-            "  font-weight: 600;"
+            "  font-weight: bold;"
             "  font-size: 11px;"
             "  min-width: 16px;"
             "  max-width: 16px;"
@@ -283,24 +348,28 @@ class HelpBadge(QLabel):
             "  qproperty-alignment: AlignCenter;"
             "}"
             "QLabel:hover {"
-            "  color: #e2e8f0;"
+            "  color: #ffffff;"
             "  background-color: #334155;"
-            "  border-color: #475569;"
+            "  border-color: #94a3b8;"
             "}"
         )
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            # Show tooltip immediately upon click at badge position
-            pos = event.globalPosition().toPoint() if hasattr(event, "globalPosition") else event.globalPos()
-            QToolTip.showText(pos, self._tooltip_text, self)
             event.accept()
         else:
             super().mousePressEvent(event)
 
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and self.rect().contains(event.pos()):
+            HelpPopup.show_for_widget(self, self._tooltip_text)
+            event.accept()
+        else:
+            super().mouseReleaseEvent(event)
+
 
 def make_setting_label(title: str, tooltip_text: str) -> QWidget:
-    """Create a composite widget containing a subtle '?' help badge followed by the label title."""
+    """Create a composite widget containing a white '?' help badge followed by the label title."""
     w = QWidget()
     lay = QHBoxLayout(w)
     lay.setContentsMargins(0, 0, 0, 0)
