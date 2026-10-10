@@ -2492,6 +2492,25 @@ class MainWindow(QMainWindow):
         mapping_str = "\n".join([f"{k} = {v}" for k, v in self.config_mgr.channel_map.items()])
         self.mapping_text.setPlainText(mapping_str)
         self.mapping_text.setMinimumHeight(200)
+
+        # 5-line concise explainer inside the text area
+        self.mapping_tip_lbl = QLabel(self.mapping_text)
+        self.mapping_tip_lbl.setText(
+            "Online guides use network names (e.g. Fox, NBC).\n"
+            "Antennas scan local station callsigns (e.g. KSAZ-HD).\n"
+            "Format: Guide Name = Tuned Channel.\n"
+            "Example: Fox = KSAZ-HD connects Fox to your antenna.\n"
+            "If channels in Kaffeine already match, leave as Fox = Fox."
+        )
+        self.mapping_tip_lbl.setStyleSheet("color: #8a99ad; font-size: 11px; line-height: 1.4; background: transparent;")
+        self.mapping_tip_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+        mapping_tip_layout = QHBoxLayout(self.mapping_text)
+        mapping_tip_layout.addStretch(1)
+        mapping_tip_layout.addWidget(self.mapping_tip_lbl, 1)
+        mapping_tip_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        mapping_tip_layout.setContentsMargins(20, 15, 20, 20)
+
         map_layout.addWidget(self.mapping_text)
 
         lineup_panels.addWidget(map_box, 1)
