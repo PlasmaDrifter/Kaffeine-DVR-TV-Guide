@@ -273,13 +273,13 @@ class HelpPopup(QFrame):
         lay.setContentsMargins(14, 11, 14, 11)
         lbl = QLabel(text)
         lbl.setWordWrap(True)
-        lbl.setStyleSheet("color: #f8fafc; font-size: 14px; font-weight: 500; line-height: 1.4; background: transparent;")
+        lbl.setStyleSheet("color: #ffffff; font-size: 14px; font-weight: 500; line-height: 1.4; background: transparent;")
         lay.addWidget(lbl)
         self.setStyleSheet(
             "HelpPopup {"
-            "  background-color: #0f172a;"
-            "  border: 1px solid #475569;"
-            "  border-radius: 7px;"
+            "  background-color: #1e293b;"
+            "  border: 1.5px solid #38bdf8;"
+            "  border-radius: 8px;"
             "}"
         )
         # Accurately compute needed width and height so box fits the text
@@ -328,6 +328,15 @@ class HelpPopup(QFrame):
             cls._active_popup = None
 
     def eventFilter(self, watched, event):
+        # Automatically close popup if user switches away to another application or window
+        if event.type() in (
+            QEvent.Type.ApplicationDeactivate,
+            QEvent.Type.WindowDeactivate,
+            QEvent.Type.ActivationChange
+        ):
+            HelpPopup.hide_active()
+            return False
+
         if event.type() in (QEvent.Type.MouseButtonPress, QEvent.Type.MouseButtonRelease):
             if watched != self and watched != getattr(self, "_origin_widget", None):
                 HelpPopup.hide_active()
