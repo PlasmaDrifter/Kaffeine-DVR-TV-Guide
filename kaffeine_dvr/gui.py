@@ -2449,6 +2449,11 @@ class MainWindow(QMainWindow):
         widget = QWidget()
         layout = QVBoxLayout(widget)
 
+        desc = QLabel("Reorder rows in your EPG TV Guide using drag-and-drop or the Move Up/Down buttons.")
+        desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        desc.setStyleSheet("color: #8a99ad; font-size: 12px; margin-bottom: 4px;")
+        layout.addWidget(desc)
+
         # Splitter / Two-panel layout
         lineup_panels = QHBoxLayout()
 
