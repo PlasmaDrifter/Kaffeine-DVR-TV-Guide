@@ -631,20 +631,18 @@ class ProgramTileDelegate(QStyledItemDelegate):
     COLOR_PAST_BG = QColor("#161922")
     COLOR_PAST_BG_ALT = QColor("#14171f")
     COLOR_LIVE_BG = QColor("#17261c")
-    COLOR_LIVE_BG_ALT = QColor("#152219")
     COLOR_DEFAULT_BORDER_SCHED = QColor("#e53935")
     COLOR_DEFAULT_BORDER = QColor("#333c4e")
     COLOR_PAST_BORDER = QColor("#262c3a")
     COLOR_PAST_BORDER_SCHED = QColor("#8b0000")
     COLOR_REC_BADGE_PEN = QColor("#e53935")
     COLOR_REC_BADGE_BRUSH = QColor("#b71c1c")
-    COLOR_LIVE_BADGE_PEN = QColor("#22c55e")
-    COLOR_LIVE_BADGE_BRUSH = QColor("#14532d")
+    COLOR_LIVE_DOT = QColor("#66bb6a")
     COLOR_WHITE = QColor("#ffffff")
     COLOR_UPCOMING_TITLE = QColor("#f1f5f9")
     COLOR_PAST_TITLE = QColor("#788292")
     COLOR_PAST_SUBTEXT = QColor("#5a6474")
-    COLOR_LIVE_TITLE = QColor("#4ade80")
+    COLOR_LIVE_TITLE = QColor("#66bb6a")
     COLOR_SUBTEXT = QColor("#a4b0c2")
 
     CATEGORY_COLORS = {
@@ -706,7 +704,7 @@ class ProgramTileDelegate(QStyledItemDelegate):
                 bg_color = self.COLOR_PAST_BG_ALT if is_alt else self.COLOR_PAST_BG
                 border_color = self.COLOR_PAST_BORDER_SCHED if is_scheduled else self.COLOR_PAST_BORDER
             elif timing_state == "live":
-                bg_color = self.COLOR_LIVE_BG_ALT if is_alt else self.COLOR_LIVE_BG
+                bg_color = self.COLOR_LIVE_BG
                 border_color = self.COLOR_DEFAULT_BORDER_SCHED if is_scheduled else self.COLOR_DEFAULT_BORDER
             else:
                 bg_color = self.COLOR_DEFAULT_BG_ALT if is_alt else self.COLOR_DEFAULT_BG
@@ -722,7 +720,7 @@ class ProgramTileDelegate(QStyledItemDelegate):
         pad_right = 10
         inner_width = max(10, rect.width() - pad_left - pad_right)
 
-        # Draw Badges (REC badge and LIVE badge in upper right corner)
+        # Draw Badges (REC badge and green LIVE dot in upper right corner)
         badge_reserved_w = 0
         cur_right = rect.right() - pad_right
 
@@ -753,31 +751,17 @@ class ProgramTileDelegate(QStyledItemDelegate):
             cur_right -= (bw + 5)
             badge_reserved_w += (bw + 5)
 
-        if timing_state == "live" and inner_width >= 80:
-            live_font = QFont(option.font)
-            live_font.setBold(True)
-            live_font.setPointSize(7)
-            painter.setFont(live_font)
-            fm_live = painter.fontMetrics()
+        if timing_state == "live":
+            dot_diam = 7
+            dot_x = cur_right - dot_diam
+            dot_y = rect.top() + pad_top + 3
 
-            live_text = "● LIVE"
-            live_w = fm_live.horizontalAdvance(live_text)
-            pad_h = 5
-            bw_live = live_w + (pad_h * 2)
-            bh_live = 15
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(self.COLOR_LIVE_DOT)
+            painter.drawEllipse(dot_x, dot_y, dot_diam, dot_diam)
 
-            bx_live = cur_right - bw_live
-            by_live = rect.top() + pad_top
-            live_badge_rect = QRect(bx_live, by_live, bw_live, bh_live)
-
-            painter.setPen(self.COLOR_LIVE_BADGE_PEN)
-            painter.setBrush(self.COLOR_LIVE_BADGE_BRUSH)
-            painter.drawRoundedRect(live_badge_rect, 4, 4)
-
-            painter.setPen(QColor("#86efac"))
-            painter.drawText(live_badge_rect, Qt.AlignmentFlag.AlignCenter, live_text)
-
-            badge_reserved_w += (bw_live + 5)
+            cur_right -= (dot_diam + 6)
+            badge_reserved_w += (dot_diam + 6)
 
         # Title & Subtext color logic (Option 1)
         cat = prog.get("_category") or classify_guide_category(prog)
@@ -4317,7 +4301,7 @@ class MainWindow(QMainWindow):
                 elif cat == "movies":
                     t_color = QColor("#ff5c5c")
                 else:
-                    t_color = QColor("#4ade80")
+                    t_color = QColor("#66bb6a")
                 title_item.setForeground(t_color)
                 title_font = QFont()
                 title_font.setBold(True)
@@ -4469,7 +4453,7 @@ class MainWindow(QMainWindow):
                 if timing_state == "past":
                     cur_bg = QColor("#161922") if (idx % 2 == 0) else QColor("#14171f")
                 elif timing_state == "live":
-                    cur_bg = QColor("#17261c") if (idx % 2 == 0) else QColor("#152219")
+                    cur_bg = QColor("#17261c")
                 else:
                     cur_bg = tile_bg if (idx % 2 == 0) else tile_bg_alt
                 item.setBackground(cur_bg)
@@ -4548,7 +4532,7 @@ class MainWindow(QMainWindow):
             buf_txt = f" | Buffer: +{buf_val}m" if buf_val else ""
             header_prefix = f"<span style='color: #ff5252; font-weight: bold;'>[● REC QUEUED #{qid} - {st}{buf_txt}]</span> "
         elif state == "live":
-            header_prefix = f"<span style='color: #22c55e; font-weight: bold;'>[● LIVE]</span> "
+            header_prefix = f"<span style='color: #66bb6a; font-weight: bold;'>●</span> "
 
         # Color-code the show title by its timing state and category (Option 1)
         cat = prog.get("_category") or classify_guide_category(prog)
@@ -4562,7 +4546,7 @@ class MainWindow(QMainWindow):
             elif cat == "movies":
                 title_color_hex = "#ff5c5c"  # Red
             else:
-                title_color_hex = "#4ade80"  # Vibrant green
+                title_color_hex = "#66bb6a"  # Green used before
         else: # upcoming
             if cat == "sports":
                 title_color_hex = "#ffa028"  # Orange
