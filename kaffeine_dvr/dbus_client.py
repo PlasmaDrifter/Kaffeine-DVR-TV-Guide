@@ -150,8 +150,51 @@ class KaffeineDbusClient:
             print(f"Error launching kaffeine: {e}")
             return False
 
-    def _minimize_window_async(self, timeout_sec: float = 8.0):
-        """Poll briefly for Kaffeine's window to appear and minimize it to the taskbar."""
+    def minimize_kaffeine(self) -> bool:
+        """Minimize Kaffeine window to the taskbar if running."""
+        import shutil
+        kdotool_bin = shutil.which("kdotool")
+        xdotool_bin = shutil.which("xdotool")
+        if not kdotool_bin and not xdotool_bin:
+            return False
+        env = self._get_display_env()
+        try:
+            if kdotool_bin:
+                res = subprocess.run(
+                    [kdotool_bin, "search", "--class", "kaffeine"],
+                    env=env,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=1.5
+                )
+                wids = [w.strip() for w in res.stdout.strip().splitlines() if w.strip()]
+                for wid in wids:
+                    subprocess.run([kdotool_bin, "windowminimize", wid], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
+                return bool(wids)
+            elif xdotool_bin:
+                res = subprocess.run(
+                    [xdotool_bin, "search", "--class", "kaffeine"],
+                    env=env,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=1.5
+                )
+                wids = [w.strip() for w in res.stdout.strip().splitlines() if w.strip()]
+                for wid in wids:
+                    subprocess.run([xdotool_bin, "windowminimize", wid], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
+                return bool(wids)
+        except Exception:
+            pass
+        return False
+
+    def _minimize_window_async(self, timeout_sec: float = 6.0, post_match_duration: float = 2.5):
+        """
+        Poll for Kaffeine's window to appear and persist minimize commands across startup.
+        Because KWin rules and Qt map events can un-minimize the window during initial creation,
+        we continue asserting minimization for post_match_duration seconds after the window is first seen.
+        """
         import shutil
         import time
 
@@ -163,8 +206,10 @@ class KaffeineDbusClient:
 
         env = self._get_display_env()
         start_time = time.time()
+        first_match_time = None
+
         while time.time() - start_time < timeout_sec:
-            time.sleep(0.3)
+            time.sleep(0.2)
             try:
                 if kdotool_bin:
                     res = subprocess.run(
@@ -177,14 +222,9 @@ class KaffeineDbusClient:
                     )
                     wids = [w.strip() for w in res.stdout.strip().splitlines() if w.strip()]
                     if wids:
+                        if first_match_time is None:
+                            first_match_time = time.time()
                         for wid in wids:
-                            subprocess.run(
-                                [kdotool_bin, "windowstate", "--add", "MINIMIZED", wid],
-                                env=env,
-                                stdout=subprocess.DEVNULL,
-                                stderr=subprocess.DEVNULL,
-                                timeout=1.0
-                            )
                             subprocess.run(
                                 [kdotool_bin, "windowminimize", wid],
                                 env=env,
@@ -192,7 +232,8 @@ class KaffeineDbusClient:
                                 stderr=subprocess.DEVNULL,
                                 timeout=1.0
                             )
-                        break
+                        if time.time() - first_match_time >= post_match_duration:
+                            break
                 elif xdotool_bin:
                     res = subprocess.run(
                         [xdotool_bin, "search", "--class", "kaffeine"],
@@ -204,6 +245,8 @@ class KaffeineDbusClient:
                     )
                     wids = [w.strip() for w in res.stdout.strip().splitlines() if w.strip()]
                     if wids:
+                        if first_match_time is None:
+                            first_match_time = time.time()
                         for wid in wids:
                             subprocess.run(
                                 [xdotool_bin, "windowminimize", wid],
@@ -212,7 +255,8 @@ class KaffeineDbusClient:
                                 stderr=subprocess.DEVNULL,
                                 timeout=1.0
                             )
-                        break
+                        if time.time() - first_match_time >= post_match_duration:
+                            break
             except Exception:
                 pass
 

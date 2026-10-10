@@ -68,9 +68,13 @@ class Watcher:
                 if not self.dbus_client.is_running():
                     self.dbus_client.launch_kaffeine(mode=cfg.launch_mode)
                     time.sleep(1)
+                elif cfg.launch_mode == "taskbar" or cfg.launch_minimized:
+                    self.dbus_client.minimize_kaffeine()
                 key = self.dbus_client.schedule_recording(title, channel, start_iso, duration_iso, 0)
                 if key and key > 0:
                     self.queue_mgr.mark_armed(rec_id, key)
+                    if cfg.launch_mode == "taskbar" or cfg.launch_minimized:
+                        self.dbus_client.minimize_kaffeine()
                     print(f"[{now_str}] Successfully armed recording in Kaffeine (D-Bus Key: {key}).", flush=True)
                     armed_count += 1
 
