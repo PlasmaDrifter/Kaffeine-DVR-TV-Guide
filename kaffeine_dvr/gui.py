@@ -2914,12 +2914,17 @@ class MainWindow(QMainWindow):
         title_layout.addWidget(h1_sub)
         layout.addWidget(title_box)
 
-        group_style = "QGroupBox { font-size: 15px; font-weight: bold; margin-top: 6px; padding-top: 14px; } QGroupBox::title { subcontrol-origin: margin; left: 8px; padding: 0 4px; }"
+        # Base styles
+        make_group_style = lambda color: (
+            "QGroupBox { font-size: 15px; font-weight: bold; margin-top: 6px; padding-top: 14px; } "
+            f"QGroupBox::title {{ subcontrol-origin: margin; subcontrol-position: top center; padding: 0 4px; color: {color}; }}"
+        )
         body_style = "color: #d8e2ee; font-size: 14px; line-height: 1.6;"
 
         # Section 1: Guide Sources & Coverage
         sources_box = QGroupBox("1. TV Guide Coverage and Providers")
-        sources_box.setStyleSheet(group_style)
+        sources_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        sources_box.setStyleSheet(make_group_style("#4ade80"))
         sources_layout = QVBoxLayout(sources_box)
         sources_text = QLabel(
             "• <b style='color: #4ade80;'>National Broadcast Networks (TVMaze API):</b><br>"
@@ -2947,8 +2952,9 @@ class MainWindow(QMainWindow):
         layout.addWidget(sources_box)
 
         # Section 2: Core Concept and Why this App Exists
-        concept_box = QGroupBox("2. How Kaffeine DVR Scheduling Works (Safe Reboots and Shutdowns)")
-        concept_box.setStyleSheet(group_style)
+        concept_box = QGroupBox("2. How Kaffeine DVR Scheduling Works")
+        concept_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        concept_box.setStyleSheet(make_group_style("#f87171"))
         concept_layout = QVBoxLayout(concept_box)
         concept_text = QLabel(
             "• <b style='color: #f87171;'>The Problem with Native Kaffeine Timers:</b><br>"
@@ -2969,7 +2975,8 @@ class MainWindow(QMainWindow):
 
         # Section 3: Background Service and System Commands
         services_box = QGroupBox("3. Unified Background Service and Commands")
-        services_box.setStyleSheet(group_style)
+        services_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        services_box.setStyleSheet(make_group_style("#60a5fa"))
         services_layout = QVBoxLayout(services_box)
         services_text = QLabel(
             "• <b style='color: #60a5fa;'>Unified Background Daemon:</b><br>"
