@@ -280,7 +280,7 @@ class KaffeineDbusClient:
     def tune_channel(self, channel: str, raise_window: bool = True, view_mode: Optional[str] = None) -> bool:
         """
         Tune Kaffeine to the specified TV channel name or number.
-        view_mode options: 'minimal', 'fullscreen', 'alwaysontop', 'normal'
+        view_mode options: 'minimal', 'minimal_alwaysontop', 'fullscreen', 'alwaysontop', 'normal'
         If Kaffeine is not running, launches it with view mode flags and tuned to the channel.
         If Kaffeine is already running, tunes via D-Bus and applies window mode if requested.
         """
@@ -304,6 +304,8 @@ class KaffeineDbusClient:
                         app_iface = dbus.Interface(app_proxy, "org.kde.KDBusService")
                         if view_mode == "minimal":
                             app_iface.CommandLine(["kaffeine", "--minimal"], "/tmp", {})
+                        elif view_mode == "minimal_alwaysontop":
+                            app_iface.CommandLine(["kaffeine", "--minimal", "--alwaysontop"], "/tmp", {})
                         elif view_mode == "fullscreen":
                             app_iface.CommandLine(["kaffeine", "--fullscreen"], "/tmp", {})
                         elif view_mode == "alwaysontop":
@@ -324,6 +326,8 @@ class KaffeineDbusClient:
                     cmd = [self.get_kaffeine_bin()]
                     if view_mode == "minimal":
                         cmd.append("--minimal")
+                    elif view_mode == "minimal_alwaysontop":
+                        cmd.extend(["--minimal", "--alwaysontop"])
                     elif view_mode == "fullscreen":
                         cmd.append("--fullscreen")
                     elif view_mode == "alwaysontop":
@@ -340,6 +344,8 @@ class KaffeineDbusClient:
             cmd = [self.get_kaffeine_bin()]
             if view_mode == "minimal":
                 cmd.append("--minimal")
+            elif view_mode == "minimal_alwaysontop":
+                cmd.extend(["--minimal", "--alwaysontop"])
             elif view_mode == "fullscreen":
                 cmd.append("--fullscreen")
             elif view_mode == "alwaysontop":

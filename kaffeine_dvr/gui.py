@@ -2268,6 +2268,8 @@ class MainWindow(QMainWindow):
         # 2. Live Health Monitor
         health_box = QGroupBox("Guide Sources Health and Connectivity Monitor")
         health_layout = QVBoxLayout(health_box)
+        health_layout.setContentsMargins(10, 0, 10, 8)
+        health_layout.setSpacing(4)
 
         monitor_desc = QLabel(
             "Live monitoring of configured TV guide backends. Check status codes, latency, and program contributions."
@@ -2445,14 +2447,6 @@ class MainWindow(QMainWindow):
     def create_settings_channels_tab(self) -> QWidget:
         widget = QWidget()
         layout = QVBoxLayout(widget)
-
-        layout.addWidget(QLabel("<b>Kaffeine Channel Lineup & Guide Network Mapping</b>:"))
-        desc = QLabel(
-            "Reorder rows in your EPG TV Guide using drag-and-drop or the Move Up/Down buttons.\n"
-            "Map external guide broadcast network names to your exact Kaffeine tuned channel names on the right."
-        )
-        desc.setStyleSheet("color: #6c757d; font-size: 11px;")
-        layout.addWidget(desc)
 
         # Splitter / Two-panel layout
         lineup_panels = QHBoxLayout()
@@ -2701,6 +2695,7 @@ class MainWindow(QMainWindow):
 
         self.guide_watch_combo = QComboBox()
         self.guide_watch_combo.addItem("Minimal Mode (-m clean player)", "minimal")
+        self.guide_watch_combo.addItem("Minimal + Always On Top (-m -t)", "minimal_alwaysontop")
         self.guide_watch_combo.addItem("Full Screen (-f fullscreen)", "fullscreen")
         self.guide_watch_combo.addItem("Always On Top (-t always on top)", "alwaysontop")
         self.guide_watch_combo.addItem("Normal Window (Full KDE controls)", "normal")
@@ -2714,6 +2709,7 @@ class MainWindow(QMainWindow):
                 "Guide Live TV View Mode:",
                 "Controls window display mode when watching live TV directly from the Guide:\n"
                 "• Minimal Mode: Hides toolbars and menus for clean playback.\n"
+                "• Minimal + Always On Top: Borderless minimal player pinned on top.\n"
                 "• Full Screen: Expands to full screen immediately.\n"
                 "• Always On Top: Keeps video pinned on top of other windows.\n"
                 "• Normal Window: Standard window with playback bars."
@@ -2767,7 +2763,7 @@ class MainWindow(QMainWindow):
 
         left_col.addWidget(win_group)
         left_col.addStretch()
-        two_col_layout.addLayout(left_col, 55)
+        two_col_layout.addLayout(left_col, 50)
 
         # ------------------ RIGHT COLUMN: Service & Storage ------------------
         right_col = QVBoxLayout()
@@ -2776,8 +2772,8 @@ class MainWindow(QMainWindow):
         # Service Management Card
         service_box = QGroupBox("Unified Background Service (kaffeine-dvr-watcher)")
         service_layout = QVBoxLayout(service_box)
-        service_layout.setContentsMargins(15, 15, 15, 15)
-        service_layout.setSpacing(12)
+        service_layout.setContentsMargins(15, 0, 15, 10)
+        service_layout.setSpacing(4)
 
         self.service_status_lbl = QLabel("Checking service status...")
         self.service_status_lbl.setStyleSheet("font-weight: bold; font-size: 13px;")
@@ -2875,7 +2871,7 @@ class MainWindow(QMainWindow):
 
         right_col.addWidget(storage_box)
         right_col.addStretch()
-        two_col_layout.addLayout(right_col, 45)
+        two_col_layout.addLayout(right_col, 50)
 
         main_layout.addLayout(two_col_layout)
 
