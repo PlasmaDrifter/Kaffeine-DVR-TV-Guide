@@ -1853,22 +1853,17 @@ class MainWindow(QMainWindow):
         widget = QWidget()
         widget.setObjectName("updateBadge")
         badge_layout = QHBoxLayout(widget)
-        badge_layout.setContentsMargins(6, 2, 4, 2)
-        badge_layout.setSpacing(4)
-        widget.setStyleSheet(
-            "QWidget#updateBadge { "
-            "  background-color: #141f17; "
-            "  border: 1px solid #244c2e; "
-            "  border-radius: 9px; "
-            "}"
-        )
+        badge_layout.setContentsMargins(4, 0, 4, 0)
+        badge_layout.setSpacing(6)
+        widget.setStyleSheet("QWidget#updateBadge { background: transparent; border: none; }")
+
         self.update_badge_btn = QPushButton("Update Available")
         self.update_badge_btn.setFlat(True)
         self.update_badge_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.update_badge_btn.setToolTip("Click to view details and install update in Settings")
         self.update_badge_btn.setStyleSheet(
-            "QPushButton { color: #4da666; font-size: 11px; font-weight: 500; border: none; padding: 0 4px; background: transparent; }"
-            "QPushButton:hover { color: #6bc284; text-decoration: underline; }"
+            "QPushButton { color: #52b774; font-size: 12px; font-weight: 600; border: none; padding: 2px 4px; background: transparent; }"
+            "QPushButton:hover { color: #7de89f; text-decoration: underline; }"
         )
         self.update_badge_btn.clicked.connect(self.navigate_to_updates_tab)
         badge_layout.addWidget(self.update_badge_btn)
@@ -1878,8 +1873,8 @@ class MainWindow(QMainWindow):
         self.update_badge_dismiss_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.update_badge_dismiss_btn.setToolTip("Dismiss update notice")
         self.update_badge_dismiss_btn.setStyleSheet(
-            "QToolButton { color: #556573; font-size: 10px; font-weight: bold; border: none; background: transparent; padding: 0 2px; }"
-            "QToolButton:hover { color: #b8c4d1; }"
+            "QToolButton { color: #6c7c8c; font-size: 15px; font-weight: bold; border: none; background: transparent; padding: 0 4px; line-height: 1; }"
+            "QToolButton:hover { color: #d0d8e2; }"
         )
         self.update_badge_dismiss_btn.clicked.connect(self.dismiss_update_badge)
         badge_layout.addWidget(self.update_badge_dismiss_btn)
