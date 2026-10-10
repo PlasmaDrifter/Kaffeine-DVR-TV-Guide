@@ -55,44 +55,6 @@ Kaffeine is a powerful digital TV viewer for KDE and Linux desktop environments,
 
 ---
 
-## Architecture and Workflow
-
-```
-+--------------------------------------------------------------+
-|                    Kaffeine DVR GUI / CLI                    |
-|  - TV Guide Grid Browser (Search, Filter, Date Picker)       |
-|  - Series Auto-Record Rule Manager                           |
-|  - Source Health and Connectivity Monitor                    |
-+--------------------------------------------------------------+
-                               |
-                               v
-               +-------------------------------+
-               |    recordings_queue.sqlite     |
-               | (Queued DVR Recording Timers) |
-               +-------------------------------+
-                               |
-                               v (Monitored every 120s, Configurable)
-               +-------------------------------+
-               |   kaffeine-dvr-watcher daemon |
-               |     (systemd --user service)  |
-               +-------------------------------+
-                               |
-                (5 mins before showtime: JIT, Configurable)
-                               v
-            +------------------------------------+
-            | Kaffeine Media Player (D-Bus MPRIS)|
-            |  - Launched minimized to taskbar   |
-            |  - ScheduleProgram called via D-Bus|
-            +------------------------------------+
-```
-
-> **Note on Timing & Flexibility:**
-> - **Poll Interval (Default: 120s):** How often the background watcher checks the queue database. This is fully configurable via the settings dialog or CLI `--interval` flag.
-> - **Just-In-Time Lead Time (Default: 5 mins):** How early Kaffeine is launched and scheduled before broadcast start. This allows Kaffeine ample time to initialize tuner hardware and buffer without missing the start of a program, and can be customized anywhere from 1 to 60 minutes in the DVR Settings tab.
-> - **Post-Roll Buffers (Default: +30 mins for Sports):** Extra recording duration appended to the end of a scheduled recording so programs that run late or enter overtime are fully captured. Kaffeine is dispatched the total duration (base duration + buffer) via D-Bus.
-
----
-
 ## Installation
 
 ### Option 1: AppImage (Recommended - No Setup Required)
