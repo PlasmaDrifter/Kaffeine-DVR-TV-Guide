@@ -1221,14 +1221,6 @@ class FirstRunWelcomeDialog(QDialog):
         title_lbl.setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff; background: transparent;")
         layout.addWidget(title_lbl)
 
-        desc_lbl = QLabel(
-            "This application enables online TV guide browsing and DVR scheduling for Kaffeine "
-            "without blocking system restarts or shutdowns."
-        )
-        desc_lbl.setStyleSheet("color: #a4b0c2; font-size: 13px; line-height: 1.4; background: transparent;")
-        desc_lbl.setWordWrap(True)
-        layout.addWidget(desc_lbl)
-
         # Environment box
         env_box = QGroupBox("Detected System Environment")
         env_layout = QFormLayout(env_box)
