@@ -5401,7 +5401,47 @@ class MainWindow(QMainWindow):
         super().closeEvent(event)
 
 
+def ensure_desktop_launcher():
+    """Ensure kaffeine-dvr.desktop exists in user applications directory."""
+    try:
+        from pathlib import Path
+        import shutil
+        import subprocess
+
+        xdg_data = os.environ.get("XDG_DATA_HOME")
+        apps_dir = (Path(xdg_data) if xdg_data else Path.home() / ".local" / "share") / "applications"
+        desktop_file = apps_dir / "kaffeine-dvr.desktop"
+
+        if not desktop_file.exists():
+            apps_dir.mkdir(parents=True, exist_ok=True)
+            content = (
+                "[Desktop Entry]\n"
+                "Categories=AudioVideo;TV;Recorder;\n"
+                "Comment=Modern TV Guide & DVR Recording Manager for Kaffeine\n"
+                "Exec=kaffeine-dvr\n"
+                "GenericName=TV Guide & Recording Manager\n"
+                "Icon=kaffeine\n"
+                "Keywords=tv;dvr;kaffeine;record;guide;epg;\n"
+                "Name=Kaffeine DVR & TV Guide\n"
+                "StartupNotify=true\n"
+                "StartupWMClass=kaffeine-dvr\n"
+                "Terminal=false\n"
+                "Type=Application\n"
+            )
+            desktop_file.write_text(content, encoding="utf-8")
+            if shutil.which("update-desktop-database"):
+                subprocess.run(
+                    ["update-desktop-database", str(apps_dir)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False
+                )
+    except Exception:
+        pass
+
+
 def main():
+    ensure_desktop_launcher()
     app = QApplication(sys.argv)
     wheel_filter = NoWheelEventFilter(app)
     app.installEventFilter(wheel_filter)
