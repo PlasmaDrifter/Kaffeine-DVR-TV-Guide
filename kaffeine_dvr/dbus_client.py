@@ -338,6 +338,7 @@ class KaffeineDbusClient:
 
             if raise_window:
                 self.raise_window()
+            self.switch_to_tv_view(view_mode=view_mode)
             return tuned
         else:
             env = self._get_display_env()
@@ -357,6 +358,56 @@ class KaffeineDbusClient:
             except Exception as e:
                 print(f"Error launching Kaffeine for channel {channel}: {e}")
                 return False
+
+    def switch_to_tv_view(self, view_mode: Optional[str] = None):
+        """
+        Switch Kaffeine central display to the Television playback view.
+        When Kaffeine tunes via D-Bus, audio plays but the UI stays on the start page
+        unless switched to Television (digit '5').
+        Also toggles minimal or fullscreen mode if requested.
+        """
+        import shutil
+        import time
+
+        kdotool_bin = shutil.which("kdotool")
+        xdotool_bin = shutil.which("xdotool")
+        env = self._get_display_env()
+
+        # Send DigitPressed(5) via D-Bus first if available
+        try:
+            import dbus
+            bus = dbus.SessionBus()
+            proxy = bus.get_object(self.service_name, self.object_path)
+            iface = dbus.Interface(proxy, dbus_interface=self.interface_name)
+            iface.DigitPressed(5)
+        except Exception:
+            pass
+
+        # Also send key 5 to Kaffeine X11 window to guarantee switching from start page
+        if xdotool_bin:
+            try:
+                res_x = subprocess.run(
+                    [xdotool_bin, "search", "--class", "^kaffeine$"],
+                    env=env,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    text=True,
+                    timeout=1.5
+                )
+                wids = [w.strip() for w in res_x.stdout.strip().splitlines() if w.strip()]
+                for wid in wids:
+                    name = subprocess.run([xdotool_bin, "getwindowname", wid], env=env, stdout=subprocess.PIPE, text=True, timeout=1.0).stdout.strip().lower()
+                    if "kaffeine" in name:
+                        subprocess.run([xdotool_bin, "key", "--window", wid, "5"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
+                        if view_mode in ("minimal", "minimal_alwaysontop"):
+                            time.sleep(0.1)
+                            subprocess.run([xdotool_bin, "key", "--window", wid, "m"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
+                        elif view_mode == "fullscreen":
+                            time.sleep(0.1)
+                            subprocess.run([xdotool_bin, "key", "--window", wid, "f"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
+                        break
+            except Exception:
+                pass
 
     def raise_window(self):
         """Unminimize and raise Kaffeine window to the foreground."""
