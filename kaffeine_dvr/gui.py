@@ -720,21 +720,9 @@ class ProgramTileDelegate(QStyledItemDelegate):
         pad_right = 10
         inner_width = max(10, rect.width() - pad_left - pad_right)
 
-        # Draw Badges (green LIVE dot at far right, and REC badge to the left of it)
+        # Draw Badges (REC badge in upper right corner if scheduled)
         badge_reserved_w = 0
         cur_right = rect.right() - pad_right
-
-        if timing_state == "live":
-            dot_diam = 7
-            dot_x = cur_right - dot_diam
-            dot_y = rect.top() + pad_top + 3
-
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(self.COLOR_LIVE_DOT)
-            painter.drawEllipse(dot_x, dot_y, dot_diam, dot_diam)
-
-            cur_right -= (dot_diam + 6)
-            badge_reserved_w += (dot_diam + 6)
 
         if is_scheduled:
             badge_font = QFont(option.font)
@@ -4532,8 +4520,6 @@ class MainWindow(QMainWindow):
         if rec_info:
             st = (rec_info.get("status") or "QUEUED").upper()
             header_prefix = f"<span style='color: #ff5252; font-weight: bold;'>[● {st}]</span> "
-        elif state == "live":
-            header_prefix = f"<span style='color: #66bb6a; font-weight: bold;'>●</span> "
 
         # Color-code the show title by its timing state and category (Option 1)
         cat = prog.get("_category") or classify_guide_category(prog)
