@@ -2964,52 +2964,27 @@ class MainWindow(QMainWindow):
         sources_layout.addWidget(sources_text)
         layout.addWidget(sources_box)
 
-        # Section 3: Step-by-Step Feature Walkthrough
-        guide_box = QGroupBox("3. Feature Walkthrough")
-        guide_box.setStyleSheet(group_style)
-        guide_layout = QVBoxLayout(guide_box)
-        guide_text = QLabel(
-            "• <b style='color: #60a5fa;'>Recordings Schedule Tab:</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;View all upcoming queued recordings, their scheduled start time, duration, and status. "
-            "You can manually add one-off recordings or cancel scheduled shows here.<br><br>"
-            "• <b style='color: #60a5fa;'>Web TV Guide Browser Tab:</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;Browse cached 7-day TV listings by date and channel. Filter by show title, view episode summaries, "
-            "and click <i>Record This Program</i> or <i>Auto-Record This Series</i> directly from the listings.<br><br>"
-            "• <b style='color: #60a5fa;'>Auto-Record Rules Tab:</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;Create series recording rules (e.g. record any show titled <i>'NBA Basketball'</i> or <i>'News'</i>). "
-            "The system checks the guide periodically and automatically schedules any newly matching episodes. Use <i>Edit Rule</i> "
-            "or double-click any row to update rule keywords, channel filters, or enable/disable them.<br><br>"
-            "• <b style='color: #60a5fa;'>Settings Tab:</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;<b style='color: #60a5fa;'>Guide Sources & Health:</b> Monitor provider status codes and latency in real time.<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;<b style='color: #60a5fa;'>Channels Lineup:</b> Import your scanned digital TV channels directly from Kaffeine with one click.<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;<b style='color: #60a5fa;'>Automation & DVR:</b> Configure lead time (default: 5 min), taskbar minimization, and persistent desktop notifications."
-        )
-        guide_text.setWordWrap(True)
-        guide_text.setStyleSheet(body_style)
-        guide_layout.addWidget(guide_text)
-        layout.addWidget(guide_box)
-
-        # Section 4: Background Service and System Commands
-        services_box = QGroupBox("4. Unified Background Service and Commands")
+        # Section 3: Background Service and System Commands
+        services_box = QGroupBox("3. Unified Background Service and Commands")
         services_box.setStyleSheet(group_style)
         services_layout = QVBoxLayout(services_box)
         services_text = QLabel(
-            "• <b>Unified Background Daemon:</b><br>"
+            "• <b style='color: #60a5fa;'>Unified Background Daemon:</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;<code>kaffeine-dvr-watcher.service</code> : Single unified background daemon that monitors the recording queue "
             "and periodically synchronizes guide data (default every 6 hours).<br><br>"
-            "• <b>Configurable Window Launch Modes:</b><br>"
+            "• <b style='color: #60a5fa;'>Configurable Window Launch Modes:</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;In <i>Settings &gt; Automation &amp; DVR</i>, you can choose how Kaffeine opens when armed for recording:<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;1. <b>Minimized to Taskbar (Default):</b> Minimizes quietly to your KDE taskbar panel via <code>kdotool</code> (or <code>xdotool</code>). "
             "Preserves menus and toolbars, avoids system tray clutter, and never affects manual launches from your pinned icon.<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;2. <b>Minimize to System Tray:</b> Starts with the <code>-m</code> flag (minimal mode) to dock into the KDE system tray (if enabled in Kaffeine).<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;3. <b>Normal Window:</b> Opens as a standard visible window on your desktop.<br><br>"
-            "• <b>Command Line Tool:</b><br>"
+            "• <b style='color: #60a5fa;'>Command Line Tool:</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;<code>kaffeine-dvr --status</code> : Print provider health, cache counts, and Kaffeine status.<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;<code>kaffeine-dvr --list</code>   : List all scheduled recordings in the DVR queue.<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;<code>kaffeine-dvr --sync</code>   : Force an immediate TV guide download.<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;<code>kaffeine-dvr --rules</code>  : Evaluate series auto-record rules immediately.<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;<code>kaffeine-dvr --watch</code>  : Run the watcher dispatcher in foreground debug mode.<br><br>"
-            "• <b>Managing the Background Service:</b><br>"
+            "• <b style='color: #60a5fa;'>Managing the Background Service:</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;<code>systemctl --user status kaffeine-dvr-watcher.service</code> : Check daemon running state.<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;<code>systemctl --user restart kaffeine-dvr-watcher.service</code> : Restart the background daemon.<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;<code>journalctl --user -u kaffeine-dvr-watcher.service -f</code> : Follow live daemon logs."
