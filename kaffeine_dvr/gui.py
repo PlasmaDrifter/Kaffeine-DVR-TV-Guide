@@ -67,20 +67,29 @@ def _get_checkmark_icon_path() -> str:
             fallback_dir.mkdir(parents=True, exist_ok=True)
             asset_path = fallback_dir / "checkmark.png"
             if not asset_path.exists():
-                pix = QPixmap(14, 14)
-                pix.fill(Qt.GlobalColor.transparent)
-                p = QPainter(pix)
-                p.setRenderHint(QPainter.RenderHint.Antialiasing)
-                pen = QPen(QColor('#ffffff'), 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
-                p.setPen(pen)
-                p.drawLine(2, 7, 5, 11)
-                p.drawLine(5, 11, 12, 3)
-                p.end()
-                pix.save(str(asset_path), 'PNG')
+                try:
+                    pix = QPixmap(14, 14)
+                    pix.fill(Qt.GlobalColor.transparent)
+                    p = QPainter(pix)
+                    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+                    pen = QPen(QColor('#ffffff'), 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+                    p.setPen(pen)
+                    p.drawLine(2, 7, 5, 11)
+                    p.drawLine(5, 11, 12, 3)
+                    p.end()
+                    pix.save(str(asset_path), 'PNG')
+                except Exception:
+                    pass
     return str(asset_path).replace("\\", "/")
 
 
-CHECKMARK_ICON_PATH = _get_checkmark_icon_path()
+def get_checkmark_icon_path() -> str:
+    global _CACHED_CHECKMARK_PATH
+    if _CACHED_CHECKMARK_PATH is None:
+        _CACHED_CHECKMARK_PATH = _get_checkmark_icon_path()
+    return _CACHED_CHECKMARK_PATH
+
+_CACHED_CHECKMARK_PATH = None
 
 
 class SyncWorker(QThread):
@@ -1181,12 +1190,12 @@ class FirstRunWelcomeDialog(QDialog):
             QCheckBox::indicator:checked {{
                 background-color: #2d6cd4;
                 border-color: #4a8df5;
-                image: url("{CHECKMARK_ICON_PATH}");
+                image: url("{get_checkmark_icon_path()}");
             }}
             QCheckBox::indicator:checked:disabled {{
                 background-color: #238636;
                 border-color: #2ea043;
-                image: url("{CHECKMARK_ICON_PATH}");
+                image: url("{get_checkmark_icon_path()}");
             }}
             QPushButton#primaryActionBtn {{
                 background-color: #2d6cd4;
@@ -1692,7 +1701,7 @@ def setup_dark_theme(app: Optional[QApplication]):
     palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, QColor("#656f82"))
     palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, QColor("#656f82"))
     app.setPalette(palette)
-    stylesheet = APP_STYLESHEET.replace("__CHECKMARK_ICON_PATH__", CHECKMARK_ICON_PATH)
+    stylesheet = APP_STYLESHEET.replace("__CHECKMARK_ICON_PATH__", get_checkmark_icon_path())
     app.setStyleSheet(stylesheet)
 
 
@@ -5441,8 +5450,8 @@ def ensure_desktop_launcher():
 
 
 def main():
-    ensure_desktop_launcher()
     app = QApplication(sys.argv)
+    ensure_desktop_launcher()
     wheel_filter = NoWheelEventFilter(app)
     app.installEventFilter(wheel_filter)
     app.setApplicationName("kaffeine-dvr")
