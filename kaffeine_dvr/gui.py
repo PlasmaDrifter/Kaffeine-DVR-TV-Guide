@@ -270,19 +270,19 @@ class HelpPopup(QFrame):
         super().__init__(parent, Qt.WindowType.ToolTip | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(12, 9, 12, 9)
+        lay.setContentsMargins(14, 11, 14, 11)
         lbl = QLabel(text)
         lbl.setWordWrap(True)
-        lbl.setStyleSheet("color: #f8fafc; font-size: 12px; line-height: 1.35; background: transparent;")
+        lbl.setStyleSheet("color: #f8fafc; font-size: 14px; font-weight: 500; line-height: 1.4; background: transparent;")
         lay.addWidget(lbl)
         self.setStyleSheet(
             "HelpPopup {"
             "  background-color: #0f172a;"
             "  border: 1px solid #475569;"
-            "  border-radius: 6px;"
+            "  border-radius: 7px;"
             "}"
         )
-        self.setMaximumWidth(340)
+        self.setMaximumWidth(380)
         self.adjustSize()
 
     @classmethod
