@@ -2167,12 +2167,12 @@ class MainWindow(QMainWindow):
         self.guide_table = QTableWidget()
         self.guide_table.setColumnCount(6)
         self.guide_table.setHorizontalHeaderLabels(["REC", "Start Time", "Channel", "Show Title", "Episode Title", "Duration"])
-        self.guide_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        self.guide_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        self.guide_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self.guide_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
+        self.guide_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
+        self.guide_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
         self.guide_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
         self.guide_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
-        self.guide_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+        self.guide_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.Interactive)
         self.guide_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.guide_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.guide_table.itemSelectionChanged.connect(self.on_guide_selection_changed)
@@ -4633,71 +4633,80 @@ class MainWindow(QMainWindow):
 
     def _populate_list_guide(self, programs: List[Dict[str, Any]]):
         active_scheduled = self.queue_mgr.get_active_scheduled_map()
-        self.guide_table.setRowCount(len(programs))
-        for row, p in enumerate(programs):
-            ch = (p.get("kaffeine_channel") or "").strip().lower()
-            start_iso = (p.get("start_iso") or "")[:16]
-            rec_info = active_scheduled.get((ch, start_iso))
+        self.guide_table.setUpdatesEnabled(False)
+        self.guide_table.blockSignals(True)
+        try:
+            self.guide_table.setRowCount(len(programs))
+            for row, p in enumerate(programs):
+                ch = (p.get("kaffeine_channel") or "").strip().lower()
+                start_iso = (p.get("start_iso") or "")[:16]
+                rec_info = active_scheduled.get((ch, start_iso))
 
-            timing_info = self._get_program_timing_state(p)
-            timing_state = timing_info.get("state", "upcoming")
-            cat = p.get("_category") or classify_guide_category(p)
+                timing_info = self._get_program_timing_state(p)
+                timing_state = timing_info.get("state", "upcoming")
+                cat = p.get("_category") or classify_guide_category(p)
 
-            rec_item = QTableWidgetItem("● REC" if rec_info else "")
-            rec_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            if rec_info:
-                rec_item.setForeground(QColor("#ff5252"))
-                rec_item.setFont(QFont("", -1, QFont.Weight.Bold))
-                buf_val = rec_info.get("buffer_mins", 0)
-                buf_tip = f" | +{buf_val}m buffer" if buf_val else ""
-                rec_item.setToolTip(f"Recording Scheduled (Queue #{rec_info.get('id')} - {rec_info.get('status')}{buf_tip})")
-            self.guide_table.setItem(row, 0, rec_item)
+                rec_item = QTableWidgetItem("● REC" if rec_info else "")
+                rec_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                if rec_info:
+                    rec_item.setForeground(QColor("#ff5252"))
+                    rec_item.setFont(QFont("", -1, QFont.Weight.Bold))
+                    buf_val = rec_info.get("buffer_mins", 0)
+                    buf_tip = f" | +{buf_val}m buffer" if buf_val else ""
+                    rec_item.setToolTip(f"Recording Scheduled (Queue #{rec_info.get('id')} - {rec_info.get('status')}{buf_tip})")
+                self.guide_table.setItem(row, 0, rec_item)
 
-            time_item = QTableWidgetItem(p.get("start_time_local", ""))
-            chan_item = QTableWidgetItem(p.get("kaffeine_channel", ""))
+                time_item = QTableWidgetItem(p.get("start_time_local", ""))
+                chan_item = QTableWidgetItem(p.get("kaffeine_channel", ""))
 
-            disp_title, disp_sub = get_program_display_titles(p)
-            title_item = QTableWidgetItem(disp_title)
-            sub_item = QTableWidgetItem(disp_sub)
-            dur_item = QTableWidgetItem(p.get("duration_iso", ""))
+                disp_title, disp_sub = get_program_display_titles(p)
+                title_item = QTableWidgetItem(disp_title)
+                sub_item = QTableWidgetItem(disp_sub)
+                dur_item = QTableWidgetItem(p.get("duration_iso", ""))
 
-            # Option 1 coloring for list view:
-            if timing_state == "past":
-                gray_color = QColor("#788292")
-                time_item.setForeground(gray_color)
-                chan_item.setForeground(gray_color)
-                title_item.setForeground(gray_color)
-                sub_item.setForeground(gray_color)
-                dur_item.setForeground(gray_color)
-            elif timing_state == "live":
-                if cat == "sports":
-                    t_color = QColor("#ffa028")
-                elif cat == "news":
-                    t_color = QColor("#4fc3f7")
-                elif cat == "movies":
-                    t_color = QColor("#ff5c5c")
+                # Option 1 coloring for list view:
+                if timing_state == "past":
+                    gray_color = QColor("#788292")
+                    time_item.setForeground(gray_color)
+                    chan_item.setForeground(gray_color)
+                    title_item.setForeground(gray_color)
+                    sub_item.setForeground(gray_color)
+                    dur_item.setForeground(gray_color)
+                elif timing_state == "live":
+                    if cat == "sports":
+                        t_color = QColor("#ffa028")
+                    elif cat == "news":
+                        t_color = QColor("#4fc3f7")
+                    elif cat == "movies":
+                        t_color = QColor("#ff5c5c")
+                    else:
+                        t_color = QColor("#66bb6a")
+                    title_item.setForeground(t_color)
+                    title_font = QFont()
+                    title_font.setBold(True)
+                    title_item.setFont(title_font)
                 else:
-                    t_color = QColor("#66bb6a")
-                title_item.setForeground(t_color)
-                title_font = QFont()
-                title_font.setBold(True)
-                title_item.setFont(title_font)
-            else:
-                if cat == "sports":
-                    t_color = QColor("#ffa028")
-                elif cat == "news":
-                    t_color = QColor("#4fc3f7")
-                elif cat == "movies":
-                    t_color = QColor("#ff5c5c")
-                else:
-                    t_color = QColor("#f1f5f9")
-                title_item.setForeground(t_color)
+                    if cat == "sports":
+                        t_color = QColor("#ffa028")
+                    elif cat == "news":
+                        t_color = QColor("#4fc3f7")
+                    elif cat == "movies":
+                        t_color = QColor("#ff5c5c")
+                    else:
+                        t_color = QColor("#f1f5f9")
+                    title_item.setForeground(t_color)
 
-            self.guide_table.setItem(row, 1, time_item)
-            self.guide_table.setItem(row, 2, chan_item)
-            self.guide_table.setItem(row, 3, title_item)
-            self.guide_table.setItem(row, 4, sub_item)
-            self.guide_table.setItem(row, 5, dur_item)
+                self.guide_table.setItem(row, 1, time_item)
+                self.guide_table.setItem(row, 2, chan_item)
+                self.guide_table.setItem(row, 3, title_item)
+                self.guide_table.setItem(row, 4, sub_item)
+                self.guide_table.setItem(row, 5, dur_item)
+
+            for col in [0, 1, 2, 5]:
+                self.guide_table.resizeColumnToContents(col)
+        finally:
+            self.guide_table.blockSignals(False)
+            self.guide_table.setUpdatesEnabled(True)
 
     def _populate_grid_guide(self, programs: List[Dict[str, Any]], airdate: Optional[str], keep_scroll: bool = False):
         active_scheduled = self.queue_mgr.get_active_scheduled_map()
