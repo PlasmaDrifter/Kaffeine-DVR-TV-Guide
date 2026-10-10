@@ -2920,14 +2920,14 @@ class MainWindow(QMainWindow):
         concept_box.setStyleSheet(group_style)
         concept_layout = QVBoxLayout(concept_box)
         concept_text = QLabel(
-            "• <b>The Problem with Native Kaffeine Timers:</b> Whenever timers are active directly inside Kaffeine, "
+            "• <b style='color: #f87171;'>The Problem with Native Kaffeine Timers:</b> Whenever timers are active directly inside Kaffeine, "
             "Kaffeine inhibits Linux system restarts and shutdowns to prevent losing recordings.<br><br>"
-            "• <b>Just-In-Time (JIT) Dispatching:</b> This application stores upcoming recordings in an external queue "
+            "• <b style='color: #f87171;'>Just-In-Time (JIT) Dispatching:</b> This application stores upcoming recordings in an external queue "
             "(<code>recordings_queue.sqlite</code>) rather than inside Kaffeine immediately. Kaffeine remains clean with 0 active timers.<br><br>"
-            "• <b>Unified Background Watcher Daemon:</b> A single background service (<code>kaffeine-dvr-watcher.service</code>) handles both queue monitoring and periodic TV guide synchronizations. "
+            "• <b style='color: #f87171;'>Unified Background Watcher Daemon:</b> A single background service (<code>kaffeine-dvr-watcher.service</code>) handles both queue monitoring and periodic TV guide synchronizations. "
             "When a show is about to start (e.g. 5 minutes before showtime), it automatically launches Kaffeine minimized to your taskbar "
             "and arms the recording via D-Bus Just-In-Time.<br><br>"
-            "• <b>Safe Power Operations:</b> You can reboot or power off your computer at any time without Kaffeine freezing or blocking systemd."
+            "• <b style='color: #f87171;'>Safe Power Operations:</b> You can reboot or power off your computer at any time without Kaffeine freezing or blocking systemd."
         )
         concept_text.setWordWrap(True)
         concept_text.setStyleSheet(body_style)
@@ -2939,22 +2939,22 @@ class MainWindow(QMainWindow):
         sources_box.setStyleSheet(group_style)
         sources_layout = QVBoxLayout(sources_box)
         sources_text = QLabel(
-            "• <b>National Broadcast Networks (TVMaze API - Zero Configuration Required):</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;Networks like <b>FOX, CBS, NBC, ABC, PBS, and The CW</b> work out of the box with <b>zero configuration</b>. "
+            "• <b style='color: #4ade80;'>National Broadcast Networks (TVMaze API - Zero Configuration Required):</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;Networks like <b style='color: #4ade80;'>FOX, CBS, NBC, ABC, PBS, and The CW</b> work out of the box with <b style='color: #4ade80;'>zero configuration</b>. "
             "No account, API keys, or manual setup are required—TVMaze automatically synchronizes up to 7 days of prime-time listings immediately upon launch.<br><br>"
-            "• <b>Understanding National Feeds vs. Local Daytime Programming:</b><br>"
+            "• <b style='color: #4ade80;'>Understanding National Feeds vs. Local Daytime Programming:</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;TVMaze tracks national network schedules, which includes all major prime-time dramas, comedies, national sports, and network specials. "
-            "However, US broadcast networks delegate midday and daytime time-slots to regional affiliates. As a result, <b>local news, syndicated morning/daytime talk shows, game shows, and local independent subchannels</b> "
+            "However, US broadcast networks delegate midday and daytime time-slots to regional affiliates. As a result, <b style='color: #4ade80;'>local news, syndicated morning/daytime talk shows, game shows, and local independent subchannels</b> "
             "do not appear in TVMaze's national feed.<br><br>"
-            "• <b>Getting 24/7 Local Affiliate Schedules & Regional Subchannels (TV Passport):</b><br>"
+            "• <b style='color: #4ade80;'>Getting 24/7 Local Affiliate Schedules & Regional Subchannels (TV Passport):</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;To obtain continuous 24/7 schedules including local news and daytime programming, or to support independent local channels, use TV Passport in <i>Settings &gt; Guide Sources &gt; TV Passport</i>:<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;1. Look up your local affiliate station on <a href='https://www.tvpassport.com' style='color: #64b5f6; font-weight: bold;'>tvpassport.com</a>.<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;2. Copy the numeric station ID from the URL and enter <code>ChannelName = StationID</code>.<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;3. Click <i>Save Station IDs</i>. The app immediately verifies the station and downloads full 24/7 local affiliate listings in the background.<br><br>"
-            "• <b>Free Hybrid Mode (Recommended & Default):</b><br>"
+            "• <b style='color: #4ade80;'>Free Hybrid Mode (Recommended & Default):</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;Running TVMaze and TV Passport together is seamless. TV Passport provides complete 24/7 local schedules for any stations you configure with IDs, "
             "while TVMaze automatically fills in listings for any remaining national networks with zero configuration and no duplicate rows.<br><br>"
-            "• <b>Additional Custom Providers & International Support:</b><br>"
+            "• <b style='color: #4ade80;'>Additional Custom Providers & International Support:</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;You can also connect a custom local XMLTV file or remote URL, or use a paid Schedules Direct (Gracenote) account for international listings."
         )
         sources_text.setWordWrap(True)
@@ -2969,20 +2969,20 @@ class MainWindow(QMainWindow):
         guide_box.setStyleSheet(group_style)
         guide_layout = QVBoxLayout(guide_box)
         guide_text = QLabel(
-            "• <b>Recordings Schedule Tab:</b><br>"
+            "• <b style='color: #60a5fa;'>Recordings Schedule Tab:</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;View all upcoming queued recordings, their scheduled start time, duration, and status. "
             "You can manually add one-off recordings or cancel scheduled shows here.<br><br>"
-            "• <b>Web TV Guide Browser Tab:</b><br>"
+            "• <b style='color: #60a5fa;'>Web TV Guide Browser Tab:</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;Browse cached 7-day TV listings by date and channel. Filter by show title, view episode summaries, "
             "and click <i>Record This Program</i> or <i>Auto-Record This Series</i> directly from the listings.<br><br>"
-            "• <b>Auto-Record Rules Tab:</b><br>"
+            "• <b style='color: #60a5fa;'>Auto-Record Rules Tab:</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;Create series recording rules (e.g. record any show titled <i>'NBA Basketball'</i> or <i>'News'</i>). "
             "The system checks the guide periodically and automatically schedules any newly matching episodes. Use <i>Edit Rule</i> "
             "or double-click any row to update rule keywords, channel filters, or enable/disable them.<br><br>"
-            "• <b>Settings Tab:</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;<b>Guide Sources & Health:</b> Monitor provider status codes and latency in real time.<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;<b>Channels Lineup:</b> Import your scanned digital TV channels directly from Kaffeine with one click.<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;<b>Automation & DVR:</b> Configure lead time (default: 5 min), taskbar minimization, and persistent desktop notifications."
+            "• <b style='color: #60a5fa;'>Settings Tab:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;<b style='color: #60a5fa;'>Guide Sources & Health:</b> Monitor provider status codes and latency in real time.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;<b style='color: #60a5fa;'>Channels Lineup:</b> Import your scanned digital TV channels directly from Kaffeine with one click.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;<b style='color: #60a5fa;'>Automation & DVR:</b> Configure lead time (default: 5 min), taskbar minimization, and persistent desktop notifications."
         )
         guide_text.setWordWrap(True)
         guide_text.setStyleSheet(body_style)
