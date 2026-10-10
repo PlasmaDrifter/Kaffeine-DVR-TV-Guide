@@ -2803,17 +2803,19 @@ class MainWindow(QMainWindow):
             self.end_buffer_spin
         )
 
-        self.auto_buffer_sports_check = QCheckBox("Auto-Extend Sports")
-        self.auto_buffer_sports_check.setChecked(self.config_mgr.auto_buffer_sports)
         self.sports_buffer_spin = QSpinBox()
         self.sports_buffer_spin.setRange(0, 180)
         self.sports_buffer_spin.setValue(self.config_mgr.sports_buffer_mins)
         self.sports_buffer_spin.setSuffix(" minutes")
-        self.sports_buffer_spin.setFixedWidth(130)
+        self.sports_buffer_spin.setFixedWidth(160)
+
+        self.auto_buffer_sports_check = QCheckBox("Auto-Extend Sports")
+        self.auto_buffer_sports_check.setChecked(self.config_mgr.auto_buffer_sports)
+
         sports_row = QHBoxLayout()
-        sports_row.addWidget(self.auto_buffer_sports_check)
-        sports_row.addSpacing(10)
         sports_row.addWidget(self.sports_buffer_spin)
+        sports_row.addSpacing(12)
+        sports_row.addWidget(self.auto_buffer_sports_check)
         sports_row.addStretch()
         dvr_layout.addRow(
             make_setting_label(
