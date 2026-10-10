@@ -282,8 +282,15 @@ class HelpPopup(QFrame):
             "  border-radius: 7px;"
             "}"
         )
-        self.setMaximumWidth(380)
-        self.adjustSize()
+        # Accurately compute needed width and height so box fits the text
+        font = QFont(lbl.font())
+        font.setPixelSize(14)
+        font.setWeight(QFont.Weight.Medium)
+        fm = QFontMetrics(font)
+        max_line_width = max((fm.horizontalAdvance(line) for line in text.splitlines()), default=200)
+        content_width = min(420, max(240, max_line_width))
+        text_rect = fm.boundingRect(QRect(0, 0, content_width, 10000), Qt.TextFlag.TextWordWrap, text)
+        self.setFixedSize(content_width + 28, text_rect.height() + 24)
 
     @classmethod
     def show_for_widget(cls, widget: QWidget, text: str):
