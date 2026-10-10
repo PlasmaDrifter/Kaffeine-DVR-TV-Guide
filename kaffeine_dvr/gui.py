@@ -1966,31 +1966,36 @@ class MainWindow(QMainWindow):
         self.guide_detail_text.setFixedHeight(desc_height)
         detail_layout.addWidget(self.guide_detail_text)
 
-        action_bar = QHBoxLayout()
-        action_bar.addStretch(1)
+        action_bar = QGridLayout()
+        action_bar.setContentsMargins(0, 0, 0, 0)
+
+        left_actions = QWidget()
+        left_layout = QHBoxLayout(left_actions)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(6)
 
         self.record_guide_btn = QPushButton("Record This Program")
         self.record_guide_btn.setStyleSheet("font-weight: bold;")
         self.record_guide_btn.clicked.connect(self.record_selected_guide_item)
-        action_bar.addWidget(self.record_guide_btn)
+        left_layout.addWidget(self.record_guide_btn)
 
         self.cancel_guide_btn = QPushButton("Cancel Recording")
         self.cancel_guide_btn.setStyleSheet("color: #ff5252; font-weight: bold;")
         self.cancel_guide_btn.setVisible(False)
         self.cancel_guide_btn.clicked.connect(self.cancel_selected_guide_recording)
-        action_bar.addWidget(self.cancel_guide_btn)
+        left_layout.addWidget(self.cancel_guide_btn)
+
+        self.add_rule_guide_btn = QPushButton("Auto-Record This Series")
+        self.add_rule_guide_btn.clicked.connect(self.add_rule_from_selected_guide_item)
+        left_layout.addWidget(self.add_rule_guide_btn)
 
         self.watch_guide_btn = QPushButton("Watch Live")
         self.watch_guide_btn.setStyleSheet("font-weight: bold; background-color: #2e7d32; color: #ffffff; padding: 4px 12px;")
         self.watch_guide_btn.setVisible(False)
         self.watch_guide_btn.clicked.connect(self.watch_or_tune_selected_guide_item)
-        action_bar.addWidget(self.watch_guide_btn)
 
-        self.add_rule_guide_btn = QPushButton("Auto-Record This Series")
-        self.add_rule_guide_btn.clicked.connect(self.add_rule_from_selected_guide_item)
-        action_bar.addWidget(self.add_rule_guide_btn)
-
-        action_bar.addStretch(1)
+        action_bar.addWidget(left_actions, 0, 0, Qt.AlignmentFlag.AlignLeft)
+        action_bar.addWidget(self.watch_guide_btn, 0, 0, Qt.AlignmentFlag.AlignCenter)
         detail_layout.addLayout(action_bar)
         layout.addWidget(detail_widget, 0)
         return widget
