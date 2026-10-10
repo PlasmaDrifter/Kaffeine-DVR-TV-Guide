@@ -21,8 +21,8 @@ cp /usr/share/icons/Papirus/48x48/apps/kaffeine.svg AppDir/usr/share/icons/hicol
 # Desktop File with complete AppImage metadata recognized by AppManager
 cat << 'DESK' > AppDir/kaffeine-dvr.desktop
 [Desktop Entry]
-Name=Kaffeine DVR & TV Guide
-GenericName=TV Guide & Recording Manager
+Name=Kaffeine DVR and TV Guide
+GenericName=TV Guide and Recording Manager
 Comment=Modern TV Guide browser & Just-In-Time DVR daemon for Kaffeine
 Exec=kaffeine-dvr %U
 Icon=kaffeine
@@ -31,7 +31,7 @@ Type=Application
 Categories=AudioVideo;Video;TV;Recorder;
 StartupNotify=true
 StartupWMClass=kaffeine-dvr
-X-AppImage-Name=Kaffeine DVR & TV Guide
+X-AppImage-Name=Kaffeine DVR and TV Guide
 X-AppImage-Version=0.8.4
 X-AppImage-Arch=x86_64
 DESK
