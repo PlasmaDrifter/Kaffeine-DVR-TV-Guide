@@ -2265,15 +2265,12 @@ class MainWindow(QMainWindow):
         prov_layout.addStretch()
         layout.addWidget(prov_box)
 
-        # 2. Live Health Monitor
-        health_box = QGroupBox("Guide Sources Health and Connectivity Monitor")
-        health_layout = QVBoxLayout(health_box)
-
-        monitor_desc = QLabel(
-            "Live monitoring of configured TV guide backends. Check status codes, latency, and program contributions."
-        )
-        monitor_desc.setStyleSheet("color: #6c757d; font-size: 11px;")
-        health_layout.addWidget(monitor_desc)
+        # 2. Live Health Monitor (Collapsible)
+        self.health_collapsible = CollapsibleSection("Guide Sources Health && Connectivity Monitor", initially_expanded=False)
+        health_content = QWidget()
+        health_layout = QVBoxLayout(health_content)
+        health_layout.setContentsMargins(10, 10, 10, 10)
+        health_layout.setSpacing(8)
 
         self.health_table = QTableWidget()
         self.health_table.setColumnCount(6)
@@ -2289,7 +2286,7 @@ class MainWindow(QMainWindow):
         self.health_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.health_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.health_table.verticalHeader().setVisible(False)
-        self.health_table.setFixedHeight(120)
+        self.health_table.setFixedHeight(125)
         self.health_table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.health_table.cellDoubleClicked.connect(lambda r, c: self.test_all_sources_health(silent=False))
         health_layout.addWidget(self.health_table)
@@ -2300,7 +2297,9 @@ class MainWindow(QMainWindow):
         btn_row.addWidget(self.test_health_btn)
         btn_row.addStretch()
         health_layout.addLayout(btn_row)
-        layout.addWidget(health_box)
+
+        self.health_collapsible.setContentLayout(health_layout)
+        layout.addWidget(self.health_collapsible)
 
         # 3. Source Configurations (Collapsible Sections)
         # Collapsible 1: TV Passport Custom Stations (Above Custom XMLTV)
@@ -2445,14 +2444,8 @@ class MainWindow(QMainWindow):
     def create_settings_channels_tab(self) -> QWidget:
         widget = QWidget()
         layout = QVBoxLayout(widget)
-
-        layout.addWidget(QLabel("<b>Kaffeine Channel Lineup & Guide Network Mapping</b>:"))
-        desc = QLabel(
-            "Reorder rows in your EPG TV Guide using drag-and-drop or the Move Up/Down buttons.\n"
-            "Map external guide broadcast network names to your exact Kaffeine tuned channel names on the right."
-        )
-        desc.setStyleSheet("color: #6c757d; font-size: 11px;")
-        layout.addWidget(desc)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(12)
 
         # Splitter / Two-panel layout
         lineup_panels = QHBoxLayout()
@@ -2632,16 +2625,16 @@ class MainWindow(QMainWindow):
             self.end_buffer_spin
         )
 
-        self.auto_buffer_sports_check = QCheckBox("Auto-Extend Sports")
+        self.auto_buffer_sports_check = QCheckBox("Auto-Extend")
         self.auto_buffer_sports_check.setChecked(self.config_mgr.auto_buffer_sports)
         self.sports_buffer_spin = QSpinBox()
         self.sports_buffer_spin.setRange(0, 180)
         self.sports_buffer_spin.setValue(self.config_mgr.sports_buffer_mins)
-        self.sports_buffer_spin.setSuffix(" minutes")
-        self.sports_buffer_spin.setFixedWidth(130)
+        self.sports_buffer_spin.setSuffix(" min")
+        self.sports_buffer_spin.setFixedWidth(100)
         sports_row = QHBoxLayout()
         sports_row.addWidget(self.auto_buffer_sports_check)
-        sports_row.addSpacing(10)
+        sports_row.addSpacing(8)
         sports_row.addWidget(self.sports_buffer_spin)
         sports_row.addStretch()
         dvr_layout.addRow(
@@ -2660,7 +2653,7 @@ class MainWindow(QMainWindow):
         self.interval_spin.setFixedWidth(160)
         dvr_layout.addRow(
             make_setting_label(
-                "Watcher Polling Frequency:",
+                "Watcher Polling:",
                 "How often the background watcher service checks the DVR queue for upcoming shows."
             ),
             self.interval_spin
@@ -2683,7 +2676,8 @@ class MainWindow(QMainWindow):
         self.launch_mode_combo.addItem("Minimized to Taskbar (Panel)", "taskbar")
         self.launch_mode_combo.addItem("Minimize to System Tray (-m minimal)", "tray")
         self.launch_mode_combo.addItem("Normal Window (Visible desktop)", "normal")
-        self.launch_mode_combo.setFixedWidth(290)
+        self.launch_mode_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.launch_mode_combo.setMinimumContentsLength(20)
         cur_mode = self.config_mgr.launch_mode
         mode_idx = self.launch_mode_combo.findData(cur_mode)
         if mode_idx >= 0:
@@ -2703,8 +2697,10 @@ class MainWindow(QMainWindow):
         self.guide_watch_combo.addItem("Minimal Mode (-m clean player)", "minimal")
         self.guide_watch_combo.addItem("Full Screen (-f fullscreen)", "fullscreen")
         self.guide_watch_combo.addItem("Always On Top (-t always on top)", "alwaysontop")
+        self.guide_watch_combo.addItem("Minimal + Always On Top (-m -t)", "minimal_alwaysontop")
         self.guide_watch_combo.addItem("Normal Window (Full KDE controls)", "normal")
-        self.guide_watch_combo.setFixedWidth(290)
+        self.guide_watch_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.guide_watch_combo.setMinimumContentsLength(20)
         cur_watch_mode = self.config_mgr.guide_watch_mode
         watch_idx = self.guide_watch_combo.findData(cur_watch_mode)
         if watch_idx >= 0:
@@ -2716,12 +2712,13 @@ class MainWindow(QMainWindow):
                 "• Minimal Mode: Hides toolbars and menus for clean playback.\n"
                 "• Full Screen: Expands to full screen immediately.\n"
                 "• Always On Top: Keeps video pinned on top of other windows.\n"
+                "• Minimal + Always On Top: Borderless floating video pinned above other windows.\n"
                 "• Normal Window: Standard window with playback bars."
             ),
             self.guide_watch_combo
         )
 
-        self.notify_check = QCheckBox("Show Persistent Desktop Notification on Record Launch")
+        self.notify_check = QCheckBox("Enable on Scheduled Recordings")
         self.notify_check.setChecked(self.config_mgr.enable_desktop_notifications)
         dvr_layout.addRow(
             make_setting_label(
@@ -2767,7 +2764,7 @@ class MainWindow(QMainWindow):
 
         left_col.addWidget(win_group)
         left_col.addStretch()
-        two_col_layout.addLayout(left_col, 55)
+        two_col_layout.addLayout(left_col, 1)
 
         # ------------------ RIGHT COLUMN: Service & Storage ------------------
         right_col = QVBoxLayout()
@@ -2875,7 +2872,7 @@ class MainWindow(QMainWindow):
 
         right_col.addWidget(storage_box)
         right_col.addStretch()
-        two_col_layout.addLayout(right_col, 45)
+        two_col_layout.addLayout(right_col, 1)
 
         main_layout.addLayout(two_col_layout)
 

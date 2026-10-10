@@ -308,6 +308,8 @@ class KaffeineDbusClient:
                             app_iface.CommandLine(["kaffeine", "--fullscreen"], "/tmp", {})
                         elif view_mode == "alwaysontop":
                             app_iface.CommandLine(["kaffeine", "--alwaysontop"], "/tmp", {})
+                        elif view_mode == "minimal_alwaysontop":
+                            app_iface.CommandLine(["kaffeine", "--minimal", "--alwaysontop"], "/tmp", {})
                     except Exception:
                         pass
             except Exception:
@@ -328,6 +330,8 @@ class KaffeineDbusClient:
                         cmd.append("--fullscreen")
                     elif view_mode == "alwaysontop":
                         cmd.append("--alwaysontop")
+                    elif view_mode == "minimal_alwaysontop":
+                        cmd.extend(["--minimal", "--alwaysontop"])
                     cmd.extend(["--channel", str(channel)])
                     subprocess.Popen(cmd, env=env)
                     tuned = True
@@ -344,6 +348,8 @@ class KaffeineDbusClient:
                 cmd.append("--fullscreen")
             elif view_mode == "alwaysontop":
                 cmd.append("--alwaysontop")
+            elif view_mode == "minimal_alwaysontop":
+                cmd.extend(["--minimal", "--alwaysontop"])
             cmd.extend(["--channel", str(channel)])
             try:
                 subprocess.Popen(cmd, env=env)
