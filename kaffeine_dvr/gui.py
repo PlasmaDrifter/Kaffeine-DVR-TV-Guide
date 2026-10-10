@@ -2252,7 +2252,7 @@ class MainWindow(QMainWindow):
         self.settings_subtabs.setObjectName("settingsSubTabs")
         self.settings_subtabs.addTab(self.create_settings_automation_tab(), "Automation and DVR")
         self.settings_subtabs.addTab(self.create_settings_guide_tab(), "Guide Sources and Health")
-        self.settings_subtabs.addTab(self.create_settings_channels_tab(), "Channels Lineup")
+        self.settings_subtabs.addTab(self.create_settings_channels_tab(), "Channel Source")
         layout.addWidget(self.settings_subtabs)
 
         return widget
@@ -2468,7 +2468,7 @@ class MainWindow(QMainWindow):
         scroll.setWidget(container)
         return scroll
 
-    # Subcategory 2: Channels Lineup
+    # Subcategory 2: Channel Source
     def create_settings_channels_tab(self) -> QWidget:
         widget = QWidget()
         layout = QVBoxLayout(widget)

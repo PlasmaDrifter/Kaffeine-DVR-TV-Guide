@@ -129,8 +129,8 @@ systemctl --user enable --now kaffeine-dvr-watcher.service
 
 ## Configuration & Guide Sources
 
-### 1. Channel Lineup
-Open **Settings > Channels Lineup**. Click **Import Channels from Kaffeine** to read your scanned channels directly from `~/.local/share/kaffeine/sqlite.db`.
+### 1. Channel Source
+Open **Settings > Channel Source**. Click **Import Channels from Kaffeine** to read your scanned channels directly from `~/.local/share/kaffeine/sqlite.db`.
 
 Lineup format:
 ```text
