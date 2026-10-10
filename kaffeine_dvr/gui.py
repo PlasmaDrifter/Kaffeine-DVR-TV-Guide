@@ -3779,15 +3779,18 @@ class MainWindow(QMainWindow):
                     self.import_channels_from_kaffeine(silent=True)
                 if getattr(dlg, "service_check", None) and dlg.service_check.isChecked():
                     try:
-                        ensure_systemd_service()
-                        subprocess.run(
+                        ensure_systemd_service(force=True)
+                        res = subprocess.run(
                             ["systemctl", "--user", "enable", "--now", "kaffeine-dvr-watcher.service"],
-                            check=False,
-                            stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL
+                            capture_output=True,
+                            text=True,
+                            check=False
                         )
+                        if res.returncode != 0:
+                            print(f"Error starting background service: {res.stderr.strip() or res.stdout.strip()}", flush=True)
+                        self.update_service_status_ui()
                     except Exception as e:
-                        print(f"Error starting background service: {e}")
+                        print(f"Error starting background service: {e}", flush=True)
                 if dlg.sync_check.isChecked():
                     QTimer.singleShot(600, self.sync_guide)
             self.config_mgr.first_run_completed = True
