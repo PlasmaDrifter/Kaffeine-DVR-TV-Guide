@@ -1145,7 +1145,7 @@ class FirstRunWelcomeDialog(QDialog):
     def __init__(self, config_mgr: ConfigManager, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Welcome to Kaffeine DVR & TV Guide")
-        self.setMinimumWidth(820)
+        self.setFixedWidth(730)
         self.config_mgr = config_mgr
         self.setStyleSheet(f"""
             QDialog {{
@@ -1215,10 +1215,12 @@ class FirstRunWelcomeDialog(QDialog):
         """)
 
         layout = QVBoxLayout(self)
-        layout.setSpacing(12)
+        layout.setSpacing(10)
+        layout.setContentsMargins(22, 16, 22, 18)
 
-        title_lbl = QLabel("<b>Welcome to Kaffeine DVR & TV Guide</b>")
-        title_lbl.setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff; background: transparent;")
+        title_lbl = QLabel("Welcome to Kaffeine DVR & TV Guide")
+        title_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title_lbl.setStyleSheet("font-size: 19px; font-weight: bold; color: #ffffff; padding: 6px 0 4px 0; background: transparent;")
         layout.addWidget(title_lbl)
 
         # Environment box
