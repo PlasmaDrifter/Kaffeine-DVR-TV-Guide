@@ -1967,11 +1967,7 @@ class MainWindow(QMainWindow):
         detail_layout.addWidget(self.guide_detail_text)
 
         action_bar = QHBoxLayout()
-        self.watch_guide_btn = QPushButton("Watch Live")
-        self.watch_guide_btn.setStyleSheet("font-weight: bold; background-color: #2e7d32; color: #ffffff; padding: 4px 12px;")
-        self.watch_guide_btn.setVisible(False)
-        self.watch_guide_btn.clicked.connect(self.watch_or_tune_selected_guide_item)
-        action_bar.addWidget(self.watch_guide_btn)
+        action_bar.addStretch(1)
 
         self.record_guide_btn = QPushButton("Record This Program")
         self.record_guide_btn.setStyleSheet("font-weight: bold;")
@@ -1984,11 +1980,17 @@ class MainWindow(QMainWindow):
         self.cancel_guide_btn.clicked.connect(self.cancel_selected_guide_recording)
         action_bar.addWidget(self.cancel_guide_btn)
 
+        self.watch_guide_btn = QPushButton("Watch Live")
+        self.watch_guide_btn.setStyleSheet("font-weight: bold; background-color: #2e7d32; color: #ffffff; padding: 4px 12px;")
+        self.watch_guide_btn.setVisible(False)
+        self.watch_guide_btn.clicked.connect(self.watch_or_tune_selected_guide_item)
+        action_bar.addWidget(self.watch_guide_btn)
+
         self.add_rule_guide_btn = QPushButton("Auto-Record This Series")
         self.add_rule_guide_btn.clicked.connect(self.add_rule_from_selected_guide_item)
         action_bar.addWidget(self.add_rule_guide_btn)
 
-        action_bar.addStretch()
+        action_bar.addStretch(1)
         detail_layout.addLayout(action_bar)
         layout.addWidget(detail_widget, 0)
         return widget
