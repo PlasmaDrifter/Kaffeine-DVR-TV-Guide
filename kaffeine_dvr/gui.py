@@ -2940,11 +2940,11 @@ class MainWindow(QMainWindow):
         sources_layout = QVBoxLayout(sources_box)
         sources_text = QLabel(
             "• <b style='color: #4ade80;'>National Broadcast Networks (TVMaze API - Zero Configuration Required):</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;Networks like <b style='color: #4ade80;'>FOX, CBS, NBC, ABC, PBS, and The CW</b> work out of the box with <b style='color: #4ade80;'>zero configuration</b>. "
+            "&nbsp;&nbsp;&nbsp;&nbsp;Networks like <b>FOX, CBS, NBC, ABC, PBS, and The CW</b> work out of the box with <b>zero configuration</b>. "
             "No account, API keys, or manual setup are required—TVMaze automatically synchronizes up to 7 days of prime-time listings immediately upon launch.<br><br>"
             "• <b style='color: #4ade80;'>Understanding National Feeds vs. Local Daytime Programming:</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;TVMaze tracks national network schedules, which includes all major prime-time dramas, comedies, national sports, and network specials. "
-            "However, US broadcast networks delegate midday and daytime time-slots to regional affiliates. As a result, <b style='color: #4ade80;'>local news, syndicated morning/daytime talk shows, game shows, and local independent subchannels</b> "
+            "However, US broadcast networks delegate midday and daytime time-slots to regional affiliates. As a result, <b>local news, syndicated morning/daytime talk shows, game shows, and local independent subchannels</b> "
             "do not appear in TVMaze's national feed.<br><br>"
             "• <b style='color: #4ade80;'>Getting 24/7 Local Affiliate Schedules & Regional Subchannels (TV Passport):</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;To obtain continuous 24/7 schedules including local news and daytime programming, or to support independent local channels, use TV Passport in <i>Settings &gt; Guide Sources &gt; TV Passport</i>:<br>"
