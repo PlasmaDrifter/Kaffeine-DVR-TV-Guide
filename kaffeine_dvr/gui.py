@@ -1853,7 +1853,7 @@ class MainWindow(QMainWindow):
         widget = QWidget()
         widget.setObjectName("updateBadge")
         badge_layout = QHBoxLayout(widget)
-        badge_layout.setContentsMargins(4, 0, 4, 0)
+        badge_layout.setContentsMargins(0, 0, 4, 0)
         badge_layout.setSpacing(6)
         widget.setStyleSheet("QWidget#updateBadge { background: transparent; border: none; }")
 
@@ -1862,22 +1862,22 @@ class MainWindow(QMainWindow):
         self.update_badge_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.update_badge_btn.setToolTip("Click to view details and install update in Settings")
         self.update_badge_btn.setStyleSheet(
-            "QPushButton { color: #52b774; font-size: 12px; font-weight: 600; border: none; padding: 2px 4px; background: transparent; }"
+            "QPushButton { color: #52b774; font-size: 13px; font-weight: 600; border: none; padding: 0; margin: 0; background: transparent; }"
             "QPushButton:hover { color: #7de89f; text-decoration: underline; }"
         )
         self.update_badge_btn.clicked.connect(self.navigate_to_updates_tab)
-        badge_layout.addWidget(self.update_badge_btn)
+        badge_layout.addWidget(self.update_badge_btn, 0, Qt.AlignmentFlag.AlignVCenter)
 
         self.update_badge_dismiss_btn = QToolButton()
         self.update_badge_dismiss_btn.setText("x")
         self.update_badge_dismiss_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.update_badge_dismiss_btn.setToolTip("Dismiss update notice")
         self.update_badge_dismiss_btn.setStyleSheet(
-            "QToolButton { color: #6c7c8c; font-size: 15px; font-weight: bold; border: none; background: transparent; padding: 0 4px; line-height: 1; }"
+            "QToolButton { color: #788898; font-size: 15px; font-weight: bold; border: none; background: transparent; padding: 0 4px 3px 0; margin: 0; }"
             "QToolButton:hover { color: #d0d8e2; }"
         )
         self.update_badge_dismiss_btn.clicked.connect(self.dismiss_update_badge)
-        badge_layout.addWidget(self.update_badge_dismiss_btn)
+        badge_layout.addWidget(self.update_badge_dismiss_btn, 0, Qt.AlignmentFlag.AlignVCenter)
 
         widget.setVisible(False)
         return widget
