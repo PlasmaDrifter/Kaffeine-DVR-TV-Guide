@@ -2267,6 +2267,7 @@ class MainWindow(QMainWindow):
 
         # 2. Live Health Monitor
         health_box = QGroupBox("Guide Sources Health and Connectivity Monitor")
+        health_box.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         health_layout = QVBoxLayout(health_box)
         health_layout.setContentsMargins(10, 0, 10, 8)
         health_layout.setSpacing(4)
