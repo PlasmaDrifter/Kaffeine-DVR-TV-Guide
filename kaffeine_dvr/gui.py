@@ -4530,11 +4530,10 @@ class MainWindow(QMainWindow):
 
         header_prefix = ""
         if rec_info:
-            qid = rec_info.get("id")
-            st = rec_info.get("status", "QUEUED")
+            st = (rec_info.get("status") or "QUEUED").upper()
             buf_val = rec_info.get("buffer_mins", 0)
             buf_txt = f" | Buffer: +{buf_val}m" if buf_val else ""
-            header_prefix = f"<span style='color: #ff5252; font-weight: bold;'>[● REC QUEUED #{qid} - {st}{buf_txt}]</span> "
+            header_prefix = f"<span style='color: #ff5252; font-weight: bold;'>[● {st}{buf_txt}]</span> "
         elif state == "live":
             header_prefix = f"<span style='color: #66bb6a; font-weight: bold;'>●</span> "
 
