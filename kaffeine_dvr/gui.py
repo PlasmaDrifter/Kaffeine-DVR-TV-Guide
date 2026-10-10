@@ -2922,23 +2922,22 @@ class MainWindow(QMainWindow):
         sources_box.setStyleSheet(group_style)
         sources_layout = QVBoxLayout(sources_box)
         sources_text = QLabel(
-            "• <b style='color: #4ade80;'>National Broadcast Networks (TVMaze API - Zero Configuration Required):</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;Networks like <b>FOX, CBS, NBC, ABC, PBS, and The CW</b> work out of the box with <b>zero configuration</b>. "
-            "No account, API keys, or manual setup are required—TVMaze automatically synchronizes up to 7 days of prime-time listings immediately upon launch.<br><br>"
-            "• <b style='color: #4ade80;'>Understanding National Feeds vs. Local Daytime Programming:</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;TVMaze tracks national network schedules, which includes all major prime-time dramas, comedies, national sports, and network specials. "
-            "However, US broadcast networks delegate midday and daytime time-slots to regional affiliates. As a result, <b>local news, syndicated morning/daytime talk shows, game shows, and local independent subchannels</b> "
-            "do not appear in TVMaze's national feed.<br><br>"
-            "• <b style='color: #4ade80;'>Getting 24/7 Local Affiliate Schedules & Regional Subchannels (TV Passport):</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;To obtain continuous 24/7 schedules including local news and daytime programming, or to support independent local channels, use TV Passport in <i>Settings &gt; Guide Sources &gt; TV Passport</i>:<br>"
+            "• <b style='color: #4ade80;'>National Broadcast Networks (TVMaze API):</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Works out of the box with zero setup (no account, fees, or API keys required).<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Covers major broadcast networks: FOX, CBS, NBC, ABC, PBS, and The CW.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Automatically fetches up to 7 days of prime-time listings upon launch.<br><br>"
+            "• <b style='color: #4ade80;'>National Feeds vs. Local Daytime Programming:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– TVMaze provides national schedules (prime-time series, national sports, and network specials).<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Daytime syndication (local news, talk shows, game shows, and independent subchannels) is delegated to regional affiliates and requires TV Passport.<br><br>"
+            "• <b style='color: #4ade80;'>24/7 Local Affiliate Schedules & Regional Subchannels (TV Passport):</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;1. Look up your local affiliate station on <a href='https://www.tvpassport.com' style='color: #64b5f6; font-weight: bold;'>tvpassport.com</a>.<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;2. Copy the numeric station ID from the URL and enter <code>ChannelName = StationID</code>.<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;3. Click <i>Save Station IDs</i>. The app immediately verifies the station and downloads full 24/7 local affiliate listings in the background.<br><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;2. Copy the numeric station ID from the URL and enter <code>ChannelName = StationID</code> in <i>Settings &gt; TV Passport</i>.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;3. Click <i>Save Station IDs</i> to automatically download full 24/7 local affiliate listings.<br><br>"
             "• <b style='color: #4ade80;'>Free Hybrid Mode (Recommended & Default):</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;Running TVMaze and TV Passport together is seamless. TV Passport provides complete 24/7 local schedules for any stations you configure with IDs, "
-            "while TVMaze automatically fills in listings for any remaining national networks with zero configuration and no duplicate rows.<br><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Combines local 24/7 schedules from TV Passport with instant national listings from TVMaze.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Automatically avoids duplicate channel entries.<br><br>"
             "• <b style='color: #4ade80;'>Additional Custom Providers & International Support:</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;You can also connect a custom local XMLTV file or remote URL, or use a paid Schedules Direct (Gracenote) account for international listings."
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Supports custom local XMLTV files, remote XMLTV URLs, and paid Schedules Direct (Gracenote) accounts."
         )
         sources_text.setWordWrap(True)
         sources_text.setOpenExternalLinks(True)
@@ -2952,14 +2951,16 @@ class MainWindow(QMainWindow):
         concept_box.setStyleSheet(group_style)
         concept_layout = QVBoxLayout(concept_box)
         concept_text = QLabel(
-            "• <b style='color: #f87171;'>The Problem with Native Kaffeine Timers:</b> Whenever timers are active directly inside Kaffeine, "
-            "Kaffeine inhibits Linux system restarts and shutdowns to prevent losing recordings.<br><br>"
-            "• <b style='color: #f87171;'>Just-In-Time (JIT) Dispatching:</b> This application stores upcoming recordings in an external queue "
-            "(<code>recordings_queue.sqlite</code>) rather than inside Kaffeine immediately. Kaffeine remains clean with 0 active timers.<br><br>"
-            "• <b style='color: #f87171;'>Unified Background Watcher Daemon:</b> A single background service (<code>kaffeine-dvr-watcher.service</code>) handles both queue monitoring and periodic TV guide synchronizations. "
-            "When a show is about to start (e.g. 5 minutes before showtime), it automatically launches Kaffeine minimized to your taskbar "
-            "and arms the recording via D-Bus Just-In-Time.<br><br>"
-            "• <b style='color: #f87171;'>Safe Power Operations:</b> You can reboot or power off your computer at any time without Kaffeine freezing or blocking systemd."
+            "• <b style='color: #f87171;'>The Problem with Native Kaffeine Timers:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– When timers are stored directly inside Kaffeine, Kaffeine blocks Linux system reboots and shutdowns to avoid losing recordings.<br><br>"
+            "• <b style='color: #f87171;'>Just-In-Time (JIT) Dispatching:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Upcoming recordings are stored safely in an external database queue (<code>recordings_queue.sqlite</code>).<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Kaffeine stays clean with 0 active timers until a show is about to air.<br><br>"
+            "• <b style='color: #f87171;'>Unified Background Watcher Daemon:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– A single background daemon (<code>kaffeine-dvr-watcher.service</code>) monitors the queue and syncs guide data.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Right before showtime (e.g. 5 minutes early), it automatically launches Kaffeine minimized and arms the timer via D-Bus.<br><br>"
+            "• <b style='color: #f87171;'>Safe Power Operations:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– You can reboot or shut down your PC freely at any time without Kaffeine freezing or blocking systemd."
         )
         concept_text.setWordWrap(True)
         concept_text.setStyleSheet(body_style)
@@ -2972,24 +2973,21 @@ class MainWindow(QMainWindow):
         services_layout = QVBoxLayout(services_box)
         services_text = QLabel(
             "• <b style='color: #60a5fa;'>Unified Background Daemon:</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;<code>kaffeine-dvr-watcher.service</code> : Single unified background daemon that monitors the recording queue "
-            "and periodically synchronizes guide data (default every 6 hours).<br><br>"
-            "• <b style='color: #60a5fa;'>Configurable Window Launch Modes:</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;In <i>Settings &gt; Automation &amp; DVR</i>, you can choose how Kaffeine opens when armed for recording:<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;1. <b>Minimized to Taskbar (Default):</b> Minimizes quietly to your KDE taskbar panel via <code>kdotool</code> (or <code>xdotool</code>). "
-            "Preserves menus and toolbars, avoids system tray clutter, and never affects manual launches from your pinned icon.<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;2. <b>Minimize to System Tray:</b> Starts with the <code>-m</code> flag (minimal mode) to dock into the KDE system tray (if enabled in Kaffeine).<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;3. <b>Normal Window:</b> Opens as a standard visible window on your desktop.<br><br>"
-            "• <b style='color: #60a5fa;'>Command Line Tool:</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;<code>kaffeine-dvr --status</code> : Print provider health, cache counts, and Kaffeine status.<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;<code>kaffeine-dvr --list</code>   : List all scheduled recordings in the DVR queue.<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;<code>kaffeine-dvr --sync</code>   : Force an immediate TV guide download.<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;<code>kaffeine-dvr --rules</code>  : Evaluate series auto-record rules immediately.<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;<code>kaffeine-dvr --watch</code>  : Run the watcher dispatcher in foreground debug mode.<br><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– <code>kaffeine-dvr-watcher.service</code> : Monitors the queue and refreshes guide feeds periodically.<br><br>"
+            "• <b style='color: #60a5fa;'>Configurable Window Launch Modes (Settings &gt; Automation &amp; DVR):</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– <b>Minimized to Taskbar (Default):</b> Silently minimizes to KDE panel via <code>kdotool</code>/<code>xdotool</code> without disturbing desktop workspace.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– <b>Minimize to System Tray:</b> Starts with <code>-m</code> flag to dock cleanly into the KDE system tray.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– <b>Normal Window:</b> Opens as a standard visible desktop window.<br><br>"
+            "• <b style='color: #60a5fa;'>Command Line Utility (kaffeine-dvr):</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– <code>kaffeine-dvr --status</code> : Print provider health, cache counts, and Kaffeine status.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– <code>kaffeine-dvr --list</code>   : List scheduled recordings in the DVR queue.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– <code>kaffeine-dvr --sync</code>   : Force an immediate TV guide download.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– <code>kaffeine-dvr --rules</code>  : Evaluate series auto-record rules immediately.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– <code>kaffeine-dvr --watch</code>  : Run the watcher dispatcher in foreground debug mode.<br><br>"
             "• <b style='color: #60a5fa;'>Managing the Background Service:</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;<code>systemctl --user status kaffeine-dvr-watcher.service</code> : Check daemon running state.<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;<code>systemctl --user restart kaffeine-dvr-watcher.service</code> : Restart the background daemon.<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;<code>journalctl --user -u kaffeine-dvr-watcher.service -f</code> : Follow live daemon logs."
+            "&nbsp;&nbsp;&nbsp;&nbsp;– <code>systemctl --user status kaffeine-dvr-watcher.service</code> : Check daemon running state.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– <code>systemctl --user restart kaffeine-dvr-watcher.service</code> : Restart the background daemon.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– <code>journalctl --user -u kaffeine-dvr-watcher.service -f</code> : Follow live daemon logs."
         )
         services_text.setWordWrap(True)
         services_text.setStyleSheet(body_style)
