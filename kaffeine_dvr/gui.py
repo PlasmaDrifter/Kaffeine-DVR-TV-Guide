@@ -3053,7 +3053,8 @@ class MainWindow(QMainWindow):
         s4_lay = QVBoxLayout(s4_box)
         s4_text = QLabel(
             "• <b style='color: #c084fc;'>National Networks (TVMaze - Zero Configuration):</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;– Works out of the box with zero configuration for major national broadcast networks (FOX, CBS, NBC, ABC, PBS, CW).<br><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Works out of the box with zero configuration for major national broadcast networks (FOX, CBS, NBC, ABC, PBS, CW).<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– <i>Note:</i> TVMaze tracks national feeds only and <b>does not provide local programming</b> (local news, regional daytime talk shows, and independent subchannels). To receive local programming, TV Passport will need to be configured.<br><br>"
             "• <b style='color: #c084fc;'>Full 24/7 Local Affiliates & Regional Subchannels (TV Passport):</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;1. Open <a href='https://www.tvpassport.com' style='color: #64b5f6; font-weight: bold;'>tvpassport.com</a> and find your city's local affiliate station.<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;2. Copy the numeric station ID from the URL (e.g. <code>1809</code> for Fox Phoenix).<br>"
@@ -3073,6 +3074,10 @@ class MainWindow(QMainWindow):
         s5_box.setStyleSheet(make_card_style("#60a5fa"))
         s5_lay = QVBoxLayout(s5_box)
         s5_text = QLabel(
+            "• <b style='color: #60a5fa;'>Navigating the TV Guide Grid:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– <b>Fluid Navigation:</b> Use the scrollbars or click and drag (grab) anywhere on the grid in any direction to smoothly pan through channels and time slots.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– <b>Grid Zoom (+ / -):</b> Use the <b>+</b> and <b>−</b> zoom buttons to increase or decrease the font and tile size of the guide grid to your preference.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– <b>Maximize Grid:</b> Click the <b>⛶ Maximize</b> button (or press <b>Escape</b> to exit) to expand the guide grid to fill the entire application window.<br><br>"
             "• <b style='color: #60a5fa;'>Watching Live TV:</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;– Switch to <b>Web TV Guide Browser</b>. Double-click any live show tile or click <b>Watch Live</b> to tune Kaffeine.<br><br>"
             "• <b style='color: #60a5fa;'>Scheduling DVR Recordings:</b><br>"
