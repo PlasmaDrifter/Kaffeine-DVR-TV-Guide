@@ -16,7 +16,8 @@ from PyQt6.QtWidgets import (
     QProgressBar, QStatusBar, QFrame, QGroupBox, QFileDialog,
     QScrollArea, QToolButton, QSizePolicy, QAbstractSpinBox, QSlider,
     QStackedWidget, QButtonGroup, QStyledItemDelegate, QStyleOptionViewItem,
-    QStyle, QListWidget, QListWidgetItem, QAbstractItemView, QToolTip
+    QStyle, QListWidget, QListWidgetItem, QAbstractItemView, QToolTip,
+    QLayout
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QSettings, QByteArray, QEvent, QObject, QPoint, QPointF, QRect, QRectF, QSize
 from PyQt6.QtGui import QColor, QFont, QFontMetrics, QIcon, QWheelEvent, QPainter, QPalette, QPixmap, QPen, QPolygon, QBrush
@@ -1216,11 +1217,12 @@ class FirstRunWelcomeDialog(QDialog):
 
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
-        layout.setContentsMargins(22, 16, 22, 18)
+        layout.setContentsMargins(22, 14, 22, 16)
 
         title_lbl = QLabel("Welcome to Kaffeine DVR & TV Guide")
         title_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title_lbl.setStyleSheet("font-size: 19px; font-weight: bold; color: #ffffff; padding: 6px 0 4px 0; background: transparent;")
+        title_lbl.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        title_lbl.setStyleSheet("font-size: 19px; font-weight: bold; color: #ffffff; padding: 2px 0 2px 0; background: transparent;")
         layout.addWidget(title_lbl)
 
         # Environment box
