@@ -1228,29 +1228,53 @@ class FirstRunWelcomeDialog(QDialog):
         # Environment box
         env_box = QGroupBox("Detected System Environment")
         env_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        env_layout = QFormLayout(env_box)
+        env_layout = QVBoxLayout(env_box)
+        env_layout.setContentsMargins(20, 16, 20, 18)
+        env_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         local_dt = datetime.now().astimezone()
         tz_name = local_dt.tzname() or "Local"
         tz_offset = local_dt.strftime("%z")
         tz_str = f"{tz_name} (UTC{tz_offset[:3]}:{tz_offset[3:]})"
 
-        tz_val = QLabel(f"<b>{tz_str}</b>")
-        tz_val.setStyleSheet("font-size: 13px; color: #ffffff; background: transparent;")
-        env_layout.addRow("System Timezone:", tz_val)
-        tz_note = QLabel("Showtimes and recording timers automatically align with this local timezone.")
-        tz_note.setWordWrap(True)
-        tz_note.setStyleSheet("color: #a4b0c2; font-size: 12px; background: transparent;")
-        env_layout.addRow("", tz_note)
-
         kaffeine_channels = self.config_mgr.get_scanned_kaffeine_channels()
         if kaffeine_channels:
-            ch_status = f"{len(kaffeine_channels)} scanned channels found in Kaffeine"
+            ch_count = len(kaffeine_channels)
+            ch_status_html = (
+                f"<b><span style='color: #4ade80; font-weight: bold;'>{ch_count} scanned channels</span> found in Kaffeine</b>"
+            )
         else:
-            ch_status = "No scanned channels found yet (Kaffeine scan not performed)"
-        ch_val = QLabel(f"<b>{ch_status}</b>")
-        ch_val.setStyleSheet("font-size: 13px; color: #ffffff; background: transparent;")
-        env_layout.addRow("Kaffeine Tuner:", ch_val)
+            ch_status_html = (
+                "<b style='color: #fbbf24;'>No scanned channels found yet</b> "
+                "<span style='color: #94a3b8; font-size: 11px;'>(Kaffeine scan not performed)</span>"
+            )
+
+        grid_container = QWidget()
+        grid_lay = QGridLayout(grid_container)
+        grid_lay.setContentsMargins(0, 0, 0, 0)
+        grid_lay.setHorizontalSpacing(12)
+        grid_lay.setVerticalSpacing(8)
+
+        lbl_tz_label = QLabel("System Timezone:")
+        lbl_tz_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        lbl_tz_label.setStyleSheet("color: #dce1e8; font-size: 13px; background: transparent;")
+
+        lbl_tz_val = QLabel(f"<b>{tz_str}</b> <span style='color: #94a3b8; font-size: 11px;'>(Showtimes automatically align with this timezone)</span>")
+        lbl_tz_val.setStyleSheet("font-size: 13px; color: #ffffff; background: transparent;")
+
+        lbl_tun_label = QLabel("Kaffeine Tuner:")
+        lbl_tun_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        lbl_tun_label.setStyleSheet("color: #dce1e8; font-size: 13px; background: transparent;")
+
+        lbl_tun_val = QLabel(ch_status_html)
+        lbl_tun_val.setStyleSheet("font-size: 13px; color: #ffffff; background: transparent;")
+
+        grid_lay.addWidget(lbl_tz_label, 0, 0)
+        grid_lay.addWidget(lbl_tz_val, 0, 1)
+        grid_lay.addWidget(lbl_tun_label, 1, 0)
+        grid_lay.addWidget(lbl_tun_val, 1, 1)
+
+        env_layout.addWidget(grid_container, alignment=Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(env_box)
 
         # TV Guide and Regional Channel Coverage Explanation
