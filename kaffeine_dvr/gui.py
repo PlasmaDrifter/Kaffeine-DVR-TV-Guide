@@ -2495,12 +2495,13 @@ class MainWindow(QMainWindow):
 
         # 5-line concise explainer inside the text area
         self.mapping_tip_lbl = QLabel(self.mapping_text)
+        self.mapping_tip_lbl.setTextFormat(Qt.TextFormat.RichText)
         self.mapping_tip_lbl.setText(
-            "Online guides use network names (e.g. Fox, NBC).\n"
-            "Antennas scan local station callsigns (e.g. KSAZ-HD).\n"
-            "Format: Guide Name = Tuned Channel.\n"
-            "Example: Fox = KSAZ-HD connects Fox to your antenna.\n"
-            "If channels in Kaffeine already match, leave as Fox = Fox."
+            "Online guides use network names (e.g. Fox, NBC).<br>"
+            "Antennas scan local station callsigns (e.g. KSAZ-HD).<br>"
+            "Format: <span style='color: #52b788;'>Guide Name = Tuned Channel</span>.<br>"
+            "Example: <span style='color: #52b788;'>Fox = KSAZ-HD</span> connects Fox to your antenna.<br>"
+            "If channels in Kaffeine already match, leave as <span style='color: #52b788;'>Fox = Fox</span>."
         )
         self.mapping_tip_lbl.setStyleSheet("color: #8a99ad; font-size: 13px; line-height: 1.5; background: transparent;")
         self.mapping_tip_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
