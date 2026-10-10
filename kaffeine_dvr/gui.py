@@ -2969,7 +2969,7 @@ class MainWindow(QMainWindow):
         title_box = QWidget()
         title_layout = QVBoxLayout(title_box)
         title_layout.setContentsMargins(0, 0, 0, 0)
-        h1 = QLabel("<b>Kaffeine DVR and TV Info</b>")
+        h1 = QLabel("<b>Kaffeine DVR &amp; TV Info</b>")
         h1.setAlignment(Qt.AlignmentFlag.AlignCenter)
         h1.setStyleSheet("font-size: 20px; font-weight: bold; color: #ffffff;")
         title_layout.addWidget(h1)
