@@ -2989,8 +2989,8 @@ class MainWindow(QMainWindow):
 
         # Base style helper
         make_card_style = lambda color: (
-            "QGroupBox { font-size: 15px; font-weight: bold; margin-top: 6px; padding-top: 14px; } "
-            f"QGroupBox::title {{ subcontrol-origin: margin; subcontrol-position: top center; padding: 0 4px; color: {color}; }}"
+            "QGroupBox { font-size: 15px; font-weight: bold; margin-top: 14px; padding-top: 18px; } "
+            f"QGroupBox::title {{ subcontrol-origin: margin; subcontrol-position: top center; padding: 0 6px; color: {color}; }}"
         )
         body_style = "color: #d8e2ee; font-size: 14px; line-height: 1.6;"
 
@@ -2999,6 +2999,7 @@ class MainWindow(QMainWindow):
         s1_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
         s1_box.setStyleSheet(make_card_style("#38bdf8"))
         s1_lay = QVBoxLayout(s1_box)
+        s1_lay.setContentsMargins(15, 15, 15, 15)
         s1_text = QLabel(
             "• <b style='color: #38bdf8;'>Scan Channels with Your Digital TV Tuner:</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;1. Open the native Kaffeine application.<br>"
@@ -3016,6 +3017,7 @@ class MainWindow(QMainWindow):
         s2_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
         s2_box.setStyleSheet(make_card_style("#4ade80"))
         s2_lay = QVBoxLayout(s2_box)
+        s2_lay.setContentsMargins(15, 15, 15, 15)
         s2_text = QLabel(
             "• <b style='color: #4ade80;'>One-Click Database Import:</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;1. In this app, click the <b>Settings</b> tab, then select the <b>Channel Source</b> subtab.<br>"
@@ -3032,6 +3034,7 @@ class MainWindow(QMainWindow):
         s3_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
         s3_box.setStyleSheet(make_card_style("#facc15"))
         s3_lay = QVBoxLayout(s3_box)
+        s3_lay.setContentsMargins(15, 15, 15, 15)
         s3_text = QLabel(
             "• <b style='color: #facc15;'>TV Guide Channel Order (Left Panel):</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;– Drag and drop channels or use <b>Move Up</b> / <b>Move Down</b> / <b>Sort A-Z</b> to prioritize how channels are stacked in your EPG TV Guide grid.<br><br>"
@@ -3051,6 +3054,7 @@ class MainWindow(QMainWindow):
         s4_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
         s4_box.setStyleSheet(make_card_style("#c084fc"))
         s4_lay = QVBoxLayout(s4_box)
+        s4_lay.setContentsMargins(15, 15, 15, 15)
         s4_text = QLabel(
             "• <b style='color: #c084fc;'>National Networks (TVMaze - Zero Configuration):</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;– Works out of the box with zero configuration for major national broadcast networks (FOX, CBS, NBC, ABC, PBS, CW).<br>"
@@ -3073,6 +3077,7 @@ class MainWindow(QMainWindow):
         s5_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
         s5_box.setStyleSheet(make_card_style("#60a5fa"))
         s5_lay = QVBoxLayout(s5_box)
+        s5_lay.setContentsMargins(15, 15, 15, 15)
         s5_text = QLabel(
             "• <b style='color: #60a5fa;'>Navigating the TV Guide Grid:</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;– <b>Fluid Navigation:</b> Use the scrollbars or click and drag (grab) anywhere on the grid in any direction to smoothly pan through channels and time slots.<br>"
@@ -3113,8 +3118,8 @@ class MainWindow(QMainWindow):
 
         # Base styles
         make_group_style = lambda color: (
-            "QGroupBox { font-size: 15px; font-weight: bold; margin-top: 6px; padding-top: 14px; } "
-            f"QGroupBox::title {{ subcontrol-origin: margin; subcontrol-position: top center; padding: 0 4px; color: {color}; }}"
+            "QGroupBox { font-size: 15px; font-weight: bold; margin-top: 14px; padding-top: 18px; } "
+            f"QGroupBox::title {{ subcontrol-origin: margin; subcontrol-position: top center; padding: 0 6px; color: {color}; }}"
         )
         body_style = "color: #d8e2ee; font-size: 14px; line-height: 1.6;"
 
@@ -3123,6 +3128,7 @@ class MainWindow(QMainWindow):
         sources_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
         sources_box.setStyleSheet(make_group_style("#4ade80"))
         sources_layout = QVBoxLayout(sources_box)
+        sources_layout.setContentsMargins(15, 15, 15, 15)
         sources_text = QLabel(
             "• <b style='color: #4ade80;'>National Broadcast Networks (TVMaze API):</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;– Works out of the box with zero setup (no account, fees, or API keys required).<br>"
@@ -3153,6 +3159,7 @@ class MainWindow(QMainWindow):
         concept_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
         concept_box.setStyleSheet(make_group_style("#f87171"))
         concept_layout = QVBoxLayout(concept_box)
+        concept_layout.setContentsMargins(15, 15, 15, 15)
         concept_text = QLabel(
             "• <b style='color: #f87171;'>The Problem with Native Kaffeine Timers:</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;– When timers are stored directly inside Kaffeine, Kaffeine blocks Linux system reboots and shutdowns to avoid losing recordings.<br><br>"
@@ -3175,6 +3182,7 @@ class MainWindow(QMainWindow):
         services_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
         services_box.setStyleSheet(make_group_style("#60a5fa"))
         services_layout = QVBoxLayout(services_box)
+        services_layout.setContentsMargins(15, 15, 15, 15)
         services_text = QLabel(
             "• <b style='color: #60a5fa;'>Unified Background Daemon:</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;– <code>kaffeine-dvr-watcher.service</code> : Monitors the queue and refreshes guide feeds periodically.<br><br>"
