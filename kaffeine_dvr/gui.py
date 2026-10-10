@@ -3779,6 +3779,7 @@ class MainWindow(QMainWindow):
                     self.import_channels_from_kaffeine(silent=True)
                 if getattr(dlg, "service_check", None) and dlg.service_check.isChecked():
                     try:
+                        ensure_systemd_service()
                         subprocess.run(
                             ["systemctl", "--user", "enable", "--now", "kaffeine-dvr-watcher.service"],
                             check=False,
@@ -4020,17 +4021,33 @@ class MainWindow(QMainWindow):
 
     def start_background_service(self):
         try:
-            subprocess.run(["systemctl", "--user", "enable", "--now", "kaffeine-dvr-watcher.service"], check=False)
+            ensure_systemd_service(force=True)
+            res = subprocess.run(
+                ["systemctl", "--user", "enable", "--now", "kaffeine-dvr-watcher.service"],
+                capture_output=True, text=True, check=False
+            )
             self.update_service_status_ui()
-            QMessageBox.information(self, "Service Started", "kaffeine-dvr-watcher.service has been started and enabled.")
+            if res.returncode == 0:
+                QMessageBox.information(self, "Service Started", "kaffeine-dvr-watcher.service has been started and enabled.")
+            else:
+                err = res.stderr.strip() or res.stdout.strip() or f"Exit code {res.returncode}"
+                QMessageBox.warning(self, "Service Error", f"Failed to start service:\n{err}")
         except Exception as e:
             QMessageBox.warning(self, "Service Error", f"Failed to start service: {e}")
 
     def restart_background_service(self):
         try:
-            subprocess.run(["systemctl", "--user", "restart", "kaffeine-dvr-watcher.service"], check=False)
+            ensure_systemd_service(force=True)
+            res = subprocess.run(
+                ["systemctl", "--user", "restart", "kaffeine-dvr-watcher.service"],
+                capture_output=True, text=True, check=False
+            )
             self.update_service_status_ui()
-            QMessageBox.information(self, "Service Restarted", "kaffeine-dvr-watcher.service has been restarted.")
+            if res.returncode == 0:
+                QMessageBox.information(self, "Service Restarted", "kaffeine-dvr-watcher.service has been restarted.")
+            else:
+                err = res.stderr.strip() or res.stdout.strip() or f"Exit code {res.returncode}"
+                QMessageBox.warning(self, "Service Error", f"Failed to restart service:\n{err}")
         except Exception as e:
             QMessageBox.warning(self, "Service Error", f"Failed to restart service: {e}")
 
@@ -5802,9 +5819,95 @@ def ensure_desktop_launcher():
         pass
 
 
+def resolve_systemd_exec_start() -> str:
+    """Resolve the appropriate ExecStart command line for the background watcher service."""
+    import shutil
+    from pathlib import Path
+
+    appimage_path = os.environ.get("APPIMAGE")
+    if appimage_path and Path(appimage_path).is_file():
+        return f'"{Path(appimage_path).resolve()}" --watch'
+
+    local_bin = Path.home() / ".local" / "bin" / "kaffeine-dvr"
+    if local_bin.is_file():
+        return "%h/.local/bin/kaffeine-dvr --watch"
+
+    cmd = shutil.which("kaffeine-dvr")
+    if cmd:
+        return f'"{cmd}" --watch'
+
+    try:
+        repo_root = Path(__file__).resolve().parent.parent
+        cli_file = repo_root / "kaffeine_dvr" / "cli.py"
+        if cli_file.is_file():
+            return f'"{sys.executable}" "{cli_file}" --watch'
+    except Exception:
+        pass
+
+    return f'"{sys.executable}" -m kaffeine_dvr.cli --watch'
+
+
+def ensure_systemd_service(force: bool = False) -> bool:
+    """Ensure kaffeine-dvr-watcher.service unit file exists in user systemd directory."""
+    try:
+        from pathlib import Path
+        import subprocess
+
+        xdg_config = os.environ.get("XDG_CONFIG_HOME")
+        base = Path(xdg_config) if xdg_config else Path.home() / ".config"
+        service_dir = base / "systemd" / "user"
+        service_file = service_dir / "kaffeine-dvr-watcher.service"
+
+        exec_start = resolve_systemd_exec_start()
+        unit_content = (
+            "[Unit]\n"
+            "Description=Kaffeine DVR Background Watcher (Just-In-Time Dispatcher)\n"
+            "After=network.target\n\n"
+            "[Service]\n"
+            "Type=simple\n"
+            f"ExecStart={exec_start}\n"
+            "Restart=on-failure\n"
+            "RestartSec=10\n"
+            "Environment=\"PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin\"\n"
+            "Environment=\"PYTHONUNBUFFERED=1\"\n"
+            "Environment=\"XDG_CURRENT_DESKTOP=KDE\"\n"
+            "Environment=\"KDE_FULL_SESSION=true\"\n"
+            "Environment=\"KDE_SESSION_VERSION=6\"\n"
+            "Environment=\"DESKTOP_SESSION=plasma.desktop\"\n"
+            "StandardOutput=journal\n"
+            "StandardError=journal\n\n"
+            "[Install]\n"
+            "WantedBy=default.target\n"
+        )
+
+        needs_write = force or (not service_file.exists())
+        if not needs_write:
+            try:
+                current_text = service_file.read_text(encoding="utf-8")
+                if current_text.strip() != unit_content.strip():
+                    needs_write = True
+            except Exception:
+                needs_write = True
+
+        if needs_write:
+            service_dir.mkdir(parents=True, exist_ok=True)
+            service_file.write_text(unit_content, encoding="utf-8")
+            subprocess.run(
+                ["systemctl", "--user", "daemon-reload"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False
+            )
+        return True
+    except Exception as e:
+        print(f"Error ensuring systemd service: {e}")
+        return False
+
+
 def main():
     app = QApplication(sys.argv)
     ensure_desktop_launcher()
+    ensure_systemd_service()
     wheel_filter = NoWheelEventFilter(app)
     app.installEventFilter(wheel_filter)
     app.setApplicationName("kaffeine-dvr")
