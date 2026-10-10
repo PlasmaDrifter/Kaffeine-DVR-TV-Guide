@@ -2432,8 +2432,31 @@ class MainWindow(QMainWindow):
             "• Normal Window: Opens as an active visible window on your desktop."
         )
         launch_mode_lbl.setStyleSheet("color: #94a3b8; font-size: 13px; line-height: 1.4;")
-        form.addRow("Window Launch Mode:", self.launch_mode_combo)
+        form.addRow("Recording Launch Mode:", self.launch_mode_combo)
         form.addRow("", launch_mode_lbl)
+
+        # Guide Live TV Watch Mode setting
+        self.guide_watch_combo = QComboBox()
+        self.guide_watch_combo.addItem("Minimal Mode (-m minimal clean video player)", "minimal")
+        self.guide_watch_combo.addItem("Full Screen (-f fullscreen)", "fullscreen")
+        self.guide_watch_combo.addItem("Always On Top (-t always on top)", "alwaysontop")
+        self.guide_watch_combo.addItem("Normal Window (Standard KDE player window)", "normal")
+        self.guide_watch_combo.setFixedWidth(340)
+        cur_watch_mode = self.config_mgr.guide_watch_mode
+        watch_idx = self.guide_watch_combo.findData(cur_watch_mode)
+        if watch_idx >= 0:
+            self.guide_watch_combo.setCurrentIndex(watch_idx)
+
+        guide_watch_lbl = QLabel(
+            "Controls window display mode when watching live TV directly from the Guide:\n"
+            "• Minimal Mode: Hides toolbars and menus for an uncluttered video playback screen.\n"
+            "• Full Screen: Expands to full screen immediately upon tuning.\n"
+            "• Always On Top: Keeps video pinned on top of other desktop windows.\n"
+            "• Normal Window: Standard window with full KDE playback and menu bars."
+        )
+        guide_watch_lbl.setStyleSheet("color: #94a3b8; font-size: 13px; line-height: 1.4;")
+        form.addRow("Guide Live TV View Mode:", self.guide_watch_combo)
+        form.addRow("", guide_watch_lbl)
 
         self.notify_check = QCheckBox("Show Persistent Desktop Notification on Record Launch")
         self.notify_check.setChecked(self.config_mgr.enable_desktop_notifications)
@@ -2488,6 +2511,7 @@ class MainWindow(QMainWindow):
         self.interval_spin.valueChanged.connect(self._auto_save_automation_settings)
         self.days_spin.valueChanged.connect(self._auto_save_automation_settings)
         self.launch_mode_combo.currentIndexChanged.connect(self._auto_save_automation_settings)
+        self.guide_watch_combo.currentIndexChanged.connect(self._auto_save_automation_settings)
         self.notify_check.stateChanged.connect(self._auto_save_automation_settings)
 
         layout.addLayout(form)
@@ -3118,6 +3142,8 @@ class MainWindow(QMainWindow):
         self.config_mgr.watcher_interval_seconds = self.interval_spin.value()
         self.config_mgr.guide_days_ahead = self.days_spin.value()
         self.config_mgr.launch_mode = self.launch_mode_combo.currentData()
+        if hasattr(self, "guide_watch_combo"):
+            self.config_mgr.guide_watch_mode = self.guide_watch_combo.currentData()
         self.config_mgr.enable_desktop_notifications = self.notify_check.isChecked()
 
         # Storage & Retention settings
@@ -4411,12 +4437,13 @@ class MainWindow(QMainWindow):
         ch = prog.get("kaffeine_channel", "")
         title = prog.get("show_title") or prog.get("title") or "Program"
 
+        watch_mode = self.config_mgr.guide_watch_mode
         if state == "live":
-            self.dbus_client.tune_channel(ch, raise_window=True)
+            self.dbus_client.tune_channel(ch, raise_window=True, view_mode=watch_mode)
             self.status_bar.showMessage(f"Tuned to {ch} - Watching '{title}' live.", 4000)
         elif state == "upcoming":
             # Direct button click in detail pane tunes directly without popup
-            self.dbus_client.tune_channel(ch, raise_window=True)
+            self.dbus_client.tune_channel(ch, raise_window=True, view_mode=watch_mode)
             self.status_bar.showMessage(f"Tuned to {ch} (Upcoming: '{title}' {timing_info.get('time_desc')}).", 4000)
         elif state == "past":
             rec_file = timing_info.get("recorded_file")
@@ -4432,9 +4459,10 @@ class MainWindow(QMainWindow):
         state = timing_info.get("state")
         ch = prog.get("kaffeine_channel", "")
         title = prog.get("show_title") or prog.get("title") or "Program"
+        watch_mode = self.config_mgr.guide_watch_mode
 
         if state == "live":
-            self.dbus_client.tune_channel(ch, raise_window=True)
+            self.dbus_client.tune_channel(ch, raise_window=True, view_mode=watch_mode)
             self.status_bar.showMessage(f"Tuned to {ch} - Watching '{title}' live.", 4000)
         elif state == "upcoming":
             # Option A: Smart Choice Dialog
@@ -4443,7 +4471,7 @@ class MainWindow(QMainWindow):
             if dlg.action == UpcomingShowDialog.ACTION_RECORD:
                 self.record_selected_guide_item()
             elif dlg.action == UpcomingShowDialog.ACTION_TUNE:
-                self.dbus_client.tune_channel(ch, raise_window=True)
+                self.dbus_client.tune_channel(ch, raise_window=True, view_mode=watch_mode)
                 self.status_bar.showMessage(f"Tuned to {ch} (Upcoming: '{title}' {timing_info.get('time_desc')}).", 4000)
         elif state == "past":
             rec_file = timing_info.get("recorded_file")

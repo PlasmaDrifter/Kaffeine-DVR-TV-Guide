@@ -245,6 +245,15 @@ class ConfigManager:
         self.save()
 
     @property
+    def guide_watch_mode(self) -> str:
+        return self.data.get("guide_watch_mode", "minimal")
+
+    @guide_watch_mode.setter
+    def guide_watch_mode(self, val: str):
+        self.data["guide_watch_mode"] = val
+        self.save()
+
+    @property
     def enable_desktop_notifications(self) -> bool:
         return self.data.get("enable_desktop_notifications", True)
 

@@ -144,11 +144,12 @@ class KaffeineDbusClient:
             except Exception:
                 pass
 
-    def tune_channel(self, channel: str, raise_window: bool = True) -> bool:
+    def tune_channel(self, channel: str, raise_window: bool = True, view_mode: Optional[str] = None) -> bool:
         """
         Tune Kaffeine to the specified TV channel name or number.
-        If Kaffeine is not running, launches it tuned to the channel.
-        If Kaffeine is already running, tunes via D-Bus PlayChannel and activates the window.
+        view_mode options: 'minimal', 'fullscreen', 'alwaysontop', 'normal'
+        If Kaffeine is not running, launches it with view mode flags and tuned to the channel.
+        If Kaffeine is already running, tunes via D-Bus and applies window mode if requested.
         """
         if not channel:
             return False
@@ -162,6 +163,20 @@ class KaffeineDbusClient:
                 iface = dbus.Interface(proxy, dbus_interface=self.interface_name)
                 iface.PlayChannel(channel)
                 tuned = True
+
+                # Apply view mode via KDBusService if requested
+                if view_mode:
+                    try:
+                        app_proxy = bus.get_object("org.kde.kaffeine", "/org/kde/kaffeine")
+                        app_iface = dbus.Interface(app_proxy, "org.kde.KDBusService")
+                        if view_mode == "minimal":
+                            app_iface.CommandLine(["kaffeine", "--minimal"], "/tmp", {})
+                        elif view_mode == "fullscreen":
+                            app_iface.CommandLine(["kaffeine", "--fullscreen"], "/tmp", {})
+                        elif view_mode == "alwaysontop":
+                            app_iface.CommandLine(["kaffeine", "--alwaysontop"], "/tmp", {})
+                    except Exception:
+                        pass
             except Exception:
                 # Fallback to qdbus CLI
                 res = subprocess.run(
@@ -173,7 +188,15 @@ class KaffeineDbusClient:
                 else:
                     # Fallback to calling kaffeine CLI with --channel
                     env = self._get_display_env()
-                    subprocess.Popen(["kaffeine", "--channel", str(channel)], env=env)
+                    cmd = ["kaffeine"]
+                    if view_mode == "minimal":
+                        cmd.append("--minimal")
+                    elif view_mode == "fullscreen":
+                        cmd.append("--fullscreen")
+                    elif view_mode == "alwaysontop":
+                        cmd.append("--alwaysontop")
+                    cmd.extend(["--channel", str(channel)])
+                    subprocess.Popen(cmd, env=env)
                     tuned = True
 
             if raise_window:
@@ -181,7 +204,14 @@ class KaffeineDbusClient:
             return tuned
         else:
             env = self._get_display_env()
-            cmd = ["kaffeine", "--channel", str(channel)]
+            cmd = ["kaffeine"]
+            if view_mode == "minimal":
+                cmd.append("--minimal")
+            elif view_mode == "fullscreen":
+                cmd.append("--fullscreen")
+            elif view_mode == "alwaysontop":
+                cmd.append("--alwaysontop")
+            cmd.extend(["--channel", str(channel)])
             try:
                 subprocess.Popen(cmd, env=env)
                 return True
