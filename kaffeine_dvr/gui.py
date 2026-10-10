@@ -2356,12 +2356,17 @@ class MainWindow(QMainWindow):
         self.health_table.setHorizontalHeaderLabels([
             "Source Name", "Type", "Status", "Latency", "Cached Programs", "Diagnostic Details"
         ])
-        self.health_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        self.health_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        self.health_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        self.health_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        self.health_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        self.health_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
+        self.health_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
+        self.health_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
+        self.health_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)
+        self.health_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Interactive)
         self.health_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
+        self.health_table.setColumnWidth(0, 350)
+        self.health_table.setColumnWidth(1, 260)
+        self.health_table.setColumnWidth(2, 130)
+        self.health_table.setColumnWidth(3, 110)
+        self.health_table.setColumnWidth(4, 160)
         self.health_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.health_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.health_table.verticalHeader().setVisible(False)
@@ -2421,7 +2426,7 @@ class MainWindow(QMainWindow):
         pass_instructions.setWordWrap(True)
         pass_instructions.setOpenExternalLinks(True)
         pass_instructions.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
-        pass_instructions.setStyleSheet("color: #b0bac8; font-size: 11px; line-height: 1.4;")
+        pass_instructions.setStyleSheet("color: #cdd6e2; font-size: 13px; line-height: 1.5;")
         pass_layout.addWidget(pass_instructions)
 
         self.passport_notice = QLabel()
@@ -3375,7 +3380,7 @@ class MainWindow(QMainWindow):
                 self.passport_header_warning.setVisible(True)
             if hasattr(self, "passport_notice"):
                 self.passport_notice.setText(
-                    f"<div style='border: 1px solid #c8832a; border-radius: 6px; background-color: #2b2214; padding: 10px 14px; color: #ffc107; font-size: 11px; margin-top: 6px; margin-bottom: 8px; line-height: 1.4;'>"
+                    f"<div style='border: 1px solid #c8832a; border-radius: 6px; background-color: #2b2214; padding: 10px 14px; color: #ffc107; font-size: 13px; margin-top: 6px; margin-bottom: 8px; line-height: 1.5;'>"
                     f"<b>Action Needed:</b> The following scanned channel(s) are local/regional and not covered by national feeds: "
                     f"<b>{ch_list_str}</b>.<br><br>"
                     f"<b>Where to get Station IDs:</b><br>"
