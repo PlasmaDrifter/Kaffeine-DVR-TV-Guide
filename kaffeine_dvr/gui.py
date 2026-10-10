@@ -915,36 +915,26 @@ class ProgramTileDelegate(QStyledItemDelegate):
         pad_right = 10
         inner_width = max(10, rect.width() - pad_left - pad_right)
 
-        # Draw Badges (REC badge in upper right corner if scheduled)
+        # Draw Badges (Red dot indicator in upper right corner if scheduled for recording)
         badge_reserved_w = 0
         cur_right = rect.right() - pad_right
 
         if is_scheduled:
-            badge_font = QFont(option.font)
-            badge_font.setBold(True)
-            badge_font.setPointSize(7)
-            painter.setFont(badge_font)
-            fm_badge = painter.fontMetrics()
+            dot_diameter = max(7, 8 + self.zoom_delta)
+            dot_x = cur_right - dot_diameter
+            # Center dot vertically with title line (line1_rect)
+            calc_font = QFont(option.font)
+            calc_font.setPointSize(max(8, 10 + self.zoom_delta))
+            fm_calc = QFontMetrics(calc_font)
+            dot_y = rect.top() + pad_top + int((fm_calc.height() - dot_diameter) / 2)
 
-            rec_text = "REC"
-            rec_w = fm_badge.horizontalAdvance(rec_text)
-            pad_h = 6
-            bw = rec_w + (pad_h * 2)
-            bh = 15
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(self.COLOR_REC_BADGE_PEN)
+            painter.drawEllipse(dot_x, dot_y, dot_diameter, dot_diameter)
 
-            bx = cur_right - bw
-            by = rect.top() + pad_top
-            badge_rect = QRect(bx, by, bw, bh)
-
-            painter.setPen(self.COLOR_REC_BADGE_PEN)
-            painter.setBrush(self.COLOR_REC_BADGE_BRUSH)
-            painter.drawRoundedRect(badge_rect, 4, 4)
-
-            painter.setPen(self.COLOR_WHITE)
-            painter.drawText(badge_rect, Qt.AlignmentFlag.AlignCenter, rec_text)
-
-            cur_right -= (bw + 5)
-            badge_reserved_w += (bw + 5)
+            cur_right -= (dot_diameter + 6)
+            badge_reserved_w += (dot_diameter + 6)
 
         # Title & Subtext color logic (Option 1)
         cat = prog.get("_category") or classify_guide_category(prog)
