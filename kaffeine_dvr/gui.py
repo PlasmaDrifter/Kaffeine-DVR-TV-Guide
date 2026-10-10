@@ -3135,6 +3135,11 @@ class MainWindow(QMainWindow):
         self.check_updates_btn.clicked.connect(lambda: self.start_update_check(silent=False))
         btn_row.addWidget(self.check_updates_btn)
 
+        self.preview_badge_btn = QPushButton("Simulate Update Badge")
+        self.preview_badge_btn.setToolTip("Show the subtle green update badge in the top header for testing")
+        self.preview_badge_btn.clicked.connect(self._simulate_update_badge)
+        btn_row.addWidget(self.preview_badge_btn)
+
         last_check_ts = self.config_mgr.last_update_check_timestamp
         last_str = datetime.fromtimestamp(last_check_ts).strftime("%Y-%m-%d %H:%M") if last_check_ts > 0 else "Never"
         self.last_check_lbl = QLabel(f"Last checked: {last_str}")
@@ -3187,6 +3192,12 @@ class MainWindow(QMainWindow):
         self.update_badge_widget.setVisible(False)
         if hasattr(self, "_latest_detected_version") and self._latest_detected_version:
             self.config_mgr.dismissed_update_version = self._latest_detected_version
+
+    def _simulate_update_badge(self):
+        self._latest_detected_version = "0.8.4"
+        self.update_badge_btn.setText("Update Available: v0.8.4")
+        self.update_badge_widget.setVisible(True)
+        self.status_bar.showMessage("Simulated update badge displayed in top header.", 4000)
 
     def check_monthly_updates_on_startup(self):
         if not self.config_mgr.auto_check_updates:
