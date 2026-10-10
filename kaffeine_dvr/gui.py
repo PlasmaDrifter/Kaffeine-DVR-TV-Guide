@@ -725,6 +725,87 @@ class ProgramTileDelegate(QStyledItemDelegate):
         painter.restore()
 
 
+class GridPanFilter(QObject):
+    """
+    Event filter installed on the guide grid table viewport to support
+    mouse grab-and-drag panning/scrolling while preserving cell click selection.
+    """
+    def __init__(self, table: QTableWidget, parent=None):
+        super().__init__(parent or table)
+        self.table = table
+        self._dragging = False
+        self._drag_start_pos = None
+        self._scroll_start_h = 0
+        self._scroll_start_v = 0
+        self._prev_cell = None
+        self._drag_threshold = 5
+        try:
+            self.table.viewport().setCursor(Qt.CursorShape.OpenHandCursor)
+        except (RuntimeError, AttributeError):
+            pass
+
+    def eventFilter(self, watched, event):
+        try:
+            vp = self.table.viewport()
+        except (RuntimeError, AttributeError):
+            return False
+
+        if watched is not vp:
+            return super().eventFilter(watched, event)
+
+        evt_type = event.type()
+
+        if evt_type == QEvent.Type.MouseButtonPress:
+            if event.button() == Qt.MouseButton.LeftButton:
+                self._dragging = False
+                self._drag_start_pos = event.globalPosition().toPoint()
+                self._scroll_start_h = self.table.horizontalScrollBar().value()
+                self._scroll_start_v = self.table.verticalScrollBar().value()
+                self._prev_cell = (self.table.currentRow(), self.table.currentColumn())
+                return False
+
+        elif evt_type == QEvent.Type.MouseMove:
+            if self._drag_start_pos is not None and (event.buttons() & Qt.MouseButton.LeftButton):
+                delta = event.globalPosition().toPoint() - self._drag_start_pos
+                if not self._dragging:
+                    if abs(delta.x()) > self._drag_threshold or abs(delta.y()) > self._drag_threshold:
+                        self._dragging = True
+                        try:
+                            self.table.viewport().setCursor(Qt.CursorShape.ClosedHandCursor)
+                        except RuntimeError:
+                            pass
+                        if self._prev_cell and self._prev_cell[0] >= 0:
+                            self.table.setCurrentCell(self._prev_cell[0], self._prev_cell[1])
+                        else:
+                            self.table.clearSelection()
+                if self._dragging:
+                    self.table.horizontalScrollBar().setValue(self._scroll_start_h - delta.x())
+                    self.table.verticalScrollBar().setValue(self._scroll_start_v - delta.y())
+                    return True
+
+        elif evt_type == QEvent.Type.MouseButtonRelease:
+            if event.button() == Qt.MouseButton.LeftButton:
+                was_dragging = self._dragging
+                self._dragging = False
+                self._drag_start_pos = None
+                try:
+                    self.table.viewport().setCursor(Qt.CursorShape.OpenHandCursor)
+                except RuntimeError:
+                    pass
+                if was_dragging:
+                    return True
+                return False
+
+        elif evt_type == QEvent.Type.Enter:
+            if not self._dragging:
+                try:
+                    self.table.viewport().setCursor(Qt.CursorShape.OpenHandCursor)
+                except RuntimeError:
+                    pass
+
+        return super().eventFilter(watched, event)
+
+
 class FirstRunWelcomeDialog(QDialog):
     def __init__(self, config_mgr: ConfigManager, parent=None):
         super().__init__(parent)
@@ -1662,6 +1743,10 @@ class MainWindow(QMainWindow):
         self.guide_grid_table.setItemDelegate(ProgramTileDelegate(self.guide_grid_table))
         self.guide_grid_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.guide_grid_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self.guide_grid_table.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.guide_grid_table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.grid_pan_filter = GridPanFilter(self.guide_grid_table)
+        self.guide_grid_table.viewport().installEventFilter(self.grid_pan_filter)
         self.guide_grid_table.cellClicked.connect(self.on_grid_cell_clicked)
         self.guide_stack.addWidget(self.guide_grid_table)
 
@@ -3460,15 +3545,19 @@ class MainWindow(QMainWindow):
 
     def _scroll_grid_to_slot(self, slot: int, center: bool = False):
         bar = self.guide_grid_table.horizontalScrollBar()
+        col_width = self.guide_grid_table.horizontalHeader().defaultSectionSize() or 165
+        is_pixel = (self.guide_grid_table.horizontalScrollMode() == QAbstractItemView.ScrollMode.ScrollPerPixel)
+
         if not center or slot <= 0:
-            bar.setValue(max(0, min(bar.maximum(), slot)))
+            target_val = (slot * col_width) if is_pixel else slot
+            bar.setValue(max(0, min(bar.maximum(), target_val)))
             return
 
         vp_width = self.guide_grid_table.viewport().width()
-        col_width = self.guide_grid_table.horizontalHeader().defaultSectionSize() or 165
         cols_visible = max(1, vp_width // col_width)
         target_col = max(0, slot - (cols_visible // 2))
-        bar.setValue(min(bar.maximum(), target_col))
+        target_val = (target_col * col_width) if is_pixel else target_col
+        bar.setValue(max(0, min(bar.maximum(), target_val)))
 
     def jump_guide_to_now(self):
         now = datetime.now()
