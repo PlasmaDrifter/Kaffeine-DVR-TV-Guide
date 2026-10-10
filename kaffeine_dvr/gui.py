@@ -337,8 +337,14 @@ class HelpPopup(QFrame):
             HelpPopup.hide_active()
             return False
 
-        if event.type() in (QEvent.Type.MouseButtonPress, QEvent.Type.MouseButtonRelease):
-            if watched != self and watched != getattr(self, "_origin_widget", None):
+        if event.type() == QEvent.Type.MouseButtonPress:
+            origin = getattr(self, "_origin_widget", None)
+            if watched == origin:
+                # User clicked the origin badge while popup was open; mark to toggle off on release
+                self._closing_for_origin = True
+                HelpPopup.hide_active()
+                return True
+            elif watched != self:
                 HelpPopup.hide_active()
         return super().eventFilter(watched, event)
 
@@ -348,6 +354,7 @@ class HelpBadge(QLabel):
     def __init__(self, tooltip_text: str, parent=None):
         super().__init__("?", parent)
         self._tooltip_text = tooltip_text
+        self._just_closed_popup = False
         self.setCursor(Qt.CursorShape.ArrowCursor)
         self.setStyleSheet(
             "QLabel {"
@@ -372,16 +379,26 @@ class HelpBadge(QLabel):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
+            if HelpPopup._active_popup and getattr(HelpPopup._active_popup, "_origin_widget", None) == self:
+                self._just_closed_popup = True
+                HelpPopup.hide_active()
+            else:
+                self._just_closed_popup = False
             event.accept()
         else:
             super().mousePressEvent(event)
 
     def mouseReleaseEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton and self.rect().contains(event.pos()):
-            HelpPopup.show_for_widget(self, self._tooltip_text)
-            event.accept()
-        else:
-            super().mouseReleaseEvent(event)
+        if event.button() == Qt.MouseButton.LeftButton:
+            if self._just_closed_popup:
+                self._just_closed_popup = False
+                event.accept()
+                return
+            if self.rect().contains(event.pos()):
+                HelpPopup.show_for_widget(self, self._tooltip_text)
+                event.accept()
+                return
+        super().mouseReleaseEvent(event)
 
 
 def make_setting_label(title: str, tooltip_text: str) -> QWidget:
