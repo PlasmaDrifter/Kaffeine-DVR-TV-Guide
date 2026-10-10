@@ -161,7 +161,7 @@ class KaffeineDbusClient:
         try:
             if kdotool_bin:
                 res = subprocess.run(
-                    [kdotool_bin, "search", "--class", "kaffeine"],
+                    [kdotool_bin, "search", "--class", "^kaffeine$"],
                     env=env,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
@@ -170,11 +170,14 @@ class KaffeineDbusClient:
                 )
                 wids = [w.strip() for w in res.stdout.strip().splitlines() if w.strip()]
                 for wid in wids:
+                    cls = subprocess.run([kdotool_bin, "getwindowclassname", wid], env=env, stdout=subprocess.PIPE, text=True, timeout=1.0).stdout.strip().lower()
+                    if "dvr" in cls:
+                        continue
                     subprocess.run([kdotool_bin, "windowminimize", wid], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
                 return bool(wids)
             elif xdotool_bin:
                 res = subprocess.run(
-                    [xdotool_bin, "search", "--class", "kaffeine"],
+                    [xdotool_bin, "search", "--class", "^kaffeine$"],
                     env=env,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
@@ -183,6 +186,9 @@ class KaffeineDbusClient:
                 )
                 wids = [w.strip() for w in res.stdout.strip().splitlines() if w.strip()]
                 for wid in wids:
+                    cls = subprocess.run([xdotool_bin, "getwindowclassname", wid], env=env, stdout=subprocess.PIPE, text=True, timeout=1.0).stdout.strip().lower()
+                    if "dvr" in cls:
+                        continue
                     subprocess.run([xdotool_bin, "windowminimize", wid], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
                 return bool(wids)
         except Exception:
@@ -194,6 +200,7 @@ class KaffeineDbusClient:
         Poll for Kaffeine's window to appear and persist minimize commands across startup.
         Because KWin rules and Qt map events can un-minimize the window during initial creation,
         we continue asserting minimization for post_match_duration seconds after the window is first seen.
+        Strictly targets Kaffeine itself, never the Kaffeine DVR TV Guide application window.
         """
         import shutil
         import time
@@ -213,7 +220,7 @@ class KaffeineDbusClient:
             try:
                 if kdotool_bin:
                     res = subprocess.run(
-                        [kdotool_bin, "search", "--class", "kaffeine"],
+                        [kdotool_bin, "search", "--class", "^kaffeine$"],
                         env=env,
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE,
@@ -221,10 +228,15 @@ class KaffeineDbusClient:
                         timeout=1.5
                     )
                     wids = [w.strip() for w in res.stdout.strip().splitlines() if w.strip()]
-                    if wids:
+                    kaffeine_wids = []
+                    for wid in wids:
+                        cls = subprocess.run([kdotool_bin, "getwindowclassname", wid], env=env, stdout=subprocess.PIPE, text=True, timeout=1.0).stdout.strip().lower()
+                        if "dvr" not in cls:
+                            kaffeine_wids.append(wid)
+                    if kaffeine_wids:
                         if first_match_time is None:
                             first_match_time = time.time()
-                        for wid in wids:
+                        for wid in kaffeine_wids:
                             subprocess.run(
                                 [kdotool_bin, "windowminimize", wid],
                                 env=env,
@@ -236,7 +248,7 @@ class KaffeineDbusClient:
                             break
                 elif xdotool_bin:
                     res = subprocess.run(
-                        [xdotool_bin, "search", "--class", "kaffeine"],
+                        [xdotool_bin, "search", "--class", "^kaffeine$"],
                         env=env,
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE,
@@ -244,10 +256,15 @@ class KaffeineDbusClient:
                         timeout=1.5
                     )
                     wids = [w.strip() for w in res.stdout.strip().splitlines() if w.strip()]
-                    if wids:
+                    kaffeine_wids = []
+                    for wid in wids:
+                        cls = subprocess.run([xdotool_bin, "getwindowclassname", wid], env=env, stdout=subprocess.PIPE, text=True, timeout=1.0).stdout.strip().lower()
+                        if "dvr" not in cls:
+                            kaffeine_wids.append(wid)
+                    if kaffeine_wids:
                         if first_match_time is None:
                             first_match_time = time.time()
-                        for wid in wids:
+                        for wid in kaffeine_wids:
                             subprocess.run(
                                 [xdotool_bin, "windowminimize", wid],
                                 env=env,
