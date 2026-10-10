@@ -2251,8 +2251,8 @@ class MainWindow(QMainWindow):
         self.settings_subtabs = QTabWidget()
         self.settings_subtabs.setObjectName("settingsSubTabs")
         self.settings_subtabs.addTab(self.create_settings_automation_tab(), "Automation and DVR")
-        self.settings_subtabs.addTab(self.create_settings_guide_tab(), "Guide Sources and Health")
         self.settings_subtabs.addTab(self.create_settings_channels_tab(), "Channel Source")
+        self.settings_subtabs.addTab(self.create_settings_guide_tab(), "Guide Sources and Health")
         layout.addWidget(self.settings_subtabs)
 
         return widget
