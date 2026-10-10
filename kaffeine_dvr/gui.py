@@ -2449,17 +2449,17 @@ class MainWindow(QMainWindow):
         widget = QWidget()
         layout = QVBoxLayout(widget)
 
-        desc = QLabel("Reorder rows in your EPG TV Guide using drag-and-drop or the Move Up/Down buttons.")
-        desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        desc.setStyleSheet("color: #8a99ad; font-size: 12px; margin-bottom: 4px;")
-        layout.addWidget(desc)
-
         # Splitter / Two-panel layout
         lineup_panels = QHBoxLayout()
 
         # Left Panel: Interactive Channel Order List
         order_box = QGroupBox("TV Guide Channel Order (Manual Priority)")
         order_layout = QVBoxLayout(order_box)
+
+        desc = QLabel("Reorder rows in your EPG TV Guide using drag-and-drop or the Move Up/Down buttons.")
+        desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        desc.setStyleSheet("color: #8a99ad; font-size: 11px;")
+        order_layout.addWidget(desc)
 
         self.channel_order_list = QListWidget()
         self.channel_order_list.setObjectName("channelOrderList")
