@@ -1540,7 +1540,9 @@ class MainWindow(QMainWindow):
         main_layout = QVBoxLayout(central_widget)
 
         # Status Banner
-        main_layout.addLayout(self.create_status_banner())
+        self.status_banner_widget = QWidget()
+        self.status_banner_widget.setLayout(self.create_status_banner())
+        main_layout.addWidget(self.status_banner_widget)
 
         # Main Tabs
         self.tabs = QTabWidget()
@@ -1861,6 +1863,22 @@ class MainWindow(QMainWindow):
         self.guide_search_input.textChanged.connect(self.filter_guide)
         filter_bar.addWidget(self.guide_search_input)
 
+        # Maximize Guide Button (toggles maximized full-window guide view)
+        max_btn_style = (
+            "QPushButton { min-width: 28px; max-width: 28px; min-height: 24px; max-height: 24px; "
+            "border: 1px solid #3d465c; border-radius: 4px; background-color: #212635; color: #c8d2df; }"
+            "QPushButton:hover { background-color: #313d56; border: 1px solid #5a80b8; color: #ffffff; }"
+            "QPushButton:pressed { background-color: #1a1e2b; border: 1px solid #353d50; }"
+        )
+        self.guide_maximize_btn = QPushButton()
+        self.guide_maximize_btn.setToolTip("Maximize guide to fill window")
+        self.guide_maximize_btn.setIcon(self._create_guide_maximize_icon())
+        self.guide_maximize_btn.setIconSize(QSize(14, 14))
+        self.guide_maximize_btn.setStyleSheet(max_btn_style)
+        self.guide_maximize_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.guide_maximize_btn.clicked.connect(self.toggle_guide_maximized)
+        filter_bar.addWidget(self.guide_maximize_btn)
+
         layout.addLayout(filter_bar)
 
         # Guide Views Container (Stacked: 0 = Grid View, 1 = List View)
@@ -1928,6 +1946,7 @@ class MainWindow(QMainWindow):
 
         # Detail Panel
         detail_widget = QWidget()
+        self.guide_detail_widget = detail_widget
         detail_layout = QVBoxLayout(detail_widget)
         detail_layout.setContentsMargins(0, 4, 0, 0)
         detail_layout.setSpacing(4)
@@ -3819,6 +3838,70 @@ class MainWindow(QMainWindow):
             self.guide_table.setStyleSheet(f"QTableWidget {{ font-size: {list_font_sz}px; }}")
             self.guide_table.viewport().update()
 
+    def toggle_guide_maximized(self):
+        self._guide_maximized = not getattr(self, "_guide_maximized", False)
+        is_max = self._guide_maximized
+
+        if hasattr(self, "status_banner_widget"):
+            self.status_banner_widget.setVisible(not is_max)
+
+        if hasattr(self, "tabs"):
+            self.tabs.tabBar().setVisible(not is_max)
+
+        if hasattr(self, "guide_detail_widget"):
+            self.guide_detail_widget.setVisible(not is_max)
+
+        if hasattr(self, "status_bar"):
+            self.status_bar.setVisible(not is_max)
+
+        if hasattr(self, "guide_maximize_btn"):
+            if is_max:
+                self.guide_maximize_btn.setToolTip("Restore standard view (Esc)")
+                self.guide_maximize_btn.setIcon(self._create_guide_restore_icon())
+            else:
+                self.guide_maximize_btn.setToolTip("Maximize guide to fill window")
+                self.guide_maximize_btn.setIcon(self._create_guide_maximize_icon())
+
+    @staticmethod
+    def _create_guide_maximize_icon() -> QIcon:
+        icon = QIcon()
+        for mode, color in [(QIcon.Mode.Normal, "#c8d2df"), (QIcon.Mode.Disabled, "#414b5d")]:
+            pix = QPixmap(18, 18)
+            pix.fill(Qt.GlobalColor.transparent)
+            p = QPainter(pix)
+            p.setRenderHint(QPainter.RenderHint.Antialiasing)
+            pen = QPen(QColor(color), 1.8)
+            p.setPen(pen)
+            # Crisp maximize rectangle
+            p.drawRoundedRect(QRectF(2.5, 2.5, 13, 13), 1.5, 1.5)
+            # Thicker top titlebar line
+            p.fillRect(QRectF(3.5, 3.5, 11, 2.5), QColor(color))
+            p.end()
+            icon.addPixmap(pix, mode)
+        return icon
+
+    @staticmethod
+    def _create_guide_restore_icon() -> QIcon:
+        icon = QIcon()
+        for mode, color in [(QIcon.Mode.Normal, "#c8d2df"), (QIcon.Mode.Disabled, "#414b5d")]:
+            pix = QPixmap(18, 18)
+            pix.fill(Qt.GlobalColor.transparent)
+            p = QPainter(pix)
+            p.setRenderHint(QPainter.RenderHint.Antialiasing)
+            pen = QPen(QColor(color), 1.8)
+            p.setPen(pen)
+            # Main foreground window rectangle
+            p.drawRoundedRect(QRectF(2, 5, 10, 10), 1.5, 1.5)
+            p.fillRect(QRectF(3, 6, 8, 2), QColor(color))
+            # Background overlapping window
+            p.drawLine(QPointF(5.5, 4), QPointF(5.5, 2))
+            p.drawLine(QPointF(5.5, 2), QPointF(15, 2))
+            p.drawLine(QPointF(15, 2), QPointF(15, 11.5))
+            p.drawLine(QPointF(15, 11.5), QPointF(13, 11.5))
+            p.end()
+            icon.addPixmap(pix, mode)
+        return icon
+
     @staticmethod
     def _create_restore_window_icon() -> QIcon:
         icon = QIcon()
@@ -4833,6 +4916,13 @@ class MainWindow(QMainWindow):
                 if not silent:
                     details = "\n".join([f"- {s['title']} ({s['channel']} at {s['start_time']})" for s in scheduled])
                     QMessageBox.information(self, "New Recordings Scheduled", f"Scheduled {len(scheduled)} shows:\n\n{details}")
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Escape and getattr(self, "_guide_maximized", False):
+            self.toggle_guide_maximized()
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
     def closeEvent(self, event):
         self.settings.setValue("geometry", self.saveGeometry())
