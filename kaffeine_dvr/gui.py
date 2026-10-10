@@ -4466,6 +4466,8 @@ class MainWindow(QMainWindow):
             self.settings.setValue("guide_view_mode", "list")
         self._update_time_jump_buttons_visibility()
         self.filter_guide()
+        if not self.grid_view_btn.isChecked():
+            QTimer.singleShot(0, self._scroll_list_to_first_active)
 
     def _scroll_grid_to_slot(self, slot: int, center: bool = False):
         bar = self.guide_grid_table.horizontalScrollBar()
@@ -4993,19 +4995,26 @@ class MainWindow(QMainWindow):
                 self.guide_table.resizeColumnToContents(col)
 
             # Auto-scroll to first currently playing or upcoming show
-            first_active_row = -1
-            for r, p in enumerate(programs):
-                timing = self._get_program_timing_state(p)
-                if timing.get("state") in ("live", "upcoming"):
-                    first_active_row = r
-                    break
-            if first_active_row >= 0:
-                target_item = self.guide_table.item(first_active_row, 1) or self.guide_table.item(first_active_row, 0)
-                if target_item:
-                    self.guide_table.scrollToItem(target_item, QTableWidget.ScrollHint.PositionAtTop)
+            QTimer.singleShot(0, self._scroll_list_to_first_active)
         finally:
             self.guide_table.blockSignals(False)
             self.guide_table.setUpdatesEnabled(True)
+
+    def _scroll_list_to_first_active(self):
+        """Scroll list guide table to the first live or upcoming show."""
+        if self.guide_stack.currentIndex() != 1:
+            return
+        programs = getattr(self, "current_guide_items", None) or []
+        first_active_row = -1
+        for r, p in enumerate(programs):
+            timing = self._get_program_timing_state(p)
+            if timing.get("state") in ("live", "upcoming"):
+                first_active_row = r
+                break
+        if first_active_row >= 0 and first_active_row < self.guide_table.rowCount():
+            target_item = self.guide_table.item(first_active_row, 1) or self.guide_table.item(first_active_row, 0)
+            if target_item:
+                self.guide_table.scrollToItem(target_item, QTableWidget.ScrollHint.PositionAtTop)
 
     def _populate_grid_guide(self, programs: List[Dict[str, Any]], airdate: Optional[str], keep_scroll: bool = False):
         active_scheduled = self.queue_mgr.get_active_scheduled_map()
