@@ -289,39 +289,44 @@ class KaffeineDbusClient:
 
         if self.is_running():
             tuned = False
+            # Method 1: Use org.kde.KDBusService CommandLine interface.
+            # This activates the TV tab in Kaffeine, tunes the exact channel requested,
+            # applies view mode flags (--minimal, --fullscreen, etc.), and activates/raises the window,
+            # avoiding any number key simulation.
             try:
                 import dbus
                 bus = dbus.SessionBus()
-                proxy = bus.get_object(self.service_name, self.object_path)
-                iface = dbus.Interface(proxy, dbus_interface=self.interface_name)
-                iface.PlayChannel(channel)
-                tuned = True
+                app_proxy = bus.get_object("org.kde.kaffeine", "/org/kde/kaffeine")
+                app_iface = dbus.Interface(app_proxy, "org.kde.KDBusService")
 
-                # Apply view mode via KDBusService if requested
-                if view_mode:
-                    try:
-                        app_proxy = bus.get_object("org.kde.kaffeine", "/org/kde/kaffeine")
-                        app_iface = dbus.Interface(app_proxy, "org.kde.KDBusService")
-                        if view_mode == "minimal":
-                            app_iface.CommandLine(["kaffeine", "--minimal"], "/tmp", {})
-                        elif view_mode == "minimal_alwaysontop":
-                            app_iface.CommandLine(["kaffeine", "--minimal", "--alwaysontop"], "/tmp", {})
-                        elif view_mode == "fullscreen":
-                            app_iface.CommandLine(["kaffeine", "--fullscreen"], "/tmp", {})
-                        elif view_mode == "alwaysontop":
-                            app_iface.CommandLine(["kaffeine", "--alwaysontop"], "/tmp", {})
-                    except Exception:
-                        pass
-            except Exception:
-                # Fallback to qdbus CLI
-                res = subprocess.run(
-                    ["qdbus", self.service_name, self.object_path, "PlayChannel", str(channel)],
-                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-                )
-                if res.returncode == 0:
+                cmd_args = ["kaffeine"]
+                if view_mode == "minimal":
+                    cmd_args.append("--minimal")
+                elif view_mode == "minimal_alwaysontop":
+                    cmd_args.extend(["--minimal", "--alwaysontop"])
+                elif view_mode == "fullscreen":
+                    cmd_args.append("--fullscreen")
+                elif view_mode == "alwaysontop":
+                    cmd_args.append("--alwaysontop")
+                cmd_args.extend(["--channel", str(channel)])
+
+                ret = app_iface.CommandLine(cmd_args, "", {})
+                if ret == 0:
                     tuned = True
-                else:
-                    # Fallback to calling kaffeine CLI with --channel
+            except Exception:
+                pass
+
+            if not tuned:
+                # Method 2: D-Bus PlayChannel fallback
+                try:
+                    import dbus
+                    bus = dbus.SessionBus()
+                    proxy = bus.get_object(self.service_name, self.object_path)
+                    iface = dbus.Interface(proxy, dbus_interface=self.interface_name)
+                    iface.PlayChannel(channel)
+                    tuned = True
+                except Exception:
+                    # Method 3: Fallback to calling kaffeine CLI with --channel
                     env = self._get_display_env()
                     cmd = [self.get_kaffeine_bin()]
                     if view_mode == "minimal":
@@ -338,7 +343,6 @@ class KaffeineDbusClient:
 
             if raise_window:
                 self.raise_window()
-            self.switch_to_tv_view(view_mode=view_mode)
             return tuned
         else:
             env = self._get_display_env()
@@ -360,54 +364,8 @@ class KaffeineDbusClient:
                 return False
 
     def switch_to_tv_view(self, view_mode: Optional[str] = None):
-        """
-        Switch Kaffeine central display to the Television playback view.
-        When Kaffeine tunes via D-Bus, audio plays but the UI stays on the start page
-        unless switched to Television (digit '5').
-        Also toggles minimal or fullscreen mode if requested.
-        """
-        import shutil
-        import time
-
-        kdotool_bin = shutil.which("kdotool")
-        xdotool_bin = shutil.which("xdotool")
-        env = self._get_display_env()
-
-        # Send DigitPressed(5) via D-Bus first if available
-        try:
-            import dbus
-            bus = dbus.SessionBus()
-            proxy = bus.get_object(self.service_name, self.object_path)
-            iface = dbus.Interface(proxy, dbus_interface=self.interface_name)
-            iface.DigitPressed(5)
-        except Exception:
-            pass
-
-        # Also send key 5 to Kaffeine X11 window to guarantee switching from start page
-        if xdotool_bin:
-            try:
-                res_x = subprocess.run(
-                    [xdotool_bin, "search", "--class", "^kaffeine$"],
-                    env=env,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.DEVNULL,
-                    text=True,
-                    timeout=1.5
-                )
-                wids = [w.strip() for w in res_x.stdout.strip().splitlines() if w.strip()]
-                for wid in wids:
-                    name = subprocess.run([xdotool_bin, "getwindowname", wid], env=env, stdout=subprocess.PIPE, text=True, timeout=1.0).stdout.strip().lower()
-                    if "kaffeine" in name:
-                        subprocess.run([xdotool_bin, "key", "--window", wid, "5"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
-                        if view_mode in ("minimal", "minimal_alwaysontop"):
-                            time.sleep(0.1)
-                            subprocess.run([xdotool_bin, "key", "--window", wid, "m"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
-                        elif view_mode == "fullscreen":
-                            time.sleep(0.1)
-                            subprocess.run([xdotool_bin, "key", "--window", wid, "f"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
-                        break
-            except Exception:
-                pass
+        """Switch view mode if needed without pressing numeric channel keys."""
+        pass
 
     def raise_window(self):
         """Unminimize and raise Kaffeine window to the foreground."""
