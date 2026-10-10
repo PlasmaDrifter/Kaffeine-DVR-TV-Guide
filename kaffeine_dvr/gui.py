@@ -1853,7 +1853,7 @@ class MainWindow(QMainWindow):
         widget = QWidget()
         widget.setObjectName("updateBadge")
         badge_layout = QHBoxLayout(widget)
-        badge_layout.setContentsMargins(0, 0, 4, 0)
+        badge_layout.setContentsMargins(0, 3, 4, 0)
         badge_layout.setSpacing(6)
         widget.setStyleSheet("QWidget#updateBadge { background: transparent; border: none; }")
 
