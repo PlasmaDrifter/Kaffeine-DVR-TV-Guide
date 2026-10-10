@@ -2972,13 +2972,7 @@ class MainWindow(QMainWindow):
         h1 = QLabel("<b>Kaffeine DVR and TV Guide - Help and Reference Guide</b>")
         h1.setAlignment(Qt.AlignmentFlag.AlignCenter)
         h1.setStyleSheet("font-size: 20px; font-weight: bold; color: #ffffff;")
-        h1_sub = QLabel(
-            "Overview of features, automatic scheduling, power management, and TV guide configuration."
-        )
-        h1_sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        h1_sub.setStyleSheet("color: #a0b2c6; font-size: 14px;")
         title_layout.addWidget(h1)
-        title_layout.addWidget(h1_sub)
         layout.addWidget(title_box)
 
         # Base styles
