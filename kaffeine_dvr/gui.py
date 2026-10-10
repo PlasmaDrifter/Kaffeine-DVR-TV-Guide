@@ -262,6 +262,48 @@ class EditRuleDialog(QDialog):
         layout.addRow(btn_box)
 
 
+class HelpBadge(QLabel):
+    """Subtle circular '?' badge that shows helpful tooltip on hover."""
+    def __init__(self, tooltip_text: str, parent=None):
+        super().__init__("?", parent)
+        self.setToolTip(tooltip_text)
+        self.setCursor(Qt.CursorShape.WhatsThisCursor)
+        self.setStyleSheet(
+            "QLabel {"
+            "  color: #7dd3fc;"
+            "  background-color: #0c4a6e;"
+            "  border: 1px solid #0284c7;"
+            "  border-radius: 8px;"
+            "  font-weight: bold;"
+            "  font-size: 11px;"
+            "  min-width: 16px;"
+            "  max-width: 16px;"
+            "  min-height: 16px;"
+            "  max-height: 16px;"
+            "  qproperty-alignment: AlignCenter;"
+            "}"
+            "QLabel:hover {"
+            "  color: #ffffff;"
+            "  background-color: #0284c7;"
+            "  border-color: #38bdf8;"
+            "}"
+        )
+
+
+def make_setting_label(title: str, tooltip_text: str) -> QWidget:
+    """Create a composite widget containing the label title and a subtle '?' help badge."""
+    w = QWidget()
+    lay = QHBoxLayout(w)
+    lay.setContentsMargins(0, 0, 0, 0)
+    lay.setSpacing(6)
+    lbl = QLabel(title)
+    badge = HelpBadge(tooltip_text)
+    lay.addWidget(lbl)
+    lay.addWidget(badge)
+    lay.addStretch()
+    return w
+
+
 class AdjustBufferDialog(QDialog):
     """
     Dialog for adjusting recording end buffer with a dedicated 2-line title container.
@@ -2452,53 +2494,69 @@ class MainWindow(QMainWindow):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         container = QWidget()
-        layout = QVBoxLayout(container)
+        main_layout = QVBoxLayout(container)
+        main_layout.setContentsMargins(15, 15, 15, 15)
+        main_layout.setSpacing(15)
 
-        layout.addWidget(QLabel("<b>DVR Automation & Polling Frequencies</b>:"))
-        form = QFormLayout()
+        two_col_layout = QHBoxLayout()
+        two_col_layout.setSpacing(20)
+
+        # ------------------ LEFT COLUMN: DVR & Window Settings ------------------
+        left_col = QVBoxLayout()
+        left_col.setSpacing(15)
+
+        # Group 1: DVR Scheduling & Automation
+        dvr_group = QGroupBox("DVR Scheduling && Automation")
+        dvr_layout = QFormLayout(dvr_group)
+        dvr_layout.setContentsMargins(15, 15, 15, 15)
+        dvr_layout.setSpacing(12)
 
         self.lead_time_spin = QSpinBox()
         self.lead_time_spin.setRange(1, 60)
         self.lead_time_spin.setValue(self.config_mgr.lead_time_mins)
         self.lead_time_spin.setSuffix(" minutes")
         self.lead_time_spin.setFixedWidth(160)
-        lead_time_lbl = QLabel(
-            "Minutes before show start time to auto-launch Kaffeine and arm recording timer.\n"
-            "Keeping this low (e.g. 5m) prevents Kaffeine from blocking system reboots and shutdowns."
+        dvr_layout.addRow(
+            make_setting_label(
+                "Just-In-Time Lead Time:",
+                "Minutes before show start time to auto-launch Kaffeine and arm recording timer.\n"
+                "Keeping this low (e.g. 2-5m) prevents Kaffeine from blocking system reboots and shutdowns."
+            ),
+            self.lead_time_spin
         )
-        lead_time_lbl.setStyleSheet("color: #94a3b8; font-size: 13px; line-height: 1.3;")
-        form.addRow("Just-In-Time Lead Time:", self.lead_time_spin)
-        form.addRow("", lead_time_lbl)
 
         self.end_buffer_spin = QSpinBox()
         self.end_buffer_spin.setRange(0, 180)
         self.end_buffer_spin.setValue(self.config_mgr.end_buffer_mins)
         self.end_buffer_spin.setSuffix(" minutes")
         self.end_buffer_spin.setFixedWidth(160)
-        end_buffer_lbl = QLabel(
-            "Extra post-roll buffer added to the end of scheduled recordings to avoid clipping broadcast overruns."
+        dvr_layout.addRow(
+            make_setting_label(
+                "Default End Buffer:",
+                "Extra post-roll buffer added to the end of scheduled recordings to avoid clipping broadcast overruns."
+            ),
+            self.end_buffer_spin
         )
-        end_buffer_lbl.setStyleSheet("color: #94a3b8; font-size: 13px; line-height: 1.3;")
-        form.addRow("Default End Buffer:", self.end_buffer_spin)
-        form.addRow("", end_buffer_lbl)
 
-        self.auto_buffer_sports_check = QCheckBox("Automatically Extend Sports Broadcasts")
+        self.auto_buffer_sports_check = QCheckBox("Auto-Extend Sports")
         self.auto_buffer_sports_check.setChecked(self.config_mgr.auto_buffer_sports)
         self.sports_buffer_spin = QSpinBox()
         self.sports_buffer_spin.setRange(0, 180)
         self.sports_buffer_spin.setValue(self.config_mgr.sports_buffer_mins)
         self.sports_buffer_spin.setSuffix(" minutes")
-        self.sports_buffer_spin.setFixedWidth(140)
+        self.sports_buffer_spin.setFixedWidth(130)
         sports_row = QHBoxLayout()
         sports_row.addWidget(self.auto_buffer_sports_check)
-        sports_row.addSpacing(15)
-        sports_row.addWidget(QLabel("Sports Buffer:"))
+        sports_row.addSpacing(10)
         sports_row.addWidget(self.sports_buffer_spin)
         sports_row.addStretch()
-        sports_buffer_lbl = QLabel("Applies extended post-roll padding to live sporting events, games, and matches.")
-        sports_buffer_lbl.setStyleSheet("color: #94a3b8; font-size: 13px; line-height: 1.3;")
-        form.addRow("Sports Auto-Extend:", sports_row)
-        form.addRow("", sports_buffer_lbl)
+        dvr_layout.addRow(
+            make_setting_label(
+                "Sports Auto-Extend:",
+                "Applies extended post-roll padding to live sporting events, games, and matches to catch overtime."
+            ),
+            sports_row
+        )
 
         self.interval_spin = QSpinBox()
         self.interval_spin.setRange(30, 600)
@@ -2506,80 +2564,93 @@ class MainWindow(QMainWindow):
         self.interval_spin.setValue(self.config_mgr.watcher_interval_seconds)
         self.interval_spin.setSuffix(" seconds")
         self.interval_spin.setFixedWidth(160)
-        interval_lbl = QLabel("How often the background watcher service checks the DVR queue for upcoming shows.")
-        interval_lbl.setStyleSheet("color: #94a3b8; font-size: 13px; line-height: 1.3;")
-        form.addRow("Watcher Polling Frequency:", self.interval_spin)
-        form.addRow("", interval_lbl)
+        dvr_layout.addRow(
+            make_setting_label(
+                "Watcher Polling Frequency:",
+                "How often the background watcher service checks the DVR queue for upcoming shows."
+            ),
+            self.interval_spin
+        )
 
         self.days_spin = QSpinBox()
         self.days_spin.setRange(1, 14)
         self.days_spin.setValue(self.config_mgr.guide_days_ahead)
         self.days_spin.setSuffix(" days")
         self.days_spin.setFixedWidth(160)
-        days_lbl = QLabel("How many future days to query and cache in the local SQLite guide database.")
-        days_lbl.setStyleSheet("color: #94a3b8; font-size: 13px; line-height: 1.3;")
-        form.addRow("Guide Cache Horizon:", self.days_spin)
-        form.addRow("", days_lbl)
+        dvr_layout.addRow(
+            make_setting_label(
+                "Guide Cache Horizon:",
+                "How many future days to query and cache in the local SQLite guide database."
+            ),
+            self.days_spin
+        )
 
         self.launch_mode_combo = QComboBox()
         self.launch_mode_combo.addItem("Minimized to Taskbar (Panel)", "taskbar")
-        self.launch_mode_combo.addItem("Minimize to System Tray (-m minimal mode)", "tray")
-        self.launch_mode_combo.addItem("Normal Window (Visible on desktop)", "normal")
-        self.launch_mode_combo.setFixedWidth(340)
+        self.launch_mode_combo.addItem("Minimize to System Tray (-m minimal)", "tray")
+        self.launch_mode_combo.addItem("Normal Window (Visible desktop)", "normal")
+        self.launch_mode_combo.setFixedWidth(290)
         cur_mode = self.config_mgr.launch_mode
         mode_idx = self.launch_mode_combo.findData(cur_mode)
         if mode_idx >= 0:
             self.launch_mode_combo.setCurrentIndex(mode_idx)
-
-        launch_mode_lbl = QLabel(
-            "Controls how Kaffeine starts when armed for recording:\n"
-            "• Minimized to Taskbar: Quietly minimizes to your panel taskbar without touching the tray.\n"
-            "• Minimize to System Tray: Starts in minimal mode (-m) and docks into the KDE tray (if enabled in Kaffeine).\n"
-            "• Normal Window: Opens as an active visible window on your desktop."
+        dvr_layout.addRow(
+            make_setting_label(
+                "Recording Launch Mode:",
+                "Controls how Kaffeine starts when armed for recording:\n"
+                "• Minimized to Taskbar: Quietly minimizes to your panel taskbar without touching tray.\n"
+                "• Minimize to System Tray: Starts with -m minimal mode and docks into tray.\n"
+                "• Normal Window: Opens as an active visible window on your desktop."
+            ),
+            self.launch_mode_combo
         )
-        launch_mode_lbl.setStyleSheet("color: #94a3b8; font-size: 13px; line-height: 1.4;")
-        form.addRow("Recording Launch Mode:", self.launch_mode_combo)
-        form.addRow("", launch_mode_lbl)
 
-        # Guide Live TV Watch Mode setting
         self.guide_watch_combo = QComboBox()
-        self.guide_watch_combo.addItem("Minimal Mode (-m minimal clean video player)", "minimal")
+        self.guide_watch_combo.addItem("Minimal Mode (-m clean player)", "minimal")
         self.guide_watch_combo.addItem("Full Screen (-f fullscreen)", "fullscreen")
         self.guide_watch_combo.addItem("Always On Top (-t always on top)", "alwaysontop")
-        self.guide_watch_combo.addItem("Normal Window (Standard KDE player window)", "normal")
-        self.guide_watch_combo.setFixedWidth(340)
+        self.guide_watch_combo.addItem("Normal Window (Full KDE controls)", "normal")
+        self.guide_watch_combo.setFixedWidth(290)
         cur_watch_mode = self.config_mgr.guide_watch_mode
         watch_idx = self.guide_watch_combo.findData(cur_watch_mode)
         if watch_idx >= 0:
             self.guide_watch_combo.setCurrentIndex(watch_idx)
-
-        guide_watch_lbl = QLabel(
-            "Controls window display mode when watching live TV directly from the Guide:\n"
-            "• Minimal Mode: Hides toolbars and menus for an uncluttered video playback screen.\n"
-            "• Full Screen: Expands to full screen immediately upon tuning.\n"
-            "• Always On Top: Keeps video pinned on top of other desktop windows.\n"
-            "• Normal Window: Standard window with full KDE playback and menu bars."
+        dvr_layout.addRow(
+            make_setting_label(
+                "Guide Live TV View Mode:",
+                "Controls window display mode when watching live TV directly from the Guide:\n"
+                "• Minimal Mode: Hides toolbars and menus for clean playback.\n"
+                "• Full Screen: Expands to full screen immediately.\n"
+                "• Always On Top: Keeps video pinned on top of other windows.\n"
+                "• Normal Window: Standard window with playback bars."
+            ),
+            self.guide_watch_combo
         )
-        guide_watch_lbl.setStyleSheet("color: #94a3b8; font-size: 13px; line-height: 1.4;")
-        form.addRow("Guide Live TV View Mode:", self.guide_watch_combo)
-        form.addRow("", guide_watch_lbl)
 
         self.notify_check = QCheckBox("Show Persistent Desktop Notification on Record Launch")
         self.notify_check.setChecked(self.config_mgr.enable_desktop_notifications)
-        notify_lbl = QLabel(
-            "Sends a desktop notification via notify-send when Kaffeine is launched and armed for a scheduled show.\n"
-            "The notification persists in your notification center until explicitly dismissed."
+        dvr_layout.addRow(
+            make_setting_label(
+                "Desktop Notifications:",
+                "Sends a persistent desktop notification via notify-send when Kaffeine is launched and armed for a scheduled show."
+            ),
+            self.notify_check
         )
-        notify_lbl.setStyleSheet("color: #94a3b8; font-size: 13px; line-height: 1.3;")
-        form.addRow("Notifications:", self.notify_check)
-        form.addRow("", notify_lbl)
 
-        # Application Window Dimensions
+        left_col.addWidget(dvr_group)
+
+        # Group 2: Window Dimensions
+        win_group = QGroupBox("Application Window Dimensions")
+        win_layout = QVBoxLayout(win_group)
+        win_layout.setContentsMargins(15, 15, 15, 15)
+        win_layout.setSpacing(10)
+
         self.win_size_lbl = QLabel(self._get_window_size_label_text())
         self.win_size_lbl.setStyleSheet("color: #a0b2c6; font-size: 13px; font-weight: 500;")
+        win_layout.addWidget(self.win_size_lbl)
 
         win_size_btn_row = QHBoxLayout()
-        win_size_btn_row.setContentsMargins(0, 2, 0, 0)
+        win_size_btn_row.setContentsMargins(0, 0, 0, 0)
         win_size_btn_row.setSpacing(10)
 
         self.save_win_size_btn = QPushButton("Save Size")
@@ -2589,7 +2660,7 @@ class MainWindow(QMainWindow):
         win_size_btn_row.addWidget(self.save_win_size_btn)
 
         self.restore_win_size_btn = QPushButton("Restore Size")
-        self.restore_win_size_btn.setToolTip("Resize back to your saved dimensions without restarting")
+        self.restore_win_size_btn.setToolTip("Resize back to saved dimensions without restarting")
         self.restore_win_size_btn.clicked.connect(self.restore_saved_window_size)
         win_size_btn_row.addWidget(self.restore_win_size_btn)
 
@@ -2598,90 +2669,105 @@ class MainWindow(QMainWindow):
         self.reset_win_size_btn.clicked.connect(self.reset_window_size_to_default)
         win_size_btn_row.addWidget(self.reset_win_size_btn)
         win_size_btn_row.addStretch()
+        win_layout.addLayout(win_size_btn_row)
 
-        win_size_desc = QLabel(
-            "• <b>Save Size:</b> Saves current dimensions to restore automatically on launch.<br>"
-            "• <b>Restore Size:</b> Immediately snaps back to your saved size (also accessible via the restore icon on the far left of the top header bar).<br>"
-            "• <b>Reset Default:</b> Reverts back to standard factory dimensions (1100 × 750)."
-        )
-        win_size_desc.setStyleSheet("color: #94a3b8; font-size: 13px; line-height: 1.4;")
+        left_col.addWidget(win_group)
+        left_col.addStretch()
+        two_col_layout.addLayout(left_col, 55)
 
-        form.addRow("Application Window Size:", self.win_size_lbl)
-        form.addRow("", win_size_btn_row)
-        form.addRow("", win_size_desc)
+        # ------------------ RIGHT COLUMN: Service & Storage ------------------
+        right_col = QVBoxLayout()
+        right_col.setSpacing(15)
 
-        self.lead_time_spin.valueChanged.connect(self._auto_save_automation_settings)
-        self.end_buffer_spin.valueChanged.connect(self._auto_save_automation_settings)
-        self.auto_buffer_sports_check.stateChanged.connect(self._auto_save_automation_settings)
-        self.sports_buffer_spin.valueChanged.connect(self._auto_save_automation_settings)
-        self.interval_spin.valueChanged.connect(self._auto_save_automation_settings)
-        self.days_spin.valueChanged.connect(self._auto_save_automation_settings)
-        self.launch_mode_combo.currentIndexChanged.connect(self._auto_save_automation_settings)
-        self.guide_watch_combo.currentIndexChanged.connect(self._auto_save_automation_settings)
-        self.notify_check.stateChanged.connect(self._auto_save_automation_settings)
+        # Service Management Card
+        service_box = QGroupBox("Unified Background Service (kaffeine-dvr-watcher)")
+        service_layout = QVBoxLayout(service_box)
+        service_layout.setContentsMargins(15, 15, 15, 15)
+        service_layout.setSpacing(12)
 
-        layout.addLayout(form)
-        layout.addSpacing(10)
+        self.service_status_lbl = QLabel("Checking service status...")
+        self.service_status_lbl.setStyleSheet("font-weight: bold; font-size: 13px;")
+        service_layout.addWidget(self.service_status_lbl)
 
-        # Storage & Auto-Cleanup Section
-        storage_box = QGroupBox("Storage & Video Retention (Auto-Delete Old Recordings)")
+        svc_btn_row = QHBoxLayout()
+        svc_btn_row.setSpacing(10)
+        self.start_svc_btn = QPushButton("Start && Enable Service")
+        self.start_svc_btn.clicked.connect(self.start_background_service)
+        svc_btn_row.addWidget(self.start_svc_btn)
+
+        self.restart_svc_btn = QPushButton("Restart Service")
+        self.restart_svc_btn.clicked.connect(self.restart_background_service)
+        svc_btn_row.addWidget(self.restart_svc_btn)
+        svc_btn_row.addStretch()
+        service_layout.addLayout(svc_btn_row)
+
+        right_col.addWidget(service_box)
+
+        # Storage & Auto-Cleanup Card
+        storage_box = QGroupBox("Storage && Video Retention")
         storage_layout = QVBoxLayout(storage_box)
+        storage_layout.setContentsMargins(15, 15, 15, 15)
+        storage_layout.setSpacing(12)
 
-        # Disk space status display
         self.storage_status_lbl = QLabel("Checking storage space...")
         self.storage_status_lbl.setStyleSheet("font-weight: bold; font-size: 13px; color: #55a84c;")
         storage_layout.addWidget(self.storage_status_lbl)
 
         storage_form = QFormLayout()
+        storage_form.setSpacing(10)
+
         self.cleanup_enable_check = QCheckBox("Enable Automatic Video Cleanup")
         self.cleanup_enable_check.setChecked(self.config_mgr.auto_cleanup_enabled)
         self.cleanup_enable_check.stateChanged.connect(self._auto_save_automation_settings)
-        storage_form.addRow("Auto-Cleanup:", self.cleanup_enable_check)
+        storage_form.addRow(
+            make_setting_label("Auto-Cleanup:", "Automatically purges unprotected videos matching age or disk thresholds."),
+            self.cleanup_enable_check
+        )
 
         self.retention_days_spin = QSpinBox()
         self.retention_days_spin.setRange(0, 365)
         self.retention_days_spin.setValue(self.config_mgr.retention_days)
         self.retention_days_spin.setSuffix(" days")
-        self.retention_days_spin.setFixedWidth(160)
+        self.retention_days_spin.setFixedWidth(150)
         self.retention_days_spin.valueChanged.connect(self._auto_save_automation_settings)
-        retention_lbl = QLabel("Delete recordings older than this age. Set to 0 to disable age-based pruning.")
-        retention_lbl.setStyleSheet("color: #94a3b8; font-size: 13px; line-height: 1.3;")
-        storage_form.addRow("Retention Window:", self.retention_days_spin)
-        storage_form.addRow("", retention_lbl)
+        storage_form.addRow(
+            make_setting_label("Retention Window:", "Delete recordings older than this age. Set to 0 to disable age-based pruning."),
+            self.retention_days_spin
+        )
 
         self.min_free_spin = QSpinBox()
         self.min_free_spin.setRange(0, 1000)
         self.min_free_spin.setSingleStep(5)
         self.min_free_spin.setValue(self.config_mgr.min_free_disk_gb)
         self.min_free_spin.setSuffix(" GB")
-        self.min_free_spin.setFixedWidth(160)
+        self.min_free_spin.setFixedWidth(150)
         self.min_free_spin.valueChanged.connect(self._auto_save_automation_settings)
-        free_lbl = QLabel("If free disk space drops below this limit, oldest unprotected recordings are purged first.")
-        free_lbl.setStyleSheet("color: #94a3b8; font-size: 13px; line-height: 1.3;")
-        storage_form.addRow("Minimum Free Space:", self.min_free_spin)
-        storage_form.addRow("", free_lbl)
+        storage_form.addRow(
+            make_setting_label("Min Free Space:", "If free disk space drops below this limit, oldest unprotected recordings are purged first."),
+            self.min_free_spin
+        )
 
-        # Custom recording folder override
         detected_folder = str(self.storage_mgr.get_recording_folder())
         folder_row = QHBoxLayout()
         folder_row.setContentsMargins(0, 0, 0, 0)
-        folder_row.setSpacing(10)
+        folder_row.setSpacing(8)
         self.custom_folder_input = QLineEdit()
         self.custom_folder_input.setText(self.config_mgr.custom_recording_folder)
-        self.custom_folder_input.setPlaceholderText(f"Auto-detected from Kaffeine: {detected_folder}")
-        self.custom_folder_input.setFixedWidth(520)
+        self.custom_folder_input.setPlaceholderText(f"Auto-detected: {detected_folder}")
         self.custom_folder_input.textChanged.connect(self._auto_save_automation_settings)
         folder_row.addWidget(self.custom_folder_input)
         self.browse_folder_btn = QPushButton("Browse...")
         self.browse_folder_btn.clicked.connect(self.browse_custom_recording_folder)
         folder_row.addWidget(self.browse_folder_btn)
-        folder_row.addStretch()
-        storage_form.addRow("Recording Folder:", folder_row)
+        storage_form.addRow(
+            make_setting_label("Recording Folder:", "Folder where Kaffeine saves .m2t recordings. Auto-detected from kaffeinerc or overridden here."),
+            folder_row
+        )
 
         storage_layout.addLayout(storage_form)
 
-        # Storage Action Buttons
         storage_btn_row = QHBoxLayout()
+        storage_btn_row.setSpacing(10)
         self.run_cleanup_btn = QPushButton("Run Retention Cleanup Now")
         self.run_cleanup_btn.setStyleSheet("color: #ff5252; font-weight: bold;")
         self.run_cleanup_btn.clicked.connect(self.run_manual_cleanup)
@@ -2693,37 +2779,22 @@ class MainWindow(QMainWindow):
         storage_btn_row.addStretch()
         storage_layout.addLayout(storage_btn_row)
 
-        layout.addWidget(storage_box)
-        layout.addSpacing(15)
+        right_col.addWidget(storage_box)
+        right_col.addStretch()
+        two_col_layout.addLayout(right_col, 45)
 
-        # Service Management Section
-        service_box = QGroupBox("Unified Background Service (kaffeine-dvr-watcher.service)")
-        service_layout = QVBoxLayout(service_box)
-        
-        self.service_status_lbl = QLabel("Checking service status...")
-        self.service_status_lbl.setStyleSheet("font-weight: bold; font-size: 13px;")
-        service_layout.addWidget(self.service_status_lbl)
+        main_layout.addLayout(two_col_layout)
 
-        svc_desc = QLabel(
-            "The background daemon dispatches recordings just-in-time and synchronizes guide data periodically.\n"
-            "It runs under systemd user mode and persists automatically across system reboots."
-        )
-        svc_desc.setStyleSheet("color: #94a3b8; font-size: 13px; line-height: 1.3;")
-        service_layout.addWidget(svc_desc)
-
-        svc_btn_row = QHBoxLayout()
-        self.start_svc_btn = QPushButton("Start & Enable Service")
-        self.start_svc_btn.clicked.connect(self.start_background_service)
-        svc_btn_row.addWidget(self.start_svc_btn)
-
-        self.restart_svc_btn = QPushButton("Restart Service")
-        self.restart_svc_btn.clicked.connect(self.restart_background_service)
-        svc_btn_row.addWidget(self.restart_svc_btn)
-        svc_btn_row.addStretch()
-        service_layout.addLayout(svc_btn_row)
-
-        layout.addWidget(service_box)
-        layout.addStretch()
+        # Wire up auto-saves
+        self.lead_time_spin.valueChanged.connect(self._auto_save_automation_settings)
+        self.end_buffer_spin.valueChanged.connect(self._auto_save_automation_settings)
+        self.auto_buffer_sports_check.stateChanged.connect(self._auto_save_automation_settings)
+        self.sports_buffer_spin.valueChanged.connect(self._auto_save_automation_settings)
+        self.interval_spin.valueChanged.connect(self._auto_save_automation_settings)
+        self.days_spin.valueChanged.connect(self._auto_save_automation_settings)
+        self.launch_mode_combo.currentIndexChanged.connect(self._auto_save_automation_settings)
+        self.guide_watch_combo.currentIndexChanged.connect(self._auto_save_automation_settings)
+        self.notify_check.stateChanged.connect(self._auto_save_automation_settings)
 
         scroll.setWidget(container)
         return scroll
