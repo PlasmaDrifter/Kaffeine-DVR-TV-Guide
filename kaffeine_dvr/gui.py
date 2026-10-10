@@ -1269,8 +1269,8 @@ class FirstRunWelcomeDialog(QDialog):
             "<div style='margin-bottom: 8px;'>"
             "  <div style='color: #c084fc; font-weight: bold; font-size: 13px; margin-bottom: 2px;'>• 24/7 Local Affiliates, PBS, CW & Regional Channels (TV Passport)</div>"
             "  <div style='color: #c9d4e2; font-size: 12px; margin-left: 14px; line-height: 1.45;'>"
-            "    Provides complete 24/7 schedules with local news, PBS member stations, CW syndication, and regional programming. Find your numeric station ID on "
-            "    <a href='https://www.tvpassport.com' style='color: #93c5fd; font-weight: bold; text-decoration: none;'>tvpassport.com</a> "
+            "    Provides complete 24/7 schedules for local news, PBS member stations, CW syndication, and regional feeds.<br>"
+            "    Find station IDs on <a href='https://www.tvpassport.com' style='color: #93c5fd; font-weight: bold; text-decoration: none;'>tvpassport.com</a> "
             "    and enter <code style='color: #52b788;'>Channel = StationID</code> under <b>Settings &gt; Guide Sources &amp; Health</b>."
             "  </div>"
             "</div>"
@@ -1290,19 +1290,11 @@ class FirstRunWelcomeDialog(QDialog):
         # Check for unconfigured regional channels
         unconfigured_regional = self.config_mgr.get_unconfigured_regional_channels()
         if unconfigured_regional:
-            max_display = 4
-            full_title = ", ".join(unconfigured_regional)
-            if len(unconfigured_regional) > max_display:
-                shown_str = ", ".join(unconfigured_regional[:max_display])
-                extra = len(unconfigured_regional) - max_display
-                ch_display_str = f"{shown_str}, and {extra} more"
-            else:
-                ch_display_str = full_title
-
+            ch_list_str = ", ".join(unconfigured_regional)
             notice_lbl = QLabel(
                 f"<div style='border-left: 3px solid #f59e0b; border-radius: 4px; background-color: #211c14; padding: 10px 14px; margin-top: 4px; color: #fbbf24; font-size: 12px; line-height: 1.45;'>"
                 f"  <b>Notice:</b> TVMaze only covers national broadcast feeds. The following local/regional channel(s) require TV Passport: "
-                f"  <b style='color: #ffffff; background: #3d2c16; padding: 1px 6px; border-radius: 3px;' title='Full list: {full_title}'>{ch_display_str}</b>.<br>"
+                f"  <b style='color: #ffffff; background: #3d2c16; padding: 1px 6px; border-radius: 3px;'>{ch_list_str}</b>.<br>"
                 f"  Configure their numeric station ID on <a href='https://www.tvpassport.com' style='color: #93c5fd; font-weight: bold; text-decoration: none;'>tvpassport.com</a> "
                 f"  under <b>Settings &gt; Guide Sources &amp; Health</b> after startup."
                 f"</div>"
