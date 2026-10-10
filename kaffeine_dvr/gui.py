@@ -1,3 +1,5 @@
+import os
+import re
 import sys
 import html
 import subprocess
@@ -841,6 +843,76 @@ class GridPanFilter(QObject):
                     pass
 
         return super().eventFilter(watched, event)
+
+
+class UpcomingShowDialog(QDialog):
+    ACTION_CANCEL = 0
+    ACTION_RECORD = 1
+    ACTION_TUNE = 2
+
+    def __init__(self, prog: Dict[str, Any], timing_info: Dict[str, Any], parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Upcoming Program")
+        self.setMinimumWidth(460)
+        self.action = self.ACTION_CANCEL
+
+        title = prog.get("show_title") or prog.get("title") or "Selected Program"
+        ep = prog.get("episode_title")
+        ch = prog.get("kaffeine_channel", "")
+        time_desc = timing_info.get("time_desc", "")
+        start_fmt = timing_info.get("start_fmt", "")
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+
+        header_lbl = QLabel(f"<b>{title}</b>")
+        header_lbl.setStyleSheet("font-size: 15px; color: #66bb6a;")
+        layout.addWidget(header_lbl)
+
+        sub_parts = []
+        if ep:
+            sub_parts.append(f'"{ep}"')
+        if ch:
+            sub_parts.append(f"on {ch}")
+        if start_fmt:
+            sub_parts.append(f"at {start_fmt}")
+        if time_desc:
+            sub_parts.append(f"({time_desc})")
+        info_lbl = QLabel(" • ".join(sub_parts))
+        info_lbl.setStyleSheet("color: #a4b0c2; font-size: 13px;")
+        layout.addWidget(info_lbl)
+
+        prompt_lbl = QLabel("This program has not started yet. What would you like to do?")
+        prompt_lbl.setStyleSheet("font-size: 13px; margin-top: 4px;")
+        layout.addWidget(prompt_lbl)
+
+        btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(8)
+
+        record_btn = QPushButton("Schedule Recording")
+        record_btn.setStyleSheet("font-weight: bold; background-color: #212635; color: #ffffff; padding: 6px 12px;")
+        record_btn.setDefault(True)
+        record_btn.clicked.connect(self._on_record)
+        btn_layout.addWidget(record_btn)
+
+        tune_btn = QPushButton("Tune Channel Now")
+        tune_btn.setStyleSheet("padding: 6px 12px;")
+        tune_btn.clicked.connect(self._on_tune)
+        btn_layout.addWidget(tune_btn)
+
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+        btn_layout.addWidget(cancel_btn)
+
+        layout.addLayout(btn_layout)
+
+    def _on_record(self):
+        self.action = self.ACTION_RECORD
+        self.accept()
+
+    def _on_tune(self):
+        self.action = self.ACTION_TUNE
+        self.accept()
 
 
 class FirstRunWelcomeDialog(QDialog):
@@ -1785,6 +1857,7 @@ class MainWindow(QMainWindow):
         self.grid_pan_filter = GridPanFilter(self.guide_grid_table)
         self.guide_grid_table.viewport().installEventFilter(self.grid_pan_filter)
         self.guide_grid_table.cellClicked.connect(self.on_grid_cell_clicked)
+        self.guide_grid_table.cellDoubleClicked.connect(self.on_grid_cell_double_clicked)
         self.guide_stack.addWidget(self.guide_grid_table)
 
         # 2. Existing Detailed List Table
@@ -1800,6 +1873,7 @@ class MainWindow(QMainWindow):
         self.guide_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.guide_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.guide_table.itemSelectionChanged.connect(self.on_guide_selection_changed)
+        self.guide_table.itemDoubleClicked.connect(self.on_guide_table_double_clicked)
         self.guide_stack.addWidget(self.guide_table)
 
         # Set initial stack page
@@ -1841,6 +1915,12 @@ class MainWindow(QMainWindow):
         detail_layout.addWidget(self.guide_detail_text)
 
         action_bar = QHBoxLayout()
+        self.watch_guide_btn = QPushButton("Watch Live")
+        self.watch_guide_btn.setStyleSheet("font-weight: bold; background-color: #2e7d32; color: #ffffff; padding: 4px 12px;")
+        self.watch_guide_btn.setVisible(False)
+        self.watch_guide_btn.clicked.connect(self.watch_or_tune_selected_guide_item)
+        action_bar.addWidget(self.watch_guide_btn)
+
         self.record_guide_btn = QPushButton("Record This Program")
         self.record_guide_btn.setStyleSheet("font-weight: bold;")
         self.record_guide_btn.clicked.connect(self.record_selected_guide_item)
@@ -4107,6 +4187,8 @@ class MainWindow(QMainWindow):
             self.guide_detail_title.setText("Select a program to view details")
             self.guide_detail_text.clear()
             self.selected_grid_program = None
+            if hasattr(self, "watch_guide_btn"):
+                self.watch_guide_btn.setVisible(False)
             if hasattr(self, "record_guide_btn"):
                 self.record_guide_btn.setText("Record This Program")
             if hasattr(self, "cancel_guide_btn"):
@@ -4168,6 +4250,30 @@ class MainWindow(QMainWindow):
         self.guide_detail_title.setText(header_prefix + colored_title + rest_of_header)
         self.guide_detail_text.setText(summary)
 
+        # Smart timing state for Watch Live / Tune Channel / Play Recording button
+        timing_info = self._get_program_timing_state(prog)
+        state = timing_info.get("state")
+
+        if hasattr(self, "watch_guide_btn"):
+            if state == "live":
+                self.watch_guide_btn.setVisible(True)
+                self.watch_guide_btn.setText("Watch Live")
+                self.watch_guide_btn.setToolTip(f"Watch live broadcast on {channel} in Kaffeine")
+                self.watch_guide_btn.setStyleSheet("font-weight: bold; background-color: #2e7d32; color: #ffffff; padding: 4px 12px;")
+            elif state == "upcoming":
+                self.watch_guide_btn.setVisible(True)
+                self.watch_guide_btn.setText("Tune Channel Now")
+                self.watch_guide_btn.setToolTip(f"Tune Kaffeine to {channel} now ({timing_info.get('time_desc')})")
+                self.watch_guide_btn.setStyleSheet("padding: 4px 12px;")
+            elif state == "past":
+                if timing_info.get("recorded_file"):
+                    self.watch_guide_btn.setVisible(True)
+                    self.watch_guide_btn.setText("Play Recording")
+                    self.watch_guide_btn.setToolTip(f"Play recorded file in player: {os.path.basename(timing_info['recorded_file'])}")
+                    self.watch_guide_btn.setStyleSheet("font-weight: bold; background-color: #1976d2; color: #ffffff; padding: 4px 12px;")
+                else:
+                    self.watch_guide_btn.setVisible(False)
+
         if hasattr(self, "record_guide_btn"):
             if rec_info:
                 self.record_guide_btn.setText("Adjust Buffer...")
@@ -4182,6 +4288,8 @@ class MainWindow(QMainWindow):
         if row < 0 or row >= len(getattr(self, "current_guide_items", [])):
             self.guide_detail_title.setText("Select a program to view details")
             self.guide_detail_text.clear()
+            if hasattr(self, "watch_guide_btn"):
+                self.watch_guide_btn.setVisible(False)
             if hasattr(self, "record_guide_btn"):
                 self.record_guide_btn.setText("Record This Program")
             if hasattr(self, "cancel_guide_btn"):
@@ -4199,6 +4307,193 @@ class MainWindow(QMainWindow):
             if row >= 0 and row < len(getattr(self, "current_guide_items", [])):
                 return self.current_guide_items[row]
         return None
+
+    def _get_program_timing_state(self, prog: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Calculates whether a program is live, upcoming, or past, and looks for recorded files if past.
+        """
+        now = datetime.now()
+        start_iso = prog.get("start_iso")
+        dur_iso = prog.get("duration_iso") or "00:30:00"
+
+        start_dt = None
+        end_dt = None
+        if start_iso:
+            try:
+                start_dt = datetime.fromisoformat(start_iso)
+                parts = [int(x) for x in dur_iso.split(":")]
+                dur = timedelta(hours=parts[0], minutes=parts[1], seconds=parts[2] if len(parts) > 2 else 0)
+                end_dt = start_dt + dur
+            except Exception:
+                pass
+
+        if not start_dt or not end_dt:
+            return {"state": "live", "time_desc": "", "start_fmt": "", "recorded_file": None}
+
+        start_fmt = start_dt.strftime("%I:%M %p").lstrip("0")
+        if start_dt.date() == now.date():
+            time_prefix = f"Today at {start_fmt}"
+        elif start_dt.date() == (now.date() + timedelta(days=1)):
+            time_prefix = f"Tomorrow at {start_fmt}"
+        else:
+            time_prefix = f"{start_dt.strftime('%a, %b %d')} at {start_fmt}"
+
+        recorded_file = None
+
+        if start_dt <= now < end_dt:
+            mins_left = max(1, int((end_dt - now).total_seconds() // 60))
+            return {
+                "state": "live",
+                "time_desc": f"Live Now ({mins_left}m remaining)",
+                "start_fmt": start_fmt,
+                "recorded_file": None,
+                "start_dt": start_dt,
+                "end_dt": end_dt
+            }
+        elif now < start_dt:
+            delta_sec = int((start_dt - now).total_seconds())
+            if delta_sec < 3600:
+                mins = max(1, delta_sec // 60)
+                relative = f"in {mins}m"
+            elif delta_sec < 86400:
+                hours = delta_sec // 3600
+                mins = (delta_sec % 3600) // 60
+                relative = f"in {hours}h {mins}m"
+            else:
+                days = delta_sec // 86400
+                relative = f"in {days}d"
+
+            return {
+                "state": "upcoming",
+                "time_desc": f"{relative} ({time_prefix})",
+                "start_fmt": time_prefix,
+                "recorded_file": None,
+                "start_dt": start_dt,
+                "end_dt": end_dt
+            }
+        else:
+            # Past program: search for recorded file
+            title = (prog.get("show_title") or prog.get("title") or "").strip()
+            ch = (prog.get("kaffeine_channel") or "").strip().lower()
+            start_iso_prefix = (start_iso or "")[:16]
+
+            # 1. Search in QueueManager
+            try:
+                for q_item in self.queue_mgr.list_queue(include_completed=True):
+                    q_ch = (q_item.get("channel") or "").strip().lower()
+                    q_iso = (q_item.get("start_iso") or "")[:16]
+                    if (q_ch == ch and q_iso == start_iso_prefix) or (title and title.lower() in (q_item.get("title") or "").lower() and q_iso == start_iso_prefix):
+                        fp = q_item.get("file_path")
+                        if fp and os.path.exists(fp):
+                            recorded_file = fp
+                            break
+            except Exception:
+                pass
+
+            # 2. Search in Recording Folder if not found yet
+            if not recorded_file:
+                try:
+                    rec_folder = self.storage_mgr.get_recording_folder()
+                    if rec_folder and rec_folder.exists():
+                        safe_title_words = [w.lower() for w in re.findall(r"\w+", title) if len(w) > 3]
+                        date_str = start_dt.strftime("%Y-%m-%d")
+                        for ext in StorageManager.VIDEO_EXTENSIONS:
+                            for vf in rec_folder.glob(f"*{ext}"):
+                                vf_name_lower = vf.name.lower()
+                                if date_str in vf_name_lower and any(w in vf_name_lower for w in safe_title_words):
+                                    recorded_file = str(vf)
+                                    break
+                            if recorded_file:
+                                break
+                except Exception:
+                    pass
+
+            end_fmt = end_dt.strftime("%I:%M %p").lstrip("0")
+            return {
+                "state": "past",
+                "time_desc": f"Ended at {end_fmt} ({start_dt.strftime('%b %d')})",
+                "start_fmt": start_fmt,
+                "recorded_file": recorded_file,
+                "start_dt": start_dt,
+                "end_dt": end_dt
+            }
+
+    def watch_or_tune_selected_guide_item(self):
+        prog = self._get_active_selected_program()
+        if not prog:
+            QMessageBox.warning(self, "Selection Required", "Please select a program from the guide.")
+            return
+
+        timing_info = self._get_program_timing_state(prog)
+        state = timing_info.get("state")
+        ch = prog.get("kaffeine_channel", "")
+        title = prog.get("show_title") or prog.get("title") or "Program"
+
+        if state == "live":
+            self.dbus_client.tune_channel(ch, raise_window=True)
+            self.status_bar.showMessage(f"Tuned to {ch} - Watching '{title}' live.", 4000)
+        elif state == "upcoming":
+            # Direct button click in detail pane tunes directly without popup
+            self.dbus_client.tune_channel(ch, raise_window=True)
+            self.status_bar.showMessage(f"Tuned to {ch} (Upcoming: '{title}' {timing_info.get('time_desc')}).", 4000)
+        elif state == "past":
+            rec_file = timing_info.get("recorded_file")
+            if rec_file:
+                self.dbus_client.play_file(rec_file)
+                self.status_bar.showMessage(f"Playing recording: {os.path.basename(rec_file)}", 4000)
+
+    def handle_program_activation(self, prog: Dict[str, Any]):
+        if not prog:
+            return
+
+        timing_info = self._get_program_timing_state(prog)
+        state = timing_info.get("state")
+        ch = prog.get("kaffeine_channel", "")
+        title = prog.get("show_title") or prog.get("title") or "Program"
+
+        if state == "live":
+            self.dbus_client.tune_channel(ch, raise_window=True)
+            self.status_bar.showMessage(f"Tuned to {ch} - Watching '{title}' live.", 4000)
+        elif state == "upcoming":
+            # Option A: Smart Choice Dialog
+            dlg = UpcomingShowDialog(prog, timing_info, parent=self)
+            dlg.exec()
+            if dlg.action == UpcomingShowDialog.ACTION_RECORD:
+                self.record_selected_guide_item()
+            elif dlg.action == UpcomingShowDialog.ACTION_TUNE:
+                self.dbus_client.tune_channel(ch, raise_window=True)
+                self.status_bar.showMessage(f"Tuned to {ch} (Upcoming: '{title}' {timing_info.get('time_desc')}).", 4000)
+        elif state == "past":
+            rec_file = timing_info.get("recorded_file")
+            if rec_file:
+                self.dbus_client.play_file(rec_file)
+                self.status_bar.showMessage(f"Playing recording: {os.path.basename(rec_file)}", 4000)
+            else:
+                QMessageBox.information(
+                    self, "Broadcast Ended",
+                    f"'{title}' on {ch} has already finished broadcasting ({timing_info.get('time_desc')})."
+                )
+
+    def on_grid_cell_double_clicked(self, row: int, col: int):
+        item = self.guide_grid_table.item(row, col)
+        if not item:
+            for c in range(col - 1, -1, -1):
+                it = self.guide_grid_table.item(row, c)
+                if it and it.data(Qt.ItemDataRole.UserRole):
+                    item = it
+                    break
+        if item and item.data(Qt.ItemDataRole.UserRole):
+            prog = item.data(Qt.ItemDataRole.UserRole)
+            self.selected_grid_program = prog
+            self._display_program_details(prog)
+            self.handle_program_activation(prog)
+
+    def on_guide_table_double_clicked(self, item: QTableWidgetItem):
+        row = item.row()
+        if 0 <= row < len(getattr(self, "current_guide_items", [])):
+            prog = self.current_guide_items[row]
+            self._display_program_details(prog)
+            self.handle_program_activation(prog)
 
     def cancel_selected_guide_recording(self):
         prog = self._get_active_selected_program()

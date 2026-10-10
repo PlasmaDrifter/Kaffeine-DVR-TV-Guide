@@ -24,6 +24,8 @@ Kaffeine is a powerful digital TV viewer for KDE and Linux desktop environments,
   - **Intuitive Mouse Grab-and-Drag Scrolling:** Fluidly click and drag anywhere on the grid in any direction to smoothly pan through channels and time slots, with responsive hand cursor feedback and stationary click preservation.
   - **Genre Color Coding:** Show titles dynamically styled by genre (Sports = Orange, News = Light Blue, Movies = Red, TV Shows = Green).
   - **Smart Timeline Navigation:** Auto-centers on live programming when viewing Today, rewinds to 12:00 AM Midnight for future dates, with quick "Jump to Now" and "Prime Time (8 PM)" buttons.
+  - **Double-Click to Watch & Smart State:** Double-click any show tile or list row to watch live broadcasts in Kaffeine instantly. Evaluates timing states (Live Now, Upcoming, or Past): prompts to schedule recording vs. tune channel now for future shows, and plays existing recordings for past programs.
+  - **Adaptive "Watch Live / Tune Channel" Actions:** Detail panel dynamically provides one-click "Watch Live", "Tune Channel Now", or "Play Recording" buttons based on program air status.
   - **Direct Startup Launch:** Opens directly to the Web TV Guide Browser on startup for instant listing access.
 - **Configurable Recording End Buffers (Post-Roll Padding):**
   - **Global Post-Roll Buffer:** Append extra minutes (0-180m) to scheduled recordings to safeguard against broadcast delays.

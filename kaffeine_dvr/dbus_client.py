@@ -144,6 +144,102 @@ class KaffeineDbusClient:
             except Exception:
                 pass
 
+    def tune_channel(self, channel: str, raise_window: bool = True) -> bool:
+        """
+        Tune Kaffeine to the specified TV channel name or number.
+        If Kaffeine is not running, launches it tuned to the channel.
+        If Kaffeine is already running, tunes via D-Bus PlayChannel and activates the window.
+        """
+        if not channel:
+            return False
+
+        if self.is_running():
+            tuned = False
+            try:
+                import dbus
+                bus = dbus.SessionBus()
+                proxy = bus.get_object(self.service_name, self.object_path)
+                iface = dbus.Interface(proxy, dbus_interface=self.interface_name)
+                iface.PlayChannel(channel)
+                tuned = True
+            except Exception:
+                # Fallback to qdbus CLI
+                res = subprocess.run(
+                    ["qdbus", self.service_name, self.object_path, "PlayChannel", str(channel)],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+                )
+                if res.returncode == 0:
+                    tuned = True
+                else:
+                    # Fallback to calling kaffeine CLI with --channel
+                    env = self._get_display_env()
+                    subprocess.Popen(["kaffeine", "--channel", str(channel)], env=env)
+                    tuned = True
+
+            if raise_window:
+                self.raise_window()
+            return tuned
+        else:
+            env = self._get_display_env()
+            cmd = ["kaffeine", "--channel", str(channel)]
+            try:
+                subprocess.Popen(cmd, env=env)
+                return True
+            except Exception as e:
+                print(f"Error launching Kaffeine for channel {channel}: {e}")
+                return False
+
+    def raise_window(self):
+        """Unminimize and raise Kaffeine window to the foreground."""
+        import shutil
+        kdotool_bin = shutil.which("kdotool")
+        xdotool_bin = shutil.which("xdotool")
+        env = self._get_display_env()
+        try:
+            if kdotool_bin:
+                res = subprocess.run(
+                    [kdotool_bin, "search", "--class", "kaffeine"],
+                    env=env,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    text=True,
+                    timeout=1.5
+                )
+                wids = [w.strip() for w in res.stdout.strip().splitlines() if w.strip()]
+                for wid in wids:
+                    subprocess.run([kdotool_bin, "windowstate", "--remove", "MINIMIZED", wid], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
+                    subprocess.run([kdotool_bin, "windowactivate", wid], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
+            elif xdotool_bin:
+                res = subprocess.run(
+                    [xdotool_bin, "search", "--class", "kaffeine"],
+                    env=env,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    text=True,
+                    timeout=1.5
+                )
+                wids = [w.strip() for w in res.stdout.strip().splitlines() if w.strip()]
+                for wid in wids:
+                    subprocess.run([xdotool_bin, "windowactivate", wid], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
+        except Exception:
+            pass
+
+    def play_file(self, file_path: str) -> bool:
+        """Play a recorded media file in Kaffeine or system default player."""
+        if not file_path or not os.path.exists(file_path):
+            return False
+        env = self._get_display_env()
+        try:
+            subprocess.Popen(["kaffeine", str(file_path)], env=env)
+            return True
+        except Exception:
+            try:
+                subprocess.Popen(["xdg-open", str(file_path)], env=env)
+                return True
+            except Exception as e:
+                print(f"Error opening file {file_path}: {e}")
+                return False
+
 
     def list_scheduled_recordings(self) -> List[Dict[str, Any]]:
         """
