@@ -49,6 +49,10 @@ Kaffeine is a powerful digital TV viewer for KDE and Linux desktop environments,
 |:---:|:---:|
 | [![Recordings Schedule](docs/screenshots/recordings_schedule.png)](docs/screenshots/recordings_schedule.png) | [![Automation and DVR Settings](docs/screenshots/automation_dvr.png)](docs/screenshots/automation_dvr.png) |
 
+| Help and Information Setup Walkthrough |
+|:---:|
+| [![Help and Information Setup Walkthrough](docs/screenshots/help_guide.png)](docs/screenshots/help_guide.png) |
+
 ---
 
 ## Architecture and Workflow
