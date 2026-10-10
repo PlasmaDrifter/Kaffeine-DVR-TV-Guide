@@ -625,20 +625,33 @@ class ProgramTileDelegate(QStyledItemDelegate):
     """
     COLOR_SELECTED_BG = QColor("#2b3e4f")
     COLOR_SELECTED_BORDER_SCHED = QColor("#ff5252")
-    COLOR_SELECTED_BORDER = QColor("#55a84c")
+    COLOR_SELECTED_BORDER = QColor("#38bdf8")
     COLOR_DEFAULT_BG = QColor("#222838")
+    COLOR_DEFAULT_BG_ALT = QColor("#1e2332")
+    COLOR_PAST_BG = QColor("#161922")
+    COLOR_PAST_BG_ALT = QColor("#14171f")
+    COLOR_LIVE_BG = QColor("#17261c")
+    COLOR_LIVE_BG_ALT = QColor("#152219")
     COLOR_DEFAULT_BORDER_SCHED = QColor("#e53935")
     COLOR_DEFAULT_BORDER = QColor("#333c4e")
+    COLOR_PAST_BORDER = QColor("#262c3a")
+    COLOR_PAST_BORDER_SCHED = QColor("#8b0000")
     COLOR_REC_BADGE_PEN = QColor("#e53935")
     COLOR_REC_BADGE_BRUSH = QColor("#b71c1c")
+    COLOR_LIVE_BADGE_PEN = QColor("#22c55e")
+    COLOR_LIVE_BADGE_BRUSH = QColor("#14532d")
     COLOR_WHITE = QColor("#ffffff")
+    COLOR_UPCOMING_TITLE = QColor("#f1f5f9")
+    COLOR_PAST_TITLE = QColor("#788292")
+    COLOR_PAST_SUBTEXT = QColor("#5a6474")
+    COLOR_LIVE_TITLE = QColor("#4ade80")
     COLOR_SUBTEXT = QColor("#a4b0c2")
 
     CATEGORY_COLORS = {
         "sports": QColor("#ffa028"),
         "news": QColor("#4fc3f7"),
         "movies": QColor("#ff5c5c"),
-        "tvshows": QColor("#66bb6a"),
+        "tvshows": QColor("#f1f5f9"),
     }
 
     def __init__(self, parent=None):
@@ -657,19 +670,50 @@ class ProgramTileDelegate(QStyledItemDelegate):
         painter.save()
         rect = option.rect
 
-        # Background fill & subtle border
+        # Timing state & metadata
         is_selected = bool(option.state & QStyle.StateFlag.State_Selected)
         is_scheduled = bool(prog.get("_scheduled_rec"))
+        timing_state = prog.get("_timing_state")
+        if not timing_state:
+            start_iso = prog.get("start_iso")
+            dur_iso = prog.get("duration_iso") or "00:30:00"
+            if start_iso:
+                try:
+                    dt = datetime.fromisoformat(start_iso)
+                    parts = [int(x) for x in dur_iso.split(":")]
+                    dur = timedelta(hours=parts[0], minutes=parts[1], seconds=parts[2] if len(parts) > 2 else 0)
+                    now = datetime.now()
+                    if now >= dt + dur:
+                        timing_state = "past"
+                    elif dt <= now < dt + dur:
+                        timing_state = "live"
+                    else:
+                        timing_state = "upcoming"
+                except Exception:
+                    timing_state = "upcoming"
+            else:
+                timing_state = "upcoming"
 
+        # Background fill & border styling
+        is_alt = (index.row() % 2 == 1)
         if is_selected:
             bg_color = self.COLOR_SELECTED_BG
             border_color = self.COLOR_SELECTED_BORDER_SCHED if is_scheduled else self.COLOR_SELECTED_BORDER
+            pen_width = 2
         else:
-            bg_color = index.data(Qt.ItemDataRole.BackgroundRole) or self.COLOR_DEFAULT_BG
-            border_color = self.COLOR_DEFAULT_BORDER_SCHED if is_scheduled else self.COLOR_DEFAULT_BORDER
+            pen_width = 1
+            if timing_state == "past":
+                bg_color = self.COLOR_PAST_BG_ALT if is_alt else self.COLOR_PAST_BG
+                border_color = self.COLOR_PAST_BORDER_SCHED if is_scheduled else self.COLOR_PAST_BORDER
+            elif timing_state == "live":
+                bg_color = self.COLOR_LIVE_BG_ALT if is_alt else self.COLOR_LIVE_BG
+                border_color = self.COLOR_DEFAULT_BORDER_SCHED if is_scheduled else self.COLOR_DEFAULT_BORDER
+            else:
+                bg_color = self.COLOR_DEFAULT_BG_ALT if is_alt else self.COLOR_DEFAULT_BG
+                border_color = self.COLOR_DEFAULT_BORDER_SCHED if is_scheduled else self.COLOR_DEFAULT_BORDER
 
         painter.fillRect(rect, bg_color)
-        painter.setPen(border_color)
+        painter.setPen(QPen(border_color, pen_width))
         painter.drawRect(rect.adjusted(0, 0, -1, -1))
 
         # Uniform padding inside box
@@ -678,8 +722,10 @@ class ProgramTileDelegate(QStyledItemDelegate):
         pad_right = 10
         inner_width = max(10, rect.width() - pad_left - pad_right)
 
-        # Draw Scheduled [REC] badge in upper right corner if scheduled
+        # Draw Badges (REC badge and LIVE badge in upper right corner)
         badge_reserved_w = 0
+        cur_right = rect.right() - pad_right
+
         if is_scheduled:
             badge_font = QFont(option.font)
             badge_font.setBold(True)
@@ -689,29 +735,64 @@ class ProgramTileDelegate(QStyledItemDelegate):
 
             rec_text = "REC"
             rec_w = fm_badge.horizontalAdvance(rec_text)
-
             pad_h = 6
             bw = rec_w + (pad_h * 2)
             bh = 15
 
-            bx = rect.right() - pad_right - bw
+            bx = cur_right - bw
             by = rect.top() + pad_top
             badge_rect = QRect(bx, by, bw, bh)
 
-            # Draw curved corners rectangle background with border
             painter.setPen(self.COLOR_REC_BADGE_PEN)
             painter.setBrush(self.COLOR_REC_BADGE_BRUSH)
             painter.drawRoundedRect(badge_rect, 4, 4)
 
-            # Draw "REC" text perfectly centered
             painter.setPen(self.COLOR_WHITE)
             painter.drawText(badge_rect, Qt.AlignmentFlag.AlignCenter, rec_text)
 
-            badge_reserved_w = bw + 6
+            cur_right -= (bw + 5)
+            badge_reserved_w += (bw + 5)
 
-        # Title Color coding: sports=orange, news=blue, movies=red, tvshows=green
+        if timing_state == "live" and inner_width >= 80:
+            live_font = QFont(option.font)
+            live_font.setBold(True)
+            live_font.setPointSize(7)
+            painter.setFont(live_font)
+            fm_live = painter.fontMetrics()
+
+            live_text = "● LIVE"
+            live_w = fm_live.horizontalAdvance(live_text)
+            pad_h = 5
+            bw_live = live_w + (pad_h * 2)
+            bh_live = 15
+
+            bx_live = cur_right - bw_live
+            by_live = rect.top() + pad_top
+            live_badge_rect = QRect(bx_live, by_live, bw_live, bh_live)
+
+            painter.setPen(self.COLOR_LIVE_BADGE_PEN)
+            painter.setBrush(self.COLOR_LIVE_BADGE_BRUSH)
+            painter.drawRoundedRect(live_badge_rect, 4, 4)
+
+            painter.setPen(QColor("#86efac"))
+            painter.drawText(live_badge_rect, Qt.AlignmentFlag.AlignCenter, live_text)
+
+            badge_reserved_w += (bw_live + 5)
+
+        # Title & Subtext color logic (Option 1)
         cat = prog.get("_category") or classify_guide_category(prog)
-        title_color = self.CATEGORY_COLORS.get(cat, self.CATEGORY_COLORS["tvshows"])
+        if timing_state == "past":
+            title_color = self.COLOR_PAST_TITLE
+            subtext_color = self.COLOR_PAST_SUBTEXT
+        elif timing_state == "live":
+            if cat in ("sports", "news", "movies"):
+                title_color = self.CATEGORY_COLORS[cat]
+            else:
+                title_color = self.COLOR_LIVE_TITLE
+            subtext_color = self.COLOR_SUBTEXT
+        else:
+            title_color = self.CATEGORY_COLORS.get(cat, self.COLOR_UPCOMING_TITLE)
+            subtext_color = self.COLOR_SUBTEXT
 
         primary_title = prog.get("_primary_title")
         secondary_sub = prog.get("_secondary_sub")
@@ -732,12 +813,12 @@ class ProgramTileDelegate(QStyledItemDelegate):
         line1_rect = QRect(rect.left() + pad_left, rect.top() + pad_top, inner_width_title, fm_title.height())
         painter.drawText(line1_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, elided_title)
 
-        # Line 2: Time Range & Subtitle (crisply aligned with exact same pad_left margin)
+        # Line 2: Time Range & Subtitle
         font_sub = QFont(option.font)
         font_sub.setBold(False)
         font_sub.setPointSize(max(7, 9 + self.zoom_delta))
         painter.setFont(font_sub)
-        painter.setPen(self.COLOR_SUBTEXT)
+        painter.setPen(subtext_color)
 
         fm_sub = painter.fontMetrics()
         subtext = f"{time_range} • {secondary_sub}" if secondary_sub else time_range
@@ -4198,6 +4279,10 @@ class MainWindow(QMainWindow):
             start_iso = (p.get("start_iso") or "")[:16]
             rec_info = active_scheduled.get((ch, start_iso))
 
+            timing_info = self._get_program_timing_state(p)
+            timing_state = timing_info.get("state", "upcoming")
+            cat = p.get("_category") or classify_guide_category(p)
+
             rec_item = QTableWidgetItem("● REC" if rec_info else "")
             rec_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             if rec_info:
@@ -4208,13 +4293,51 @@ class MainWindow(QMainWindow):
                 rec_item.setToolTip(f"Recording Scheduled (Queue #{rec_info.get('id')} - {rec_info.get('status')}{buf_tip})")
             self.guide_table.setItem(row, 0, rec_item)
 
-            self.guide_table.setItem(row, 1, QTableWidgetItem(p.get("start_time_local", "")))
-            self.guide_table.setItem(row, 2, QTableWidgetItem(p.get("kaffeine_channel", "")))
+            time_item = QTableWidgetItem(p.get("start_time_local", ""))
+            chan_item = QTableWidgetItem(p.get("kaffeine_channel", ""))
 
             disp_title, disp_sub = get_program_display_titles(p)
-            self.guide_table.setItem(row, 3, QTableWidgetItem(disp_title))
-            self.guide_table.setItem(row, 4, QTableWidgetItem(disp_sub))
-            self.guide_table.setItem(row, 5, QTableWidgetItem(p.get("duration_iso", "")))
+            title_item = QTableWidgetItem(disp_title)
+            sub_item = QTableWidgetItem(disp_sub)
+            dur_item = QTableWidgetItem(p.get("duration_iso", ""))
+
+            # Option 1 coloring for list view:
+            if timing_state == "past":
+                gray_color = QColor("#788292")
+                time_item.setForeground(gray_color)
+                chan_item.setForeground(gray_color)
+                title_item.setForeground(gray_color)
+                sub_item.setForeground(gray_color)
+                dur_item.setForeground(gray_color)
+            elif timing_state == "live":
+                if cat == "sports":
+                    t_color = QColor("#ffa028")
+                elif cat == "news":
+                    t_color = QColor("#4fc3f7")
+                elif cat == "movies":
+                    t_color = QColor("#ff5c5c")
+                else:
+                    t_color = QColor("#4ade80")
+                title_item.setForeground(t_color)
+                title_font = QFont()
+                title_font.setBold(True)
+                title_item.setFont(title_font)
+            else:
+                if cat == "sports":
+                    t_color = QColor("#ffa028")
+                elif cat == "news":
+                    t_color = QColor("#4fc3f7")
+                elif cat == "movies":
+                    t_color = QColor("#ff5c5c")
+                else:
+                    t_color = QColor("#f1f5f9")
+                title_item.setForeground(t_color)
+
+            self.guide_table.setItem(row, 1, time_item)
+            self.guide_table.setItem(row, 2, chan_item)
+            self.guide_table.setItem(row, 3, title_item)
+            self.guide_table.setItem(row, 4, sub_item)
+            self.guide_table.setItem(row, 5, dur_item)
 
     def _populate_grid_guide(self, programs: List[Dict[str, Any]], airdate: Optional[str], keep_scroll: bool = False):
         active_scheduled = self.queue_mgr.get_active_scheduled_map()
@@ -4320,11 +4443,21 @@ class MainWindow(QMainWindow):
                 iso_key = (start_iso or "")[:16]
                 scheduled_rec = active_scheduled.get((ch_key, iso_key))
 
+                # Determine timing state (past, live, upcoming)
+                now = datetime.now()
+                if now >= end_dt:
+                    timing_state = "past"
+                elif dt <= now < end_dt:
+                    timing_state = "live"
+                else:
+                    timing_state = "upcoming"
+
                 # Annotate program metadata for delegate renderer
                 p_copy = dict(p)
                 p_copy["_time_range"] = time_range
                 p_copy["_category"] = classify_guide_category(p)
                 p_copy["_scheduled_rec"] = scheduled_rec
+                p_copy["_timing_state"] = timing_state
                 p_title, p_sub = get_program_display_titles(p)
                 p_copy["_primary_title"] = p_title
                 p_copy["_secondary_sub"] = p_sub
@@ -4332,8 +4465,14 @@ class MainWindow(QMainWindow):
                 item = QTableWidgetItem(show_title)
                 item.setData(Qt.ItemDataRole.UserRole, p_copy)
                 
-                # Visual styling
-                item.setBackground(tile_bg if (idx % 2 == 0) else tile_bg_alt)
+                # Visual styling based on timing state
+                if timing_state == "past":
+                    cur_bg = QColor("#161922") if (idx % 2 == 0) else QColor("#14171f")
+                elif timing_state == "live":
+                    cur_bg = QColor("#17261c") if (idx % 2 == 0) else QColor("#152219")
+                else:
+                    cur_bg = tile_bg if (idx % 2 == 0) else tile_bg_alt
+                item.setBackground(cur_bg)
                 item.setForeground(tile_text_color)
 
                 self.guide_grid_table.setItem(row_idx, start_col, item)
@@ -4342,7 +4481,7 @@ class MainWindow(QMainWindow):
                 for c in range(start_col + 1, start_col + span):
                     ghost = QTableWidgetItem()
                     ghost.setData(Qt.ItemDataRole.UserRole, p_copy)
-                    ghost.setBackground(tile_bg if (idx % 2 == 0) else tile_bg_alt)
+                    ghost.setBackground(cur_bg)
                     self.guide_grid_table.setItem(row_idx, c, ghost)
 
                 if span > 1:
@@ -4397,6 +4536,10 @@ class MainWindow(QMainWindow):
         iso_key = (prog.get("start_iso") or "")[:16]
         rec_info = active_map.get((ch_key, iso_key))
 
+        # Smart timing state for Watch Live / Tune Channel / Play Recording button
+        timing_info = self._get_program_timing_state(prog)
+        state = timing_info.get("state", "upcoming")
+
         header_prefix = ""
         if rec_info:
             qid = rec_info.get("id")
@@ -4404,17 +4547,31 @@ class MainWindow(QMainWindow):
             buf_val = rec_info.get("buffer_mins", 0)
             buf_txt = f" | Buffer: +{buf_val}m" if buf_val else ""
             header_prefix = f"<span style='color: #ff5252; font-weight: bold;'>[● REC QUEUED #{qid} - {st}{buf_txt}]</span> "
+        elif state == "live":
+            header_prefix = f"<span style='color: #22c55e; font-weight: bold;'>[● LIVE]</span> "
 
-        # Color-code the show title by its category (sports=orange, news=blue, movies=red, tvshows=green)
+        # Color-code the show title by its timing state and category (Option 1)
         cat = prog.get("_category") or classify_guide_category(prog)
-        if cat == "sports":
-            title_color_hex = "#ffa028"  # Orange
-        elif cat == "news":
-            title_color_hex = "#4fc3f7"  # Blue
-        elif cat == "movies":
-            title_color_hex = "#ff5c5c"  # Red
-        else:
-            title_color_hex = "#66bb6a"  # Green
+        if state == "past":
+            title_color_hex = "#788292"  # Dark grey, readable
+        elif state == "live":
+            if cat == "sports":
+                title_color_hex = "#ffa028"  # Orange
+            elif cat == "news":
+                title_color_hex = "#4fc3f7"  # Blue
+            elif cat == "movies":
+                title_color_hex = "#ff5c5c"  # Red
+            else:
+                title_color_hex = "#4ade80"  # Vibrant green
+        else: # upcoming
+            if cat == "sports":
+                title_color_hex = "#ffa028"  # Orange
+            elif cat == "news":
+                title_color_hex = "#4fc3f7"  # Blue
+            elif cat == "movies":
+                title_color_hex = "#ff5c5c"  # Red
+            else:
+                title_color_hex = "#f1f5f9"  # White / light grey
 
         primary_title, secondary_sub = get_program_display_titles(prog)
         escaped_title = html.escape(primary_title)
@@ -4433,10 +4590,6 @@ class MainWindow(QMainWindow):
 
         self.guide_detail_title.setText(header_prefix + colored_title + rest_of_header)
         self.guide_detail_text.setText(summary)
-
-        # Smart timing state for Watch Live / Tune Channel / Play Recording button
-        timing_info = self._get_program_timing_state(prog)
-        state = timing_info.get("state")
 
         if hasattr(self, "watch_guide_btn"):
             if state == "live":
