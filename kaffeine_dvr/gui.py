@@ -2202,6 +2202,12 @@ class MainWindow(QMainWindow):
         self.watch_guide_btn.clicked.connect(self.watch_or_tune_selected_guide_item)
         action_bar.addWidget(self.watch_guide_btn)
 
+        self.adjust_buffer_guide_btn = QPushButton("Adjust Buffer...")
+        self.adjust_buffer_guide_btn.setStyleSheet("font-weight: bold;")
+        self.adjust_buffer_guide_btn.setVisible(False)
+        self.adjust_buffer_guide_btn.clicked.connect(self.record_selected_guide_item)
+        action_bar.addWidget(self.adjust_buffer_guide_btn)
+
         action_bar.addStretch()
         detail_layout.addLayout(action_bar)
         layout.addWidget(detail_widget, 0)
@@ -3036,6 +3042,8 @@ class MainWindow(QMainWindow):
         s3_lay = QVBoxLayout(s3_box)
         s3_lay.setContentsMargins(15, 15, 15, 15)
         s3_text = QLabel(
+            "• <b style='color: #facc15;'>Where to Go:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;In this app, go to the <b>Settings</b> tab, then click the <b>Channel Source</b> subtab.<br><br>"
             "• <b style='color: #facc15;'>TV Guide Channel Order (Left Panel):</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;– Drag and drop channels or use <b>Move Up</b> / <b>Move Down</b> / <b>Sort A-Z</b> to prioritize how channels are stacked in your EPG TV Guide grid.<br><br>"
             "• <b style='color: #facc15;'>Guide Network Mapping (Right Panel - Format: Guide Name = Tuned Channel):</b><br>"
@@ -4838,7 +4846,10 @@ class MainWindow(QMainWindow):
             if hasattr(self, "watch_guide_btn"):
                 self.watch_guide_btn.setVisible(False)
             if hasattr(self, "record_guide_btn"):
+                self.record_guide_btn.setVisible(True)
                 self.record_guide_btn.setText("Record This Program")
+            if hasattr(self, "adjust_buffer_guide_btn"):
+                self.adjust_buffer_guide_btn.setVisible(False)
             if hasattr(self, "cancel_guide_btn"):
                 self.cancel_guide_btn.setVisible(False)
             return
@@ -4932,10 +4943,11 @@ class MainWindow(QMainWindow):
                     self.watch_guide_btn.setVisible(False)
 
         if hasattr(self, "record_guide_btn"):
-            if rec_info:
-                self.record_guide_btn.setText("Adjust Buffer...")
-            else:
-                self.record_guide_btn.setText("Record This Program")
+            self.record_guide_btn.setVisible(rec_info is None)
+            self.record_guide_btn.setText("Record This Program")
+
+        if hasattr(self, "adjust_buffer_guide_btn"):
+            self.adjust_buffer_guide_btn.setVisible(rec_info is not None)
 
         if hasattr(self, "cancel_guide_btn"):
             self.cancel_guide_btn.setVisible(rec_info is not None)
@@ -4948,7 +4960,10 @@ class MainWindow(QMainWindow):
             if hasattr(self, "watch_guide_btn"):
                 self.watch_guide_btn.setVisible(False)
             if hasattr(self, "record_guide_btn"):
+                self.record_guide_btn.setVisible(True)
                 self.record_guide_btn.setText("Record This Program")
+            if hasattr(self, "adjust_buffer_guide_btn"):
+                self.adjust_buffer_guide_btn.setVisible(False)
             if hasattr(self, "cancel_guide_btn"):
                 self.cancel_guide_btn.setVisible(False)
             return
