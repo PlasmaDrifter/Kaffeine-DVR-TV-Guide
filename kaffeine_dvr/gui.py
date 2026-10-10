@@ -4704,6 +4704,18 @@ class MainWindow(QMainWindow):
 
             for col in [0, 1, 2, 5]:
                 self.guide_table.resizeColumnToContents(col)
+
+            # Auto-scroll to first currently playing or upcoming show
+            first_active_row = -1
+            for r, p in enumerate(programs):
+                timing = self._get_program_timing_state(p)
+                if timing.get("state") in ("live", "upcoming"):
+                    first_active_row = r
+                    break
+            if first_active_row >= 0:
+                target_item = self.guide_table.item(first_active_row, 1) or self.guide_table.item(first_active_row, 0)
+                if target_item:
+                    self.guide_table.scrollToItem(target_item, QTableWidget.ScrollHint.PositionAtTop)
         finally:
             self.guide_table.blockSignals(False)
             self.guide_table.setUpdatesEnabled(True)
