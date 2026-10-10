@@ -1253,22 +1253,15 @@ class FirstRunWelcomeDialog(QDialog):
         guide_info_layout = QVBoxLayout(guide_info_box)
 
         guide_info_text = QLabel(
-            "<b>TV Guide Sources and How Listings Work:</b><br>"
-            "• <b>TVMaze API (Zero Configuration Required - Works Out of the Box):</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;Major broadcast networks (<b>FOX, CBS, NBC, ABC, PBS, and The CW</b>) work immediately with <b>zero setup, no account, and no API keys required</b>. "
-            "The moment the app starts, TVMaze automatically downloads up to 7 days of prime-time listings for all mapped national channels.<br><br>"
-            "• <b>National Programming vs. Local Daytime Programming:</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;Because TVMaze tracks national network schedules, it covers all nationally broadcast prime-time series, network specials, and national sports. "
-            "However, broadcast networks relinquish morning, midday, and late-afternoon blocks to local affiliates. Consequently, <b>local news broadcasts, daytime syndicated talk shows, game shows, and independent local subchannels</b> "
-            "are not included in TVMaze's national feed.<br><br>"
-            "• <b>Getting 24/7 Local & Regional Schedules (TV Passport):</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;If you want full 24/7 continuous coverage including local morning/evening news and daytime shows, or listings for local independent subchannels, configure free station IDs via TV Passport:<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;1. Look up your local affiliate station ID on <a href='https://www.tvpassport.com' style='color: #64b5f6; font-weight: bold;'>tvpassport.com</a>.<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;2. Enter <code>ChannelName = StationID</code> in <i>Settings &gt; Guide Sources &gt; TV Passport</i> and click <i>Save Station IDs</i>.<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;3. The app connects and immediately syncs complete 24/7 local listings in the background.<br><br>"
-            "• <b>Free Hybrid Mode (Best of Both Worlds):</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;Running both sources together is the default mode. For channels where you enter a TV Passport station ID, TV Passport automatically takes over to provide 24/7 local affiliate listings, "
-            "while TVMaze seamlessly covers any remaining national channels with zero setup and no duplicate entries."
+            "• <b>National Networks (TVMaze - Zero Setup):</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;Covers major national broadcast feeds (<b>FOX, CBS, NBC, ABC, PBS, The CW</b>) out of the box with zero configuration. "
+            "<i>Note: TVMaze tracks national schedules only and does not include local news, daytime programming, or regional subchannels.</i><br><br>"
+            "• <b>24/7 Local Affiliates & Regional Channels (TV Passport):</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;Provides complete 24/7 schedules with local news and regional programming. Find your numeric station ID on "
+            "<a href='https://www.tvpassport.com' style='color: #64b5f6; font-weight: bold;'>tvpassport.com</a> and enter <code>Channel = StationID</code> under "
+            "<b>Settings &gt; Guide Sources &amp; Health</b>.<br><br>"
+            "• <b>Hybrid Mode (Default):</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;TV Passport provides 24/7 local schedules for your configured stations, while TVMaze automatically covers remaining national networks."
         )
         guide_info_text.setWordWrap(True)
         guide_info_text.setOpenExternalLinks(True)
@@ -1282,11 +1275,14 @@ class FirstRunWelcomeDialog(QDialog):
             ch_list_str = ", ".join(unconfigured_regional)
             notice_lbl = QLabel(
                 f"<div style='border: 1px solid #c8832a; border-radius: 4px; background-color: #2b2214; padding: 8px 12px; color: #ffc107; font-size: 12px; line-height: 1.4;'>"
-                f"<b>Notice:</b> The following scanned channel(s) are local/regional and not covered by national feeds: "
+                f"<b>Notice:</b> TVMaze only covers national broadcast feeds. The following local/regional channel(s) require TV Passport: "
                 f"<b>{ch_list_str}</b>.<br>"
-                f"You can configure their free station ID under <b>Settings &gt; Guide Sources &gt; TV Passport</b> after startup.</div>"
+                f"Configure their numeric station ID on <a href='https://www.tvpassport.com' style='color: #64b5f6; font-weight: bold;'>tvpassport.com</a> "
+                f"under <b>Settings &gt; Guide Sources &amp; Health</b> after startup.</div>"
             )
             notice_lbl.setWordWrap(True)
+            notice_lbl.setOpenExternalLinks(True)
+            notice_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
             guide_info_layout.addWidget(notice_lbl)
 
         layout.addWidget(guide_info_box)
