@@ -13,6 +13,7 @@ Kaffeine is a powerful digital TV viewer for KDE and Linux desktop environments,
 **Kaffeine-DVR-TV-Guide** solves both problems:
 - **Zero-Block Power Operations:** Scheduled recordings are held in an external queue database (`recordings_queue.sqlite`). Kaffeine stays completely clean with zero active timers until minutes before showtime.
 - **Just-In-Time (JIT) Dispatching:** A lightweight systemd user background service monitors the queue. When a broadcast is about to begin (e.g. 5 minutes before airtime), it launches Kaffeine minimized and arms the timer over D-Bus automatically.
+- **Independent Systemd Daemon:** The background service (`kaffeine-dvr-watcher.service`) runs completely detached from the GUI as a `systemd --user` service. You can close the TV Guide window anytime, and the background daemon stays running 24/7 in the background (and restarts automatically upon login/reboot).
 - **Comprehensive EPG Providers:**
   - **TVMaze Cloud API (Free & Automatic)**
   - **TV Passport (Web Station Directory)**
