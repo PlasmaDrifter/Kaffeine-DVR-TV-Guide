@@ -77,10 +77,11 @@ chmod +x Kaffeine-DVR-TV-Guide-x86_64.AppImage
 Use this method if you prefer installing directly into your user Python environment and registering systemd user services.
 
 #### Prerequisites (For Source Installation Only)
-- Python 3.9 or newer
-- PyQt6 (`sudo apt install python3-pyqt6` on Ubuntu/Debian/Kubuntu, or `pip install PyQt6`)
-- Kaffeine (`kaffeine`)
-- Standard desktop tools: `systemd`, `notify-send` (optional, for notifications), `kdotool` or `xdotool` (optional, for window minimization)
+- Python 3.9 or newer with `pip`
+- Kaffeine (`kaffeine`) installed on your system
+- Optional desktop tools: `notify-send` (for notifications), `kdotool` or `xdotool` (for window minimization)
+
+*(Note: Python dependencies such as PyQt6 are downloaded and installed automatically by `install.sh`)*
 
 #### Install Script
 Clone the repository and run the automated installer:
