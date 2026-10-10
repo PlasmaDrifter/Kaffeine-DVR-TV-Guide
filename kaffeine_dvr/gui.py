@@ -1167,7 +1167,7 @@ class FirstRunWelcomeDialog(QDialog):
             }}
             QGroupBox::title {{
                 subcontrol-origin: margin;
-                subcontrol-position: top left;
+                subcontrol-position: top center;
                 padding: 0 8px;
                 color: #d3dae3;
             }}
@@ -1225,6 +1225,7 @@ class FirstRunWelcomeDialog(QDialog):
 
         # Environment box
         env_box = QGroupBox("Detected System Environment")
+        env_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
         env_layout = QFormLayout(env_box)
 
         local_dt = datetime.now().astimezone()
@@ -1252,6 +1253,7 @@ class FirstRunWelcomeDialog(QDialog):
 
         # TV Guide and Regional Channel Coverage Explanation
         guide_info_box = QGroupBox("TV Guide Coverage and Providers")
+        guide_info_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
         guide_info_layout = QVBoxLayout(guide_info_box)
         guide_info_layout.setSpacing(10)
         guide_info_layout.setContentsMargins(16, 16, 16, 16)
@@ -1305,6 +1307,7 @@ class FirstRunWelcomeDialog(QDialog):
         layout.addWidget(guide_info_box)
 
         options_box = QGroupBox("Initial Setup Options")
+        options_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
         options_layout = QVBoxLayout(options_box)
         options_layout.setSpacing(8)
 
