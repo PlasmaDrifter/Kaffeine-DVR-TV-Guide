@@ -621,6 +621,24 @@ class ProgramTileDelegate(QStyledItemDelegate):
     - Colors show titles: Sports = Orange (#ffa028), News = Blue (#4fc3f7), Movies = Red (#ff5c5c), TV Shows = Green (#66bb6a).
     - Subtext displays time range and episode title with high legibility.
     """
+    COLOR_SELECTED_BG = QColor("#2b3e4f")
+    COLOR_SELECTED_BORDER_SCHED = QColor("#ff5252")
+    COLOR_SELECTED_BORDER = QColor("#55a84c")
+    COLOR_DEFAULT_BG = QColor("#222838")
+    COLOR_DEFAULT_BORDER_SCHED = QColor("#e53935")
+    COLOR_DEFAULT_BORDER = QColor("#333c4e")
+    COLOR_REC_BADGE_PEN = QColor("#e53935")
+    COLOR_REC_BADGE_BRUSH = QColor("#b71c1c")
+    COLOR_WHITE = QColor("#ffffff")
+    COLOR_SUBTEXT = QColor("#a4b0c2")
+
+    CATEGORY_COLORS = {
+        "sports": QColor("#ffa028"),
+        "news": QColor("#4fc3f7"),
+        "movies": QColor("#ff5c5c"),
+        "tvshows": QColor("#66bb6a"),
+    }
+
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index):
         prog = index.data(Qt.ItemDataRole.UserRole)
         if not prog:
@@ -635,11 +653,11 @@ class ProgramTileDelegate(QStyledItemDelegate):
         is_scheduled = bool(prog.get("_scheduled_rec"))
 
         if is_selected:
-            bg_color = QColor("#2b3e4f")
-            border_color = QColor("#ff5252") if is_scheduled else QColor("#55a84c")
+            bg_color = self.COLOR_SELECTED_BG
+            border_color = self.COLOR_SELECTED_BORDER_SCHED if is_scheduled else self.COLOR_SELECTED_BORDER
         else:
-            bg_color = index.data(Qt.ItemDataRole.BackgroundRole) or QColor("#222838")
-            border_color = QColor("#e53935") if is_scheduled else QColor("#333c4e")
+            bg_color = index.data(Qt.ItemDataRole.BackgroundRole) or self.COLOR_DEFAULT_BG
+            border_color = self.COLOR_DEFAULT_BORDER_SCHED if is_scheduled else self.COLOR_DEFAULT_BORDER
 
         painter.fillRect(rect, bg_color)
         painter.setPen(border_color)
@@ -672,28 +690,24 @@ class ProgramTileDelegate(QStyledItemDelegate):
             badge_rect = QRect(bx, by, bw, bh)
 
             # Draw curved corners rectangle background with border
-            painter.setPen(QColor("#e53935"))
-            painter.setBrush(QColor("#b71c1c"))
+            painter.setPen(self.COLOR_REC_BADGE_PEN)
+            painter.setBrush(self.COLOR_REC_BADGE_BRUSH)
             painter.drawRoundedRect(badge_rect, 4, 4)
 
             # Draw "REC" text perfectly centered
-            painter.setPen(QColor("#ffffff"))
+            painter.setPen(self.COLOR_WHITE)
             painter.drawText(badge_rect, Qt.AlignmentFlag.AlignCenter, rec_text)
 
             badge_reserved_w = bw + 6
 
         # Title Color coding: sports=orange, news=blue, movies=red, tvshows=green
         cat = prog.get("_category") or classify_guide_category(prog)
-        if cat == "sports":
-            title_color = QColor("#ffa028")  # Vibrant Orange
-        elif cat == "news":
-            title_color = QColor("#4fc3f7")  # Vibrant Light Blue
-        elif cat == "movies":
-            title_color = QColor("#ff5c5c")  # Vibrant Red
-        else:
-            title_color = QColor("#66bb6a")  # Vibrant Green
+        title_color = self.CATEGORY_COLORS.get(cat, self.CATEGORY_COLORS["tvshows"])
 
-        primary_title, secondary_sub = get_program_display_titles(prog)
+        primary_title = prog.get("_primary_title")
+        secondary_sub = prog.get("_secondary_sub")
+        if primary_title is None:
+            primary_title, secondary_sub = get_program_display_titles(prog)
         time_range = prog.get("_time_range", "")
 
         # Line 1: Primary Title (bold, color-coded)
@@ -714,7 +728,7 @@ class ProgramTileDelegate(QStyledItemDelegate):
         font_sub.setBold(False)
         font_sub.setPointSize(9)
         painter.setFont(font_sub)
-        painter.setPen(QColor("#a4b0c2"))
+        painter.setPen(self.COLOR_SUBTEXT)
 
         fm_sub = painter.fontMetrics()
         subtext = f"{time_range} • {secondary_sub}" if secondary_sub else time_range
@@ -733,6 +747,8 @@ class GridPanFilter(QObject):
     def __init__(self, table: QTableWidget, parent=None):
         super().__init__(parent or table)
         self.table = table
+        self._h_bar = table.horizontalScrollBar()
+        self._v_bar = table.verticalScrollBar()
         self._dragging = False
         self._drag_start_pos = None
         self._scroll_start_h = 0
@@ -759,13 +775,26 @@ class GridPanFilter(QObject):
             if event.button() == Qt.MouseButton.LeftButton:
                 self._dragging = False
                 self._drag_start_pos = event.globalPosition().toPoint()
-                self._scroll_start_h = self.table.horizontalScrollBar().value()
-                self._scroll_start_v = self.table.verticalScrollBar().value()
+                self._scroll_start_h = self._h_bar.value()
+                self._scroll_start_v = self._v_bar.value()
                 self._prev_cell = (self.table.currentRow(), self.table.currentColumn())
                 return False
+            elif self._dragging:
+                # Suppress other mouse buttons while actively dragging
+                return True
 
         elif evt_type == QEvent.Type.MouseMove:
-            if self._drag_start_pos is not None and (event.buttons() & Qt.MouseButton.LeftButton):
+            if self._drag_start_pos is not None:
+                if not (event.buttons() & Qt.MouseButton.LeftButton):
+                    # Mouse button was released outside viewport or without a clean release event
+                    self._dragging = False
+                    self._drag_start_pos = None
+                    try:
+                        self.table.viewport().setCursor(Qt.CursorShape.OpenHandCursor)
+                    except (RuntimeError, AttributeError):
+                        pass
+                    return False
+
                 delta = event.globalPosition().toPoint() - self._drag_start_pos
                 if not self._dragging:
                     if abs(delta.x()) > self._drag_threshold or abs(delta.y()) > self._drag_threshold:
@@ -779,8 +808,8 @@ class GridPanFilter(QObject):
                         else:
                             self.table.clearSelection()
                 if self._dragging:
-                    self.table.horizontalScrollBar().setValue(self._scroll_start_h - delta.x())
-                    self.table.verticalScrollBar().setValue(self._scroll_start_v - delta.y())
+                    self._h_bar.setValue(self._scroll_start_h - delta.x())
+                    self._v_bar.setValue(self._scroll_start_v - delta.y())
                     return True
 
         elif evt_type == QEvent.Type.MouseButtonRelease:
@@ -795,6 +824,14 @@ class GridPanFilter(QObject):
                 if was_dragging:
                     return True
                 return False
+
+        elif evt_type in (QEvent.Type.FocusOut, QEvent.Type.WindowDeactivate):
+            self._dragging = False
+            self._drag_start_pos = None
+            try:
+                self.table.viewport().setCursor(Qt.CursorShape.OpenHandCursor)
+            except (RuntimeError, AttributeError):
+                pass
 
         elif evt_type == QEvent.Type.Enter:
             if not self._dragging:
@@ -4024,6 +4061,9 @@ class MainWindow(QMainWindow):
                 p_copy["_time_range"] = time_range
                 p_copy["_category"] = classify_guide_category(p)
                 p_copy["_scheduled_rec"] = scheduled_rec
+                p_title, p_sub = get_program_display_titles(p)
+                p_copy["_primary_title"] = p_title
+                p_copy["_secondary_sub"] = p_sub
 
                 item = QTableWidgetItem(show_title)
                 item.setData(Qt.ItemDataRole.UserRole, p_copy)

@@ -21,8 +21,10 @@ Kaffeine is a powerful digital TV viewer for KDE and Linux desktop environments,
   - **Schedules Direct:** Direct commercial Gracenote EPG integration by postal/zip code.
 - **Dual-Mode TV Guide (Traditional EPG Grid & Searchable List):**
   - **Traditional Grid Layout:** Displays channels vertically and 48 half-hour time slots across the 24-hour day, with program tiles spanning their duration.
+  - **Intuitive Mouse Grab-and-Drag Scrolling:** Fluidly click and drag anywhere on the grid in any direction to smoothly pan through channels and time slots, with responsive hand cursor feedback and stationary click preservation.
   - **Genre Color Coding:** Show titles dynamically styled by genre (Sports = Orange, News = Light Blue, Movies = Red, TV Shows = Green).
   - **Smart Timeline Navigation:** Auto-centers on live programming when viewing Today, rewinds to 12:00 AM Midnight for future dates, with quick "Jump to Now" and "Prime Time (8 PM)" buttons.
+  - **Direct Startup Launch:** Opens directly to the Web TV Guide Browser on startup for instant listing access.
 - **Configurable Recording End Buffers (Post-Roll Padding):**
   - **Global Post-Roll Buffer:** Append extra minutes (0-180m) to scheduled recordings to safeguard against broadcast delays.
   - **Sports Broadcast Auto-Extend:** Automatically adds extended post-roll padding (default: +30 minutes) to live sporting events (NFL, NBA, MLB, NCAA, Premier League, NASCAR, racing, etc.) so overtime and extra innings are never cut short.
