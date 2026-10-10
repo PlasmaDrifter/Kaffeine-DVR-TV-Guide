@@ -2915,27 +2915,8 @@ class MainWindow(QMainWindow):
         group_style = "QGroupBox { font-size: 15px; font-weight: bold; margin-top: 6px; padding-top: 14px; } QGroupBox::title { subcontrol-origin: margin; left: 8px; padding: 0 4px; }"
         body_style = "color: #d8e2ee; font-size: 14px; line-height: 1.6;"
 
-        # Section 1: Core Concept and Why this App Exists
-        concept_box = QGroupBox("1. How Kaffeine DVR Scheduling Works (Safe Reboots and Shutdowns)")
-        concept_box.setStyleSheet(group_style)
-        concept_layout = QVBoxLayout(concept_box)
-        concept_text = QLabel(
-            "• <b style='color: #f87171;'>The Problem with Native Kaffeine Timers:</b> Whenever timers are active directly inside Kaffeine, "
-            "Kaffeine inhibits Linux system restarts and shutdowns to prevent losing recordings.<br><br>"
-            "• <b style='color: #f87171;'>Just-In-Time (JIT) Dispatching:</b> This application stores upcoming recordings in an external queue "
-            "(<code>recordings_queue.sqlite</code>) rather than inside Kaffeine immediately. Kaffeine remains clean with 0 active timers.<br><br>"
-            "• <b style='color: #f87171;'>Unified Background Watcher Daemon:</b> A single background service (<code>kaffeine-dvr-watcher.service</code>) handles both queue monitoring and periodic TV guide synchronizations. "
-            "When a show is about to start (e.g. 5 minutes before showtime), it automatically launches Kaffeine minimized to your taskbar "
-            "and arms the recording via D-Bus Just-In-Time.<br><br>"
-            "• <b style='color: #f87171;'>Safe Power Operations:</b> You can reboot or power off your computer at any time without Kaffeine freezing or blocking systemd."
-        )
-        concept_text.setWordWrap(True)
-        concept_text.setStyleSheet(body_style)
-        concept_layout.addWidget(concept_text)
-        layout.addWidget(concept_box)
-
-        # Section 2: Guide Sources & Coverage
-        sources_box = QGroupBox("2. TV Guide Coverage and Providers")
+        # Section 1: Guide Sources & Coverage
+        sources_box = QGroupBox("1. TV Guide Coverage and Providers")
         sources_box.setStyleSheet(group_style)
         sources_layout = QVBoxLayout(sources_box)
         sources_text = QLabel(
@@ -2963,6 +2944,25 @@ class MainWindow(QMainWindow):
         sources_text.setStyleSheet(body_style)
         sources_layout.addWidget(sources_text)
         layout.addWidget(sources_box)
+
+        # Section 2: Core Concept and Why this App Exists
+        concept_box = QGroupBox("2. How Kaffeine DVR Scheduling Works (Safe Reboots and Shutdowns)")
+        concept_box.setStyleSheet(group_style)
+        concept_layout = QVBoxLayout(concept_box)
+        concept_text = QLabel(
+            "• <b style='color: #f87171;'>The Problem with Native Kaffeine Timers:</b> Whenever timers are active directly inside Kaffeine, "
+            "Kaffeine inhibits Linux system restarts and shutdowns to prevent losing recordings.<br><br>"
+            "• <b style='color: #f87171;'>Just-In-Time (JIT) Dispatching:</b> This application stores upcoming recordings in an external queue "
+            "(<code>recordings_queue.sqlite</code>) rather than inside Kaffeine immediately. Kaffeine remains clean with 0 active timers.<br><br>"
+            "• <b style='color: #f87171;'>Unified Background Watcher Daemon:</b> A single background service (<code>kaffeine-dvr-watcher.service</code>) handles both queue monitoring and periodic TV guide synchronizations. "
+            "When a show is about to start (e.g. 5 minutes before showtime), it automatically launches Kaffeine minimized to your taskbar "
+            "and arms the recording via D-Bus Just-In-Time.<br><br>"
+            "• <b style='color: #f87171;'>Safe Power Operations:</b> You can reboot or power off your computer at any time without Kaffeine freezing or blocking systemd."
+        )
+        concept_text.setWordWrap(True)
+        concept_text.setStyleSheet(body_style)
+        concept_layout.addWidget(concept_text)
+        layout.addWidget(concept_box)
 
         # Section 3: Background Service and System Commands
         services_box = QGroupBox("3. Unified Background Service and Commands")
