@@ -2544,6 +2544,24 @@ class MainWindow(QMainWindow):
         # Bottom Button Row
         btn_row = QHBoxLayout()
         import_kaffeine_btn = QPushButton("Import Channels from Kaffeine")
+        import_kaffeine_btn.setStyleSheet(
+            "QPushButton {"
+            "  background-color: #1b4332;"
+            "  border: 1.5px solid #2d6a4f;"
+            "  color: #e8f5e9;"
+            "  font-weight: bold;"
+            "  padding: 6px 14px;"
+            "  border-radius: 5px;"
+            "}"
+            "QPushButton:hover {"
+            "  background-color: #2d6a4f;"
+            "  border-color: #40916c;"
+            "  color: #ffffff;"
+            "}"
+            "QPushButton:pressed {"
+            "  background-color: #081c15;"
+            "}"
+        )
         import_kaffeine_btn.clicked.connect(lambda: self.import_channels_from_kaffeine(silent=False))
         btn_row.addWidget(import_kaffeine_btn)
 
