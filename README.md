@@ -97,33 +97,37 @@ Kaffeine is a powerful digital TV viewer for KDE and Linux desktop environments,
 - Kaffeine (`kaffeine`)
 - Standard desktop tools: `systemd`, `notify-send` (optional, for notifications), `kdotool` or `xdotool` (optional, for window minimization)
 
-### 1. Install via pip / local clone
+### Automated Installation (Recommended)
+Clone the repository and run the automated installer:
 ```bash
 git clone https://github.com/PlasmaDrifter/Kaffeine-DVR-TV-Guide.git
 cd Kaffeine-DVR-TV-Guide
-
-# On Ubuntu / Kubuntu / Debian (PEP 668 externally managed environment):
-pip install --user --break-system-packages .
-
-# On other distributions (Arch, Fedora, etc.):
-pip install --user .
+./install.sh
 ```
+The script automatically:
+1. Installs the Python package with appropriate flags (e.g. `--break-system-packages` where required).
+2. Installs the desktop menu launcher into `~/.local/share/applications/`.
+3. Installs, enables, and starts the systemd background watcher service (`kaffeine-dvr-watcher.service`).
 
-> **Note on PATH**: Ensure `~/.local/bin` is in your user `PATH` (standard on modern Ubuntu/Kubuntu).
-
-### 2. Install Desktop Launcher and Systemd User Service
+For local development or editable mode, pass the `-e` flag:
 ```bash
-# Desktop launcher
-mkdir -p ~/.local/share/applications
-cp desktop/kaffeine-dvr.desktop ~/.local/share/applications/
-update-desktop-database ~/.local/share/applications
-
-# Systemd background watcher service (Just-In-Time recording daemon)
-mkdir -p ~/.config/systemd/user
-cp systemd/kaffeine-dvr-watcher.service ~/.config/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable --now kaffeine-dvr-watcher.service
+./install.sh -e
 ```
+
+### Uninstallation
+To remove Kaffeine DVR:
+```bash
+./uninstall.sh
+```
+To also purge user configuration and cached database files:
+```bash
+./uninstall.sh --purge
+```
+
+### In-App Updates
+You can check for and apply updates directly inside the application under **Settings > Updates and Maintenance**:
+- **Automatic Monthly Checks**: Disabled by default. When enabled, Kaffeine DVR checks once every 30 days and displays a subtle green notification badge in the top header with a dismissal button.
+- **One-Click Update**: Click **Check for Updates Now** and **Install Update Now** to update and restart without needing terminal commands.
 
 ---
 

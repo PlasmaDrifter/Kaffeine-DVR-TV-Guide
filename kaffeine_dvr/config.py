@@ -67,6 +67,12 @@ class ConfigManager:
                         data["auto_buffer_sports"] = True
                     if "max_history_entries" not in data:
                         data["max_history_entries"] = 50
+                    if "auto_check_updates" not in data:
+                        data["auto_check_updates"] = False
+                    if "last_update_check_timestamp" not in data:
+                        data["last_update_check_timestamp"] = 0.0
+                    if "dismissed_update_version" not in data:
+                        data["dismissed_update_version"] = ""
                     return data
             except Exception:
                 pass
@@ -99,7 +105,10 @@ class ConfigManager:
             "end_buffer_mins": 0,
             "sports_buffer_mins": 30,
             "auto_buffer_sports": True,
-            "max_history_entries": 50
+            "max_history_entries": 50,
+            "auto_check_updates": False,
+            "last_update_check_timestamp": 0.0,
+            "dismissed_update_version": ""
         }
         self._save(default_data)
         return default_data
@@ -409,7 +418,29 @@ class ConfigManager:
                 unconfigured.append(name)
         return unconfigured
 
+    @property
+    def auto_check_updates(self) -> bool:
+        return self.data.get("auto_check_updates", False)
 
+    @auto_check_updates.setter
+    def auto_check_updates(self, val: bool):
+        self.data["auto_check_updates"] = bool(val)
+        self.save()
 
+    @property
+    def last_update_check_timestamp(self) -> float:
+        return float(self.data.get("last_update_check_timestamp", 0.0))
 
+    @last_update_check_timestamp.setter
+    def last_update_check_timestamp(self, val: float):
+        self.data["last_update_check_timestamp"] = float(val)
+        self.save()
 
+    @property
+    def dismissed_update_version(self) -> str:
+        return str(self.data.get("dismissed_update_version", ""))
+
+    @dismissed_update_version.setter
+    def dismissed_update_version(self, val: str):
+        self.data["dismissed_update_version"] = str(val)
+        self.save()

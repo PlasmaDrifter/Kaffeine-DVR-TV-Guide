@@ -159,6 +159,31 @@ class HealthCheckWorker(QThread):
             self.finished.emit({})
 
 
+class UpdateCheckWorker(QThread):
+    finished = pyqtSignal(dict)
+
+    def run(self):
+        try:
+            from kaffeine_dvr.updater import check_for_updates
+            res = check_for_updates()
+            self.finished.emit(res)
+        except Exception as e:
+            self.finished.emit({"update_available": False, "details": str(e), "error": True})
+
+
+class UpdateApplyWorker(QThread):
+    progress = pyqtSignal(str)
+    finished = pyqtSignal(bool, str)
+
+    def run(self):
+        try:
+            from kaffeine_dvr.updater import apply_update
+            success, msg = apply_update(lambda text: self.progress.emit(text))
+            self.finished.emit(success, msg)
+        except Exception as e:
+            self.finished.emit(False, str(e))
+
+
 class ManualRecordDialog(QDialog):
     def __init__(self, channels: List[str], parent=None, default_buffer_mins: int = 0):
         super().__init__(parent)
@@ -1787,6 +1812,9 @@ class MainWindow(QMainWindow):
         # Run health check quietly on startup to populate settings dashboard
         QTimer.singleShot(1500, lambda: self.test_all_sources_health(silent=True))
 
+        # Check monthly updates if enabled
+        QTimer.singleShot(2500, self.check_monthly_updates_on_startup)
+
     def init_ui(self):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -1842,6 +1870,42 @@ class MainWindow(QMainWindow):
         )
         self.header_restore_btn.clicked.connect(self.restore_saved_window_size)
         left_layout.addWidget(self.header_restore_btn)
+
+        # Subtle green update notification badge with dismissal function
+        self.update_badge_widget = QWidget()
+        badge_layout = QHBoxLayout(self.update_badge_widget)
+        badge_layout.setContentsMargins(8, 2, 6, 2)
+        badge_layout.setSpacing(6)
+        self.update_badge_widget.setStyleSheet(
+            "QWidget { "
+            "  background-color: #122818; "
+            "  border: 1px solid #28a745; "
+            "  border-radius: 12px; "
+            "}"
+        )
+        self.update_badge_btn = QPushButton("Update Available")
+        self.update_badge_btn.setFlat(True)
+        self.update_badge_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.update_badge_btn.setStyleSheet(
+            "QPushButton { color: #74d98a; font-size: 11px; font-weight: bold; border: none; padding: 0; background: transparent; }"
+            "QPushButton:hover { color: #a3e635; text-decoration: underline; }"
+        )
+        self.update_badge_btn.clicked.connect(self.navigate_to_updates_tab)
+        badge_layout.addWidget(self.update_badge_btn)
+
+        self.update_badge_dismiss_btn = QToolButton()
+        self.update_badge_dismiss_btn.setText("x")
+        self.update_badge_dismiss_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.update_badge_dismiss_btn.setToolTip("Dismiss update notice")
+        self.update_badge_dismiss_btn.setStyleSheet(
+            "QToolButton { color: #8c98aa; font-size: 10px; font-weight: bold; border: none; background: transparent; padding: 0 2px; }"
+            "QToolButton:hover { color: #ffffff; }"
+        )
+        self.update_badge_dismiss_btn.clicked.connect(self.dismiss_update_badge)
+        badge_layout.addWidget(self.update_badge_dismiss_btn)
+
+        self.update_badge_widget.setVisible(False)
+        left_layout.addWidget(self.update_badge_widget)
         left_layout.addStretch()
 
         banner.addWidget(left_container, 0, 0, Qt.AlignmentFlag.AlignLeft)
@@ -2302,6 +2366,7 @@ class MainWindow(QMainWindow):
         self.settings_subtabs.addTab(self.create_settings_automation_tab(), "Automation and DVR")
         self.settings_subtabs.addTab(self.create_settings_channels_tab(), "Channel Source")
         self.settings_subtabs.addTab(self.create_settings_guide_tab(), "Guide Sources and Health")
+        self.settings_subtabs.addTab(self.create_settings_updates_tab(), "Updates and Maintenance")
         layout.addWidget(self.settings_subtabs)
 
         return widget
@@ -3009,6 +3074,231 @@ class MainWindow(QMainWindow):
 
         scroll.setWidget(container)
         return scroll
+
+    # Subcategory 4: Updates and Maintenance
+    def create_settings_updates_tab(self) -> QWidget:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        container = QWidget()
+        main_layout = QVBoxLayout(container)
+        main_layout.setContentsMargins(15, 15, 15, 15)
+        main_layout.setSpacing(15)
+
+        # 1. Environment & Version Info
+        env_box = QGroupBox("Application && System Environment")
+        env_layout = QFormLayout(env_box)
+        env_layout.setContentsMargins(15, 15, 15, 15)
+        env_layout.setSpacing(10)
+
+        from kaffeine_dvr.updater import get_install_info
+        info = get_install_info()
+
+        self.updates_current_ver_lbl = QLabel(f"<b>v{info['current_version']}</b>")
+        env_layout.addRow("Installed Version:", self.updates_current_ver_lbl)
+
+        install_type_str = f"Git Repository ({info['repo_path']})" if info['is_git'] else "Standard Package"
+        self.updates_install_type_lbl = QLabel(install_type_str)
+        env_layout.addRow("Installation Source:", self.updates_install_type_lbl)
+
+        service_status = "Active and running" if info['is_service_active'] else "Inactive / Disabled"
+        self.updates_service_lbl = QLabel(service_status)
+        if info['is_service_active']:
+            self.updates_service_lbl.setStyleSheet("color: #28a745; font-weight: bold;")
+        else:
+            self.updates_service_lbl.setStyleSheet("color: #8c98aa;")
+        env_layout.addRow("Background Watcher Service:", self.updates_service_lbl)
+
+        main_layout.addWidget(env_box)
+
+        # 2. Update Preferences & Check Options
+        pref_box = QGroupBox("Update Options && Frequency")
+        pref_layout = QVBoxLayout(pref_box)
+        pref_layout.setContentsMargins(15, 15, 15, 15)
+        pref_layout.setSpacing(12)
+
+        self.auto_check_updates_cb = QCheckBox("Automatically check for updates monthly")
+        self.auto_check_updates_cb.setChecked(self.config_mgr.auto_check_updates)
+        self.auto_check_updates_cb.toggled.connect(self._on_auto_check_updates_toggled)
+        pref_layout.addWidget(self.auto_check_updates_cb)
+
+        check_desc = QLabel(
+            "When enabled, Kaffeine DVR silently checks GitHub for new updates once every 30 days. "
+            "If an update is found, a subtle green badge appears in the top header with a dismissal button."
+        )
+        check_desc.setStyleSheet("color: #8c98aa; font-size: 11px;")
+        check_desc.setWordWrap(True)
+        pref_layout.addWidget(check_desc)
+
+        btn_row = QHBoxLayout()
+        self.check_updates_btn = QPushButton("Check for Updates Now")
+        self.check_updates_btn.setObjectName("primaryActionBtn")
+        self.check_updates_btn.clicked.connect(lambda: self.start_update_check(silent=False))
+        btn_row.addWidget(self.check_updates_btn)
+
+        last_check_ts = self.config_mgr.last_update_check_timestamp
+        last_str = datetime.fromtimestamp(last_check_ts).strftime("%Y-%m-%d %H:%M") if last_check_ts > 0 else "Never"
+        self.last_check_lbl = QLabel(f"Last checked: {last_str}")
+        self.last_check_lbl.setStyleSheet("color: #8c98aa; font-size: 11px;")
+        btn_row.addWidget(self.last_check_lbl)
+        btn_row.addStretch()
+        pref_layout.addLayout(btn_row)
+
+        main_layout.addWidget(pref_box)
+
+        # 3. Update Status & Installation
+        action_box = QGroupBox("Software Update Status")
+        action_layout = QVBoxLayout(action_box)
+        action_layout.setContentsMargins(15, 15, 15, 15)
+        action_layout.setSpacing(12)
+
+        self.update_status_lbl = QLabel("Click 'Check for Updates Now' to query for available updates.")
+        self.update_status_lbl.setStyleSheet("font-size: 13px; color: #cdd6e2;")
+        self.update_status_lbl.setWordWrap(True)
+        action_layout.addWidget(self.update_status_lbl)
+
+        self.update_progress_lbl = QLabel("")
+        self.update_progress_lbl.setStyleSheet("color: #55a84c; font-size: 12px; font-weight: bold;")
+        self.update_progress_lbl.setVisible(False)
+        action_layout.addWidget(self.update_progress_lbl)
+
+        install_btn_row = QHBoxLayout()
+        self.apply_update_btn = QPushButton("Install Update Now")
+        self.apply_update_btn.setEnabled(False)
+        self.apply_update_btn.clicked.connect(self.start_apply_update)
+        install_btn_row.addWidget(self.apply_update_btn)
+        install_btn_row.addStretch()
+        action_layout.addLayout(install_btn_row)
+
+        main_layout.addWidget(action_box)
+        main_layout.addStretch()
+
+        scroll.setWidget(container)
+        return scroll
+
+    def _on_auto_check_updates_toggled(self, checked: bool):
+        self.config_mgr.auto_check_updates = checked
+        self.flash_save_indicator("Update settings saved")
+
+    def navigate_to_updates_tab(self):
+        self.tabs.setCurrentIndex(2)
+        self.settings_subtabs.setCurrentIndex(3)
+
+    def dismiss_update_badge(self):
+        self.update_badge_widget.setVisible(False)
+        if hasattr(self, "_latest_detected_version") and self._latest_detected_version:
+            self.config_mgr.dismissed_update_version = self._latest_detected_version
+
+    def check_monthly_updates_on_startup(self):
+        if not self.config_mgr.auto_check_updates:
+            return
+        now = time.time()
+        last_check = self.config_mgr.last_update_check_timestamp
+        # Check monthly (30 days = 30 * 86400 = 2592000 seconds)
+        if now - last_check >= 2592000:
+            self.start_update_check(silent=True)
+
+    def start_update_check(self, silent: bool = False):
+        if hasattr(self, "check_updates_btn"):
+            self.check_updates_btn.setEnabled(False)
+        if not silent and hasattr(self, "update_status_lbl"):
+            self.update_status_lbl.setText("Checking for updates from GitHub / Git repository...")
+        if not silent:
+            self.status_bar.showMessage("Checking for application updates...")
+
+        self.update_check_worker = UpdateCheckWorker()
+        self.update_check_worker.finished.connect(lambda res: self.on_update_check_finished(res, silent))
+        self.update_check_worker.start()
+
+    def on_update_check_finished(self, res: dict, silent: bool):
+        if hasattr(self, "check_updates_btn"):
+            self.check_updates_btn.setEnabled(True)
+
+        now = time.time()
+        self.config_mgr.last_update_check_timestamp = now
+        last_str = datetime.fromtimestamp(now).strftime("%Y-%m-%d %H:%M")
+        if hasattr(self, "last_check_lbl"):
+            self.last_check_lbl.setText(f"Last checked: {last_str}")
+
+        update_available = res.get("update_available", False)
+        latest_ver = res.get("latest_version", "")
+        details = res.get("details", "")
+
+        if hasattr(self, "update_status_lbl"):
+            self.update_status_lbl.setText(details)
+        if hasattr(self, "apply_update_btn"):
+            self.apply_update_btn.setEnabled(update_available)
+
+        if update_available:
+            self._latest_detected_version = latest_ver
+            dismissed = self.config_mgr.dismissed_update_version
+            if latest_ver != dismissed:
+                if hasattr(self, "update_badge_widget") and hasattr(self, "update_badge_btn"):
+                    self.update_badge_btn.setText(f"Update Available: v{latest_ver}")
+                    self.update_badge_widget.setVisible(True)
+            if not silent:
+                self.status_bar.showMessage(f"Update available: v{latest_ver}", 5000)
+        else:
+            if hasattr(self, "update_badge_widget"):
+                self.update_badge_widget.setVisible(False)
+            if not silent:
+                self.status_bar.showMessage("Application is up to date.", 4000)
+
+    def start_apply_update(self):
+        reply = QMessageBox.question(
+            self,
+            "Install Update",
+            "Are you ready to download and install the latest update?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        self.apply_update_btn.setEnabled(False)
+        if hasattr(self, "check_updates_btn"):
+            self.check_updates_btn.setEnabled(False)
+        self.update_progress_lbl.setVisible(True)
+        self.update_progress_lbl.setText("Starting update...")
+        self.status_bar.showMessage("Installing update...")
+
+        self.update_apply_worker = UpdateApplyWorker()
+        self.update_apply_worker.progress.connect(self._on_update_progress)
+        self.update_apply_worker.finished.connect(self.on_update_apply_finished)
+        self.update_apply_worker.start()
+
+    def _on_update_progress(self, msg: str):
+        self.update_progress_lbl.setText(msg)
+        self.status_bar.showMessage(msg)
+
+    def on_update_apply_finished(self, success: bool, msg: str):
+        if hasattr(self, "check_updates_btn"):
+            self.check_updates_btn.setEnabled(True)
+        self.update_progress_lbl.setVisible(False)
+
+        if success:
+            self.update_status_lbl.setText("Update installed successfully!")
+            self.apply_update_btn.setEnabled(False)
+            if hasattr(self, "update_badge_widget"):
+                self.update_badge_widget.setVisible(False)
+
+            restart_reply = QMessageBox.question(
+                self,
+                "Update Complete",
+                "The update has been installed successfully!\n\nWould you like to restart Kaffeine DVR now to apply the changes?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes
+            )
+            if restart_reply == QMessageBox.StandardButton.Yes:
+                self.restart_application()
+        else:
+            self.apply_update_btn.setEnabled(True)
+            self.update_status_lbl.setText(f"Update failed: {msg}")
+            QMessageBox.critical(self, "Update Failed", f"Failed to apply update:\n\n{msg}")
+
+    def restart_application(self):
+        from PyQt6.QtCore import QProcess
+        QProcess.startDetached(sys.executable, sys.argv)
+        QApplication.quit()
 
     # ------------------ TAB 5: HELP AND INFORMATION ------------------
     def create_help_tab(self) -> QWidget:
