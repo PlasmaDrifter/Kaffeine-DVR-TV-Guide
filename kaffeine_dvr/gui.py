@@ -2412,10 +2412,9 @@ class MainWindow(QMainWindow):
 
         pass_instructions = QLabel(
             "<b>24/7 Broadcast Station & Affiliate Guide (TV Passport):</b><br>"
-            "TV Passport provides complete 24/7 listings with local affiliate morning-to-night syndicated programming. "
-            "Having both TV Passport and TVMaze active together is completely supported: "
-            "under Free Hybrid mode, adding a station ID here will automatically supersede national TVMaze data for that specific channel, "
-            "giving you full local affiliate listings while TVMaze continues providing automatic national listings for any unmapped channels without duplicates.<br><br>"
+            "TV Passport provides 24/7 local affiliate listings. In Free Hybrid mode, "
+            "mapped stations automatically replace national TVMaze listings for those channels, "
+            "while TVMaze seamlessly covers all remaining channels without duplicates.<br><br>"
             "<b>Instructions:</b><br>"
             "1. Visit <a href='https://www.tvpassport.com' style='color: #64b5f6; font-weight: bold;'>tvpassport.com</a> in your browser and search for your station or city.<br>"
             "2. Select your channel to open its listings page. Look at the web address (URL):<br>"
