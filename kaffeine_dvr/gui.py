@@ -756,80 +756,82 @@ class GridPanFilter(QObject):
     def __init__(self, table: QTableWidget, parent=None):
         super().__init__(parent or table)
         self.table = table
-        self._h_bar = table.horizontalScrollBar()
-        self._v_bar = table.verticalScrollBar()
         self._dragging = False
         self._drag_start_pos = None
-        self._scroll_start_h = 0
-        self._scroll_start_v = 0
-        self._prev_cell = None
+        self._last_drag_pos = None
         self._drag_threshold = 5
+        self._set_cursor(Qt.CursorShape.OpenHandCursor)
+
+    def _set_cursor(self, shape: Qt.CursorShape):
         try:
-            self.table.viewport().setCursor(Qt.CursorShape.OpenHandCursor)
+            self.table.viewport().setCursor(shape)
+            hdr = self.table.horizontalHeader()
+            if hdr and hdr.viewport():
+                hdr.viewport().setCursor(shape)
         except (RuntimeError, AttributeError):
             pass
 
     def eventFilter(self, watched, event):
         try:
             vp = self.table.viewport()
+            hdr = self.table.horizontalHeader()
+            hdr_vp = hdr.viewport() if hdr else None
         except (RuntimeError, AttributeError):
             return False
 
-        if watched is not vp:
+        if watched not in (vp, hdr_vp):
             return super().eventFilter(watched, event)
 
         evt_type = event.type()
 
         if evt_type == QEvent.Type.MouseButtonPress:
-            if event.button() == Qt.MouseButton.LeftButton:
+            if event.button() in (Qt.MouseButton.LeftButton, Qt.MouseButton.MiddleButton):
                 self._dragging = False
-                self._drag_start_pos = event.globalPosition().toPoint()
-                self._scroll_start_h = self._h_bar.value()
-                self._scroll_start_v = self._v_bar.value()
-                self._prev_cell = (self.table.currentRow(), self.table.currentColumn())
+                pos = event.position().toPoint()
+                self._drag_start_pos = pos
+                self._last_drag_pos = pos
                 return False
             elif self._dragging:
-                # Suppress other mouse buttons while actively dragging
                 return True
 
         elif evt_type == QEvent.Type.MouseMove:
             if self._drag_start_pos is not None:
-                if not (event.buttons() & Qt.MouseButton.LeftButton):
-                    # Mouse button was released outside viewport or without a clean release event
+                # If neither left nor middle button is held down, end drag
+                if not (event.buttons() & (Qt.MouseButton.LeftButton | Qt.MouseButton.MiddleButton)):
+                    was_drag = self._dragging
                     self._dragging = False
                     self._drag_start_pos = None
-                    try:
-                        self.table.viewport().setCursor(Qt.CursorShape.OpenHandCursor)
-                    except (RuntimeError, AttributeError):
-                        pass
-                    return False
+                    self._last_drag_pos = None
+                    self._set_cursor(Qt.CursorShape.OpenHandCursor)
+                    return was_drag
 
-                delta = event.globalPosition().toPoint() - self._drag_start_pos
+                cur_pos = event.position().toPoint()
                 if not self._dragging:
-                    if abs(delta.x()) > self._drag_threshold or abs(delta.y()) > self._drag_threshold:
+                    total_dist = (cur_pos - self._drag_start_pos).manhattanLength()
+                    if total_dist > self._drag_threshold:
                         self._dragging = True
-                        try:
-                            self.table.viewport().setCursor(Qt.CursorShape.ClosedHandCursor)
-                        except RuntimeError:
-                            pass
-                        if self._prev_cell and self._prev_cell[0] >= 0:
-                            self.table.setCurrentCell(self._prev_cell[0], self._prev_cell[1])
-                        else:
-                            self.table.clearSelection()
+                        self._set_cursor(Qt.CursorShape.ClosedHandCursor)
+
                 if self._dragging:
-                    self._h_bar.setValue(self._scroll_start_h - delta.x())
-                    self._v_bar.setValue(self._scroll_start_v - delta.y())
+                    delta = cur_pos - self._last_drag_pos
+                    self._last_drag_pos = cur_pos
+
+                    h_bar = self.table.horizontalScrollBar()
+                    v_bar = self.table.verticalScrollBar()
+
+                    if delta.x() != 0 and h_bar:
+                        h_bar.setValue(h_bar.value() - delta.x())
+                    if delta.y() != 0 and v_bar and watched is vp:
+                        v_bar.setValue(v_bar.value() - delta.y())
                     return True
 
         elif evt_type == QEvent.Type.MouseButtonRelease:
-            if event.button() == Qt.MouseButton.LeftButton:
+            if event.button() in (Qt.MouseButton.LeftButton, Qt.MouseButton.MiddleButton):
                 was_dragging = self._dragging
                 self._dragging = False
                 self._drag_start_pos = None
-                try:
-                    self.table.viewport().setCursor(Qt.CursorShape.OpenHandCursor)
-                except RuntimeError:
-                    pass
+                self._last_drag_pos = None
+                self._set_cursor(Qt.CursorShape.OpenHandCursor)
                 if was_dragging:
                     return True
                 return False
@@ -837,17 +839,12 @@ class GridPanFilter(QObject):
         elif evt_type in (QEvent.Type.FocusOut, QEvent.Type.WindowDeactivate):
             self._dragging = False
             self._drag_start_pos = None
-            try:
-                self.table.viewport().setCursor(Qt.CursorShape.OpenHandCursor)
-            except (RuntimeError, AttributeError):
-                pass
+            self._last_drag_pos = None
+            self._set_cursor(Qt.CursorShape.OpenHandCursor)
 
         elif evt_type == QEvent.Type.Enter:
             if not self._dragging:
-                try:
-                    self.table.viewport().setCursor(Qt.CursorShape.OpenHandCursor)
-                except RuntimeError:
-                    pass
+                self._set_cursor(Qt.CursorShape.OpenHandCursor)
 
         return super().eventFilter(watched, event)
 
@@ -1905,6 +1902,7 @@ class MainWindow(QMainWindow):
         self.guide_grid_table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.grid_pan_filter = GridPanFilter(self.guide_grid_table)
         self.guide_grid_table.viewport().installEventFilter(self.grid_pan_filter)
+        self.guide_grid_table.horizontalHeader().viewport().installEventFilter(self.grid_pan_filter)
         self.guide_grid_table.cellClicked.connect(self.on_grid_cell_clicked)
         self.guide_grid_table.cellDoubleClicked.connect(self.on_grid_cell_double_clicked)
         self.guide_stack.addWidget(self.guide_grid_table)
