@@ -1825,6 +1825,9 @@ class MainWindow(QMainWindow):
         self.status_banner_widget.setLayout(self.create_status_banner())
         main_layout.addWidget(self.status_banner_widget)
 
+        # Muted update notification badge (placed in action bar just above status bar)
+        self.update_badge_widget = self._create_update_badge_widget()
+
         # Main Tabs
         self.tabs = QTabWidget()
         self.tabs.setObjectName("mainTabs")
@@ -1846,13 +1849,13 @@ class MainWindow(QMainWindow):
         self.progress_bar.setVisible(False)
         self.status_bar.addPermanentWidget(self.progress_bar)
 
-        # Muted update notification badge in bottom-right status bar
-        self.update_badge_widget = QWidget()
-        self.update_badge_widget.setObjectName("updateBadge")
-        badge_layout = QHBoxLayout(self.update_badge_widget)
-        badge_layout.setContentsMargins(6, 1, 4, 1)
+    def _create_update_badge_widget(self) -> QWidget:
+        widget = QWidget()
+        widget.setObjectName("updateBadge")
+        badge_layout = QHBoxLayout(widget)
+        badge_layout.setContentsMargins(6, 2, 4, 2)
         badge_layout.setSpacing(4)
-        self.update_badge_widget.setStyleSheet(
+        widget.setStyleSheet(
             "QWidget#updateBadge { "
             "  background-color: #141f17; "
             "  border: 1px solid #244c2e; "
@@ -1864,7 +1867,7 @@ class MainWindow(QMainWindow):
         self.update_badge_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.update_badge_btn.setToolTip("Click to view details and install update in Settings")
         self.update_badge_btn.setStyleSheet(
-            "QPushButton { color: #4da666; font-size: 11px; font-weight: 500; border: none; padding: 0 2px; background: transparent; }"
+            "QPushButton { color: #4da666; font-size: 11px; font-weight: 500; border: none; padding: 0 4px; background: transparent; }"
             "QPushButton:hover { color: #6bc284; text-decoration: underline; }"
         )
         self.update_badge_btn.clicked.connect(self.navigate_to_updates_tab)
@@ -1881,8 +1884,8 @@ class MainWindow(QMainWindow):
         self.update_badge_dismiss_btn.clicked.connect(self.dismiss_update_badge)
         badge_layout.addWidget(self.update_badge_dismiss_btn)
 
-        self.update_badge_widget.setVisible(False)
-        self.status_bar.addPermanentWidget(self.update_badge_widget)
+        widget.setVisible(False)
+        return widget
 
     def create_status_banner(self) -> QGridLayout:
         banner = QGridLayout()
@@ -2318,6 +2321,7 @@ class MainWindow(QMainWindow):
         action_bar.addWidget(self.adjust_buffer_guide_btn)
 
         action_bar.addStretch()
+        action_bar.addWidget(self.update_badge_widget)
         detail_layout.addLayout(action_bar)
         layout.addWidget(detail_widget, 0)
         return widget
@@ -3125,7 +3129,7 @@ class MainWindow(QMainWindow):
 
         check_desc = QLabel(
             "When enabled, Kaffeine DVR silently checks GitHub for new updates once every 30 days. "
-            "If an update is found, a subtle green badge appears in the bottom-right status bar with a dismissal button."
+            "If an update is found, a subtle green badge appears in the bottom action bar with a dismissal button."
         )
         check_desc.setStyleSheet("color: #8c98aa; font-size: 11px;")
         check_desc.setWordWrap(True)
@@ -3138,7 +3142,7 @@ class MainWindow(QMainWindow):
         btn_row.addWidget(self.check_updates_btn)
 
         self.preview_badge_btn = QPushButton("Simulate Update Badge")
-        self.preview_badge_btn.setToolTip("Show the subtle green update badge in the bottom-right status bar for testing")
+        self.preview_badge_btn.setToolTip("Show the subtle green update badge in the bottom action bar for testing")
         self.preview_badge_btn.clicked.connect(self._simulate_update_badge)
         btn_row.addWidget(self.preview_badge_btn)
 
@@ -3199,7 +3203,7 @@ class MainWindow(QMainWindow):
         self._latest_detected_version = "0.8.4"
         self.update_badge_btn.setText("Update Available: v0.8.4")
         self.update_badge_widget.setVisible(True)
-        self.status_bar.showMessage("Simulated update badge displayed in status bar.", 4000)
+        self.status_bar.showMessage("Simulated update badge displayed in bottom action bar.", 4000)
 
     def check_monthly_updates_on_startup(self):
         if not self.config_mgr.auto_check_updates:
