@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
     QProgressBar, QStatusBar, QFrame, QGroupBox, QFileDialog,
     QScrollArea, QToolButton, QSizePolicy, QAbstractSpinBox, QSlider,
     QStackedWidget, QButtonGroup, QStyledItemDelegate, QStyleOptionViewItem,
-    QStyle, QListWidget, QListWidgetItem, QAbstractItemView
+    QStyle, QListWidget, QListWidgetItem, QAbstractItemView, QToolTip
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QSettings, QByteArray, QEvent, QObject, QPoint, QPointF, QRect, QRectF, QSize
 from PyQt6.QtGui import QColor, QFont, QFontMetrics, QIcon, QWheelEvent, QPainter, QPalette, QPixmap, QPen, QPolygon, QBrush
@@ -263,18 +263,18 @@ class EditRuleDialog(QDialog):
 
 
 class HelpBadge(QLabel):
-    """Subtle circular '?' badge that shows helpful tooltip on hover."""
+    """Subtle circular '?' badge that shows helpful tooltip only when clicked."""
     def __init__(self, tooltip_text: str, parent=None):
         super().__init__("?", parent)
-        self.setToolTip(tooltip_text)
-        self.setCursor(Qt.CursorShape.WhatsThisCursor)
+        self._tooltip_text = tooltip_text
+        self.setCursor(Qt.CursorShape.ArrowCursor)
         self.setStyleSheet(
             "QLabel {"
-            "  color: #7dd3fc;"
-            "  background-color: #0c4a6e;"
-            "  border: 1px solid #0284c7;"
+            "  color: #94a3b8;"
+            "  background-color: #1e293b;"
+            "  border: 1px solid #334155;"
             "  border-radius: 8px;"
-            "  font-weight: bold;"
+            "  font-weight: 600;"
             "  font-size: 11px;"
             "  min-width: 16px;"
             "  max-width: 16px;"
@@ -283,23 +283,32 @@ class HelpBadge(QLabel):
             "  qproperty-alignment: AlignCenter;"
             "}"
             "QLabel:hover {"
-            "  color: #ffffff;"
-            "  background-color: #0284c7;"
-            "  border-color: #38bdf8;"
+            "  color: #e2e8f0;"
+            "  background-color: #334155;"
+            "  border-color: #475569;"
             "}"
         )
 
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            # Show tooltip immediately upon click at badge position
+            pos = event.globalPosition().toPoint() if hasattr(event, "globalPosition") else event.globalPos()
+            QToolTip.showText(pos, self._tooltip_text, self)
+            event.accept()
+        else:
+            super().mousePressEvent(event)
+
 
 def make_setting_label(title: str, tooltip_text: str) -> QWidget:
-    """Create a composite widget containing the label title and a subtle '?' help badge."""
+    """Create a composite widget containing a subtle '?' help badge followed by the label title."""
     w = QWidget()
     lay = QHBoxLayout(w)
     lay.setContentsMargins(0, 0, 0, 0)
     lay.setSpacing(6)
-    lbl = QLabel(title)
     badge = HelpBadge(tooltip_text)
-    lay.addWidget(lbl)
+    lbl = QLabel(title)
     lay.addWidget(badge)
+    lay.addWidget(lbl)
     lay.addStretch()
     return w
 
