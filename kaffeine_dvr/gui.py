@@ -1251,22 +1251,36 @@ class FirstRunWelcomeDialog(QDialog):
         # TV Guide and Regional Channel Coverage Explanation
         guide_info_box = QGroupBox("TV Guide Coverage and Providers")
         guide_info_layout = QVBoxLayout(guide_info_box)
+        guide_info_layout.setSpacing(10)
+        guide_info_layout.setContentsMargins(16, 16, 16, 16)
 
         guide_info_text = QLabel(
-            "• <b>National Networks (TVMaze - Zero Setup):</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;Covers major national broadcast feeds (<b>FOX, CBS, NBC, ABC, PBS, The CW</b>) out of the box with zero configuration. "
-            "<i>Note: TVMaze tracks national schedules only and does not include local news, daytime programming, or regional subchannels.</i><br><br>"
-            "• <b>24/7 Local Affiliates & Regional Channels (TV Passport):</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;Provides complete 24/7 schedules with local news and regional programming. Find your numeric station ID on "
-            "<a href='https://www.tvpassport.com' style='color: #64b5f6; font-weight: bold;'>tvpassport.com</a> and enter <code>Channel = StationID</code> under "
-            "<b>Settings &gt; Guide Sources &amp; Health</b>.<br><br>"
-            "• <b>Hybrid Mode (Default):</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;TV Passport provides 24/7 local schedules for your configured stations, while TVMaze automatically covers remaining national networks."
+            "<div style='margin-bottom: 8px;'>"
+            "  <div style='color: #60a5fa; font-weight: bold; font-size: 13px; margin-bottom: 2px;'>• National Networks (TVMaze — Zero Setup)</div>"
+            "  <div style='color: #c9d4e2; font-size: 12px; margin-left: 14px; line-height: 1.45;'>"
+            "    Covers major national broadcast feeds (<b>FOX, CBS, NBC, ABC, PBS, The CW</b>) out of the box with zero configuration.<br>"
+            "    <span style='color: #94a3b8; font-style: italic;'>Note: TVMaze tracks national schedules only and does not include local news, daytime programming, or regional subchannels.</span>"
+            "  </div>"
+            "</div>"
+            "<div style='margin-bottom: 8px;'>"
+            "  <div style='color: #c084fc; font-weight: bold; font-size: 13px; margin-bottom: 2px;'>• 24/7 Local Affiliates & Regional Channels (TV Passport)</div>"
+            "  <div style='color: #c9d4e2; font-size: 12px; margin-left: 14px; line-height: 1.45;'>"
+            "    Provides complete 24/7 schedules with local news and regional programming. Find your numeric station ID on "
+            "    <a href='https://www.tvpassport.com' style='color: #93c5fd; font-weight: bold; text-decoration: none;'>tvpassport.com</a> "
+            "    and enter <code style='color: #52b788;'>Channel = StationID</code> under <b>Settings &gt; Guide Sources &amp; Health</b>."
+            "  </div>"
+            "</div>"
+            "<div>"
+            "  <div style='color: #4ade80; font-weight: bold; font-size: 13px; margin-bottom: 2px;'>• Hybrid Mode (Default)</div>"
+            "  <div style='color: #c9d4e2; font-size: 12px; margin-left: 14px; line-height: 1.45;'>"
+            "    TV Passport provides 24/7 local schedules for your configured stations, while TVMaze automatically covers remaining national networks."
+            "  </div>"
+            "</div>"
         )
         guide_info_text.setWordWrap(True)
         guide_info_text.setOpenExternalLinks(True)
         guide_info_text.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
-        guide_info_text.setStyleSheet("color: #d1d8e0; font-size: 12px; line-height: 1.5; background: transparent;")
+        guide_info_text.setStyleSheet("background: transparent;")
         guide_info_layout.addWidget(guide_info_text)
 
         # Check for unconfigured regional channels
@@ -1274,11 +1288,12 @@ class FirstRunWelcomeDialog(QDialog):
         if unconfigured_regional:
             ch_list_str = ", ".join(unconfigured_regional)
             notice_lbl = QLabel(
-                f"<div style='border: 1px solid #c8832a; border-radius: 4px; background-color: #2b2214; padding: 8px 12px; color: #ffc107; font-size: 12px; line-height: 1.4;'>"
-                f"<b>Notice:</b> TVMaze only covers national broadcast feeds. The following local/regional channel(s) require TV Passport: "
-                f"<b>{ch_list_str}</b>.<br>"
-                f"Configure their numeric station ID on <a href='https://www.tvpassport.com' style='color: #64b5f6; font-weight: bold;'>tvpassport.com</a> "
-                f"under <b>Settings &gt; Guide Sources &amp; Health</b> after startup.</div>"
+                f"<div style='border-left: 3px solid #f59e0b; border-radius: 4px; background-color: #211c14; padding: 10px 14px; margin-top: 4px; color: #fbbf24; font-size: 12px; line-height: 1.45;'>"
+                f"  <b>Notice:</b> TVMaze only covers national broadcast feeds. The following local/regional channel(s) require TV Passport: "
+                f"  <b style='color: #ffffff; background: #3d2c16; padding: 1px 6px; border-radius: 3px;'>{ch_list_str}</b>.<br>"
+                f"  Configure their numeric station ID on <a href='https://www.tvpassport.com' style='color: #93c5fd; font-weight: bold; text-decoration: none;'>tvpassport.com</a> "
+                f"  under <b>Settings &gt; Guide Sources &amp; Health</b> after startup."
+                f"</div>"
             )
             notice_lbl.setWordWrap(True)
             notice_lbl.setOpenExternalLinks(True)
@@ -1301,7 +1316,7 @@ class FirstRunWelcomeDialog(QDialog):
         self.sync_check.setChecked(True)
         options_layout.addWidget(self.sync_check)
 
-        self.service_check = QCheckBox("Enable & start background recording dispatcher service (systemd)")
+        self.service_check = QCheckBox("Enable && start background recording dispatcher service (systemd)")
         self.service_check.setChecked(True)
         options_layout.addWidget(self.service_check)
         layout.addWidget(options_box)
