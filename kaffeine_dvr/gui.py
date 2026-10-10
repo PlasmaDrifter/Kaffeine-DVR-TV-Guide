@@ -2482,7 +2482,38 @@ class MainWindow(QMainWindow):
         # Splitter / Two-panel layout
         lineup_panels = QHBoxLayout()
 
-        # Left Panel: Interactive Channel Order List
+        # Left Panel: Channel & Network Mapping
+        map_box = QGroupBox("Guide Network Mapping (Name = Channel)")
+        map_layout = QVBoxLayout(map_box)
+
+        self.mapping_text = QTextEdit()
+        mapping_str = "\n".join([f"{k} = {v}" for k, v in self.config_mgr.channel_map.items()])
+        self.mapping_text.setPlainText(mapping_str)
+        self.mapping_text.setMinimumHeight(200)
+
+        # 5-line concise explainer inside the text area
+        self.mapping_tip_lbl = QLabel(self.mapping_text)
+        self.mapping_tip_lbl.setTextFormat(Qt.TextFormat.RichText)
+        self.mapping_tip_lbl.setText(
+            "Online guides use network names (e.g. Fox, NBC).<br>"
+            "Antennas scan local station callsigns (e.g. KSAZ-HD).<br>"
+            "Format: <span style='color: #52b788;'>Guide Name = Tuned Channel</span>.<br>"
+            "Example: <span style='color: #52b788;'>Fox = KSAZ-HD</span> connects Fox to your antenna.<br>"
+            "If channels in Kaffeine already match, leave as <span style='color: #52b788;'>Fox = Fox</span>."
+        )
+        self.mapping_tip_lbl.setStyleSheet("color: #8a99ad; font-size: 13px; line-height: 1.5; background: transparent;")
+        self.mapping_tip_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+        mapping_tip_layout = QHBoxLayout(self.mapping_text)
+        mapping_tip_layout.addStretch(1)
+        mapping_tip_layout.addWidget(self.mapping_tip_lbl, 1)
+        mapping_tip_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        mapping_tip_layout.setContentsMargins(20, 15, 20, 20)
+
+        map_layout.addWidget(self.mapping_text)
+        lineup_panels.addWidget(map_box, 1)
+
+        # Right Panel: Interactive Channel Order List
         order_box = QGroupBox("TV Guide Channel Order (Manual Priority)")
         order_layout = QVBoxLayout(order_box)
 
@@ -2513,38 +2544,6 @@ class MainWindow(QMainWindow):
 
         order_layout.addLayout(order_ctrl_bar)
         lineup_panels.addWidget(order_box, 1)
-
-        # Right Panel: Channel & Network Mapping
-        map_box = QGroupBox("Guide Network Mapping (Name = Channel)")
-        map_layout = QVBoxLayout(map_box)
-
-        self.mapping_text = QTextEdit()
-        mapping_str = "\n".join([f"{k} = {v}" for k, v in self.config_mgr.channel_map.items()])
-        self.mapping_text.setPlainText(mapping_str)
-        self.mapping_text.setMinimumHeight(200)
-
-        # 5-line concise explainer inside the text area
-        self.mapping_tip_lbl = QLabel(self.mapping_text)
-        self.mapping_tip_lbl.setTextFormat(Qt.TextFormat.RichText)
-        self.mapping_tip_lbl.setText(
-            "Online guides use network names (e.g. Fox, NBC).<br>"
-            "Antennas scan local station callsigns (e.g. KSAZ-HD).<br>"
-            "Format: <span style='color: #52b788;'>Guide Name = Tuned Channel</span>.<br>"
-            "Example: <span style='color: #52b788;'>Fox = KSAZ-HD</span> connects Fox to your antenna.<br>"
-            "If channels in Kaffeine already match, leave as <span style='color: #52b788;'>Fox = Fox</span>."
-        )
-        self.mapping_tip_lbl.setStyleSheet("color: #8a99ad; font-size: 13px; line-height: 1.5; background: transparent;")
-        self.mapping_tip_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-
-        mapping_tip_layout = QHBoxLayout(self.mapping_text)
-        mapping_tip_layout.addStretch(1)
-        mapping_tip_layout.addWidget(self.mapping_tip_lbl, 1)
-        mapping_tip_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        mapping_tip_layout.setContentsMargins(20, 15, 20, 20)
-
-        map_layout.addWidget(self.mapping_text)
-
-        lineup_panels.addWidget(map_box, 1)
         layout.addLayout(lineup_panels)
 
         # Bottom Button Row
@@ -3029,13 +3028,13 @@ class MainWindow(QMainWindow):
             "&nbsp;&nbsp;&nbsp;&nbsp;– In this app, go to <b>Settings &gt; Channel Source</b>.<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;– Click the emerald green button at the bottom: <b style='color: #4ade80;'>Import Channels from Kaffeine</b>.<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;– The app connects to <code>~/.local/share/kaffeine/sqlite.db</code>, instantly populating your channel lineup and guide mapping area.<br><br>"
-            "• <b style='color: #4ade80;'>2. Guide Channel Order (Left Panel):</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;– Drag and drop channels or use <b>Move Up</b> / <b>Move Down</b> / <b>Sort A-Z</b> to prioritize how channels are stacked in your EPG TV Guide grid.<br><br>"
-            "• <b style='color: #4ade80;'>3. Guide Network Mapping (Right Panel - Format: Guide Name = Tuned Channel):</b><br>"
+            "• <b style='color: #4ade80;'>2. Guide Network Mapping (Left Panel - Format: Guide Name = Tuned Channel):</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;– Online schedules use network names (e.g. <code>Fox</code>), while your antenna scans station callsigns (e.g. <code>KSAZ-HD</code>).<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;– Example: <code style='color: #52b788;'>Fox = KSAZ-HD</code> maps Fox schedule listings to tune <code>KSAZ-HD</code> on your antenna.<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;– If channels in Kaffeine already match, leave them as <code style='color: #52b788;'>Fox = Fox</code>.<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;– Click <b>Save Channel Lineup</b> when finished."
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Click <b>Save Channel Lineup</b> when finished.<br><br>"
+            "• <b style='color: #4ade80;'>3. TV Guide Channel Order (Right Panel):</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Drag and drop channels or use <b>Move Up</b> / <b>Move Down</b> / <b>Sort A-Z</b> to prioritize how channels are stacked in your EPG TV Guide grid."
         )
         s2_text.setWordWrap(True)
         s2_text.setStyleSheet(body_style)
