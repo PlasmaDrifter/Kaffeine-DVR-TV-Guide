@@ -5427,7 +5427,7 @@ def ensure_desktop_launcher():
                 "[Desktop Entry]\n"
                 "Categories=AudioVideo;TV;Recorder;\n"
                 "Comment=Modern TV Guide & DVR Recording Manager for Kaffeine\n"
-                "Exec=kaffeine-dvr\n"
+                "Exec=sh -c 'PATH=\"$HOME/.local/bin:$PATH\" exec kaffeine-dvr'\n"
                 "GenericName=TV Guide & Recording Manager\n"
                 "Icon=kaffeine\n"
                 "Keywords=tv;dvr;kaffeine;record;guide;epg;\n"
