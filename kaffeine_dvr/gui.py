@@ -3678,31 +3678,13 @@ class MainWindow(QMainWindow):
 
     def jump_guide_to_now(self):
         now = datetime.now()
-        now_slot = max(0, min(47, (now.hour * 60 + now.minute) // 30))
-
-        # Check currently active programs in the grid to find the earliest starting slot
-        # among programs currently airing (start <= now < end).
-        # We clamp to at most 2 slots (1 hour) before now_slot so we don't jump too far back.
-        target_slot = now_slot
-        if hasattr(self, "current_guide_items") and self.current_guide_items:
-            earliest_slot = now_slot
-            for p in self.current_guide_items:
-                start_iso = p.get("start_iso")
-                if not start_iso:
-                    continue
-                try:
-                    p_start = datetime.fromisoformat(start_iso)
-                    dur_iso = p.get("duration_iso") or "00:30:00"
-                    parts = [int(x) for x in dur_iso.split(":")]
-                    dur = timedelta(hours=parts[0], minutes=parts[1], seconds=parts[2] if len(parts) > 2 else 0)
-                    p_end = p_start + dur
-                    if p_start <= now < p_end:
-                        p_slot = (p_start.hour * 60 + p_start.minute) // 30
-                        if p_slot < earliest_slot:
-                            earliest_slot = p_slot
-                except Exception:
-                    continue
-            target_slot = max(max(0, now_slot - 2), earliest_slot)
+        # 10-minute buffer: if 50+ minutes past the hour, advance to the next hour's slot
+        if now.minute >= 50:
+            target_slot = min(47, (now.hour + 1) * 2)
+        elif now.minute >= 30:
+            target_slot = now.hour * 2 + 1
+        else:
+            target_slot = now.hour * 2
 
         self._scroll_grid_to_slot(target_slot, center=False)
 
