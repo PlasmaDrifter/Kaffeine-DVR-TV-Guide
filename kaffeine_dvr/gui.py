@@ -3018,52 +3018,37 @@ class MainWindow(QMainWindow):
         s1_lay.addWidget(s1_text)
         layout.addWidget(s1_box)
 
-        # Step 2: Import Channels into Kaffeine DVR
-        s2_box = QGroupBox("Step 2: Import Channels into Kaffeine DVR")
+        # Step 2: Import Channels & Organize Lineup
+        s2_box = QGroupBox("Step 2: Import Channels && Organize Lineup (Settings > Channel Source)")
         s2_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
         s2_box.setStyleSheet(make_card_style("#4ade80"))
         s2_lay = QVBoxLayout(s2_box)
         s2_lay.setContentsMargins(15, 15, 15, 15)
         s2_text = QLabel(
-            "• <b style='color: #4ade80;'>One-Click Database Import:</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;1. In this app, click the <b>Settings</b> tab, then select the <b>Channel Source</b> subtab.<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;2. Click the emerald green button at the bottom: <b style='color: #4ade80;'>Import Channels from Kaffeine</b>.<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;3. The app instantly connects to <code>~/.local/share/kaffeine/sqlite.db</code>, populating your channel order list and guide mapping area automatically."
+            "• <b style='color: #4ade80;'>1. One-Click Database Import:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– In this app, go to <b>Settings &gt; Channel Source</b>.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Click the emerald green button at the bottom: <b style='color: #4ade80;'>Import Channels from Kaffeine</b>.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– The app connects to <code>~/.local/share/kaffeine/sqlite.db</code>, instantly populating your channel lineup and guide mapping area.<br><br>"
+            "• <b style='color: #4ade80;'>2. Guide Channel Order (Left Panel):</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Drag and drop channels or use <b>Move Up</b> / <b>Move Down</b> / <b>Sort A-Z</b> to prioritize how channels are stacked in your EPG TV Guide grid.<br><br>"
+            "• <b style='color: #4ade80;'>3. Guide Network Mapping (Right Panel - Format: Guide Name = Tuned Channel):</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Online schedules use network names (e.g. <code>Fox</code>), while your antenna scans station callsigns (e.g. <code>KSAZ-HD</code>).<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Example: <code style='color: #52b788;'>Fox = KSAZ-HD</code> maps Fox schedule listings to tune <code>KSAZ-HD</code> on your antenna.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– If channels in Kaffeine already match, leave them as <code style='color: #52b788;'>Fox = Fox</code>.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Click <b>Save Channel Lineup</b> when finished."
         )
         s2_text.setWordWrap(True)
         s2_text.setStyleSheet(body_style)
         s2_lay.addWidget(s2_text)
         layout.addWidget(s2_box)
 
-        # Step 3: Organize Guide Order & Network Mapping
-        s3_box = QGroupBox("Step 3: Organize Channel Priority && Network Mapping")
+        # Step 3: Choose & Configure Your Guide Feed
+        s3_box = QGroupBox("Step 3: Guide Source Setup (National && Local Affiliates)")
         s3_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        s3_box.setStyleSheet(make_card_style("#facc15"))
+        s3_box.setStyleSheet(make_card_style("#c084fc"))
         s3_lay = QVBoxLayout(s3_box)
         s3_lay.setContentsMargins(15, 15, 15, 15)
         s3_text = QLabel(
-            "• <b style='color: #facc15;'>Where to Go:</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;In this app, go to the <b>Settings</b> tab, then click the <b>Channel Source</b> subtab.<br><br>"
-            "• <b style='color: #facc15;'>TV Guide Channel Order (Left Panel):</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;– Drag and drop channels or use <b>Move Up</b> / <b>Move Down</b> / <b>Sort A-Z</b> to prioritize how channels are stacked in your EPG TV Guide grid.<br><br>"
-            "• <b style='color: #facc15;'>Guide Network Mapping (Right Panel - Format: Guide Name = Tuned Channel):</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;– Online schedules use network names (e.g. <code>Fox</code>), while your antenna scans station callsigns (e.g. <code>KSAZ-HD</code>).<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;– Example: <code style='color: #52b788;'>Fox = KSAZ-HD</code> maps Fox schedule listings to tune <code>KSAZ-HD</code> on your antenna.<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;– If channels in Kaffeine already match, leave them as <code style='color: #52b788;'>Fox = Fox</code>.<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;– Click <b style='color: #facc15;'>Save Channel Lineup</b> when finished."
-        )
-        s3_text.setWordWrap(True)
-        s3_text.setStyleSheet(body_style)
-        s3_lay.addWidget(s3_text)
-        layout.addWidget(s3_box)
-
-        # Step 4: Choose & Configure Your Guide Feed
-        s4_box = QGroupBox("Step 4: Guide Source Setup (National && Local Affiliates)")
-        s4_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        s4_box.setStyleSheet(make_card_style("#c084fc"))
-        s4_lay = QVBoxLayout(s4_box)
-        s4_lay.setContentsMargins(15, 15, 15, 15)
-        s4_text = QLabel(
             "• <b style='color: #c084fc;'>National Networks (TVMaze - Zero Configuration):</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;– Works out of the box with zero configuration for major national broadcast networks (FOX, CBS, NBC, ABC, PBS, CW).<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;– <i>Note:</i> TVMaze tracks national feeds only and <b>does not provide local programming</b> (local news, regional daytime talk shows, and independent subchannels). To receive local programming, TV Passport will need to be configured.<br><br>"
@@ -3073,20 +3058,20 @@ class MainWindow(QMainWindow):
             "&nbsp;&nbsp;&nbsp;&nbsp;3. Go to <b>Settings &gt; Guide Sources &amp; Health</b>, expand <b>TV Passport Station IDs</b>, and enter: <code>Fox = 1809</code> (or <code>KSAZ-HD = 1809</code>).<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;4. Click <b>Save Station IDs</b> to download 24/7 listings with local news, daytime syndication, and sports."
         )
-        s4_text.setWordWrap(True)
-        s4_text.setOpenExternalLinks(True)
-        s4_text.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
-        s4_text.setStyleSheet(body_style)
-        s4_lay.addWidget(s4_text)
-        layout.addWidget(s4_box)
+        s3_text.setWordWrap(True)
+        s3_text.setOpenExternalLinks(True)
+        s3_text.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
+        s3_text.setStyleSheet(body_style)
+        s3_lay.addWidget(s3_text)
+        layout.addWidget(s3_box)
 
-        # Step 5: Test Live TV & Schedule Recordings
-        s5_box = QGroupBox("Step 5: Test Live TV && Schedule Recordings")
-        s5_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        s5_box.setStyleSheet(make_card_style("#60a5fa"))
-        s5_lay = QVBoxLayout(s5_box)
-        s5_lay.setContentsMargins(15, 15, 15, 15)
-        s5_text = QLabel(
+        # Step 4: Test Live TV & Schedule Recordings
+        s4_box = QGroupBox("Step 4: Test Live TV && Schedule Recordings")
+        s4_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        s4_box.setStyleSheet(make_card_style("#60a5fa"))
+        s4_lay = QVBoxLayout(s4_box)
+        s4_lay.setContentsMargins(15, 15, 15, 15)
+        s4_text = QLabel(
             "• <b style='color: #60a5fa;'>Navigating the TV Guide Grid:</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;– <b>Fluid Navigation:</b> Use the scrollbars or click and drag (grab) anywhere on the grid in any direction to smoothly pan through channels and time slots.<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;– <b>Grid Zoom (+ / -):</b> Use the <b>+</b> and <b>−</b> zoom buttons to increase or decrease the font and tile size of the guide grid to your preference.<br>"
@@ -3098,10 +3083,10 @@ class MainWindow(QMainWindow):
             "&nbsp;&nbsp;&nbsp;&nbsp;– Click <b>Auto-Record This Series</b> to create keyword auto-record rules that automatically capture all future airings.<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;– The unified background service (<code>kaffeine-dvr-watcher.service</code>) safely dispatches timers Just-In-Time without locking up system reboots."
         )
-        s5_text.setWordWrap(True)
-        s5_text.setStyleSheet(body_style)
-        s5_lay.addWidget(s5_text)
-        layout.addWidget(s5_box)
+        s4_text.setWordWrap(True)
+        s4_text.setStyleSheet(body_style)
+        s4_lay.addWidget(s4_text)
+        layout.addWidget(s4_box)
 
         layout.addStretch()
         scroll.setWidget(container)
