@@ -5905,6 +5905,15 @@ def ensure_systemd_service(force: bool = False) -> bool:
 
 
 def main():
+    cli_flags = ["--watch", "--sync", "--rules", "--list", "--status", "--help", "-h"]
+    if any(arg in sys.argv for arg in cli_flags):
+        try:
+            from .cli import main as cli_main
+        except (ImportError, ValueError):
+            from kaffeine_dvr.cli import main as cli_main
+        cli_main()
+        return
+
     app = QApplication(sys.argv)
     ensure_desktop_launcher()
     ensure_systemd_service()
