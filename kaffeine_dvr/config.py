@@ -57,6 +57,8 @@ class ConfigManager:
                         data["min_free_disk_gb"] = 25
                     if "custom_recording_folder" not in data:
                         data["custom_recording_folder"] = ""
+                    if "custom_kaffeine_path" not in data:
+                        data["custom_kaffeine_path"] = ""
                     if "end_buffer_mins" not in data:
                         data["end_buffer_mins"] = 0
                     if "sports_buffer_mins" not in data:
@@ -93,6 +95,7 @@ class ConfigManager:
             "retention_days": 14,
             "min_free_disk_gb": 25,
             "custom_recording_folder": "",
+            "custom_kaffeine_path": "",
             "end_buffer_mins": 0,
             "sports_buffer_mins": 30,
             "auto_buffer_sports": True,
@@ -305,6 +308,15 @@ class ConfigManager:
     @custom_recording_folder.setter
     def custom_recording_folder(self, val: str):
         self.data["custom_recording_folder"] = val
+        self.save()
+
+    @property
+    def custom_kaffeine_path(self) -> str:
+        return self.data.get("custom_kaffeine_path", "")
+
+    @custom_kaffeine_path.setter
+    def custom_kaffeine_path(self, val: str):
+        self.data["custom_kaffeine_path"] = val
         self.save()
 
     @property

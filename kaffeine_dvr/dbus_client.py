@@ -12,22 +12,76 @@ class KaffeineDbusClient:
         self.object_path = "/Television"
         self.interface_name = "org.freedesktop.MediaPlayer"
 
+    @staticmethod
+    def get_kaffeine_bin() -> str:
+        """
+        Locate the preferred Kaffeine executable:
+        1. Custom path override if configured in config.json.
+        2. Standard user installation ~/.local/bin/kaffeine (if present and executable).
+        3. System PATH lookup via shutil.which("kaffeine").
+        4. Standard distribution location /usr/bin/kaffeine.
+        """
+        import shutil
+        try:
+            from .config import ConfigManager
+            cfg = ConfigManager()
+            if cfg.custom_kaffeine_path:
+                cpath = Path(cfg.custom_kaffeine_path)
+                if cpath.is_file() and os.access(cpath, os.X_OK):
+                    return str(cpath)
+        except Exception:
+            pass
+
+        local_bin = Path.home() / ".local" / "bin" / "kaffeine"
+        if local_bin.is_file() and os.access(local_bin, os.X_OK):
+            return str(local_bin)
+
+        which_bin = shutil.which("kaffeine")
+        if which_bin:
+            return which_bin
+
+        return "/usr/bin/kaffeine"
+
     def is_running(self) -> bool:
         """Check if Kaffeine is active on the D-Bus session bus."""
         try:
             import dbus
             bus = dbus.SessionBus()
-            return bool(bus.name_has_owner(self.service_name))
+            if bool(bus.name_has_owner(self.service_name)):
+                return True
         except Exception:
-            # Fallback to pgrep check
-            res = subprocess.run(["pgrep", "-x", "kaffeine"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            return res.returncode == 0
+            pass
+
+        # Fallback to checking active (non-zombie) kaffeine process
+        try:
+            res = subprocess.run(["pgrep", "-x", "kaffeine"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            if res.returncode != 0:
+                return False
+            pids = res.stdout.strip().split()
+            for p in pids:
+                try:
+                    with open(f"/proc/{p}/status", "r") as f:
+                        for line in f:
+                            if line.startswith("State:"):
+                                if "Z" not in line:  # Exclude zombie / defunct
+                                    return True
+                except (FileNotFoundError, ProcessLookupError, PermissionError):
+                    continue
+            return False
+        except Exception:
+            return False
 
     def _get_display_env(self) -> Dict[str, str]:
-        """Ensure WAYLAND_DISPLAY, DISPLAY, XAUTHORITY, and QT_QPA_PLATFORM exist when launched from background services."""
+        """Ensure WAYLAND_DISPLAY, DISPLAY, XAUTHORITY, QT_QPA_PLATFORM, and KDE desktop environment variables exist."""
         env = os.environ.copy()
         runtime_dir_str = env.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
         runtime_dir = Path(runtime_dir_str)
+
+        # Ensure PATH contains ~/.local/bin
+        local_bin = str(Path.home() / ".local" / "bin")
+        curr_path = env.get("PATH", "")
+        if local_bin not in curr_path.split(os.pathsep):
+            env["PATH"] = f"{local_bin}:{curr_path}" if curr_path else local_bin
 
         if not env.get("WAYLAND_DISPLAY"):
             wayland_sockets = list(runtime_dir.glob("wayland-*"))
@@ -41,6 +95,22 @@ class KaffeineDbusClient:
             xauth_files = sorted(runtime_dir.glob("xauth_*"), key=lambda p: p.stat().st_mtime, reverse=True)
             if xauth_files:
                 env["XAUTHORITY"] = str(xauth_files[0])
+
+        # Essential KDE / Qt desktop environment variables for theme inheritance
+        if not env.get("XDG_CURRENT_DESKTOP"):
+            env["XDG_CURRENT_DESKTOP"] = "KDE"
+        if not env.get("KDE_FULL_SESSION"):
+            env["KDE_FULL_SESSION"] = "true"
+        if not env.get("KDE_SESSION_VERSION"):
+            env["KDE_SESSION_VERSION"] = "6"
+        if not env.get("DESKTOP_SESSION"):
+            env["DESKTOP_SESSION"] = "plasma.desktop"
+        if not env.get("XDG_SESSION_DESKTOP"):
+            env["XDG_SESSION_DESKTOP"] = "KDE"
+
+        config_defaults = str(Path.home() / ".config" / "kdedefaults")
+        if not env.get("XDG_CONFIG_DIRS"):
+            env["XDG_CONFIG_DIRS"] = f"{config_defaults}:/etc/xdg:/usr/share/kde-settings/kde-profile/default/xdg"
 
         # Kaffeine is configured in its desktop launcher with QT_QPA_PLATFORM=xcb,
         # which produces wmclass='kaffeine' (matching user KWin rules to place on the second monitor).
@@ -61,17 +131,19 @@ class KaffeineDbusClient:
             mode = "taskbar" if minimized else "normal"
         try:
             env = self._get_display_env()
-            cmd = ["kaffeine", "-m"] if mode == "tray" else ["kaffeine"]
+            k_bin = self.get_kaffeine_bin()
+            cmd = [k_bin, "-m"] if mode == "tray" else [k_bin]
             subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             if mode == "taskbar":
                 import threading
                 threading.Thread(target=self._minimize_window_async, daemon=True).start()
 
-            # Wait up to 5 seconds for Kaffeine to register on D-Bus
+            # Wait up to 8 seconds for Kaffeine to register on D-Bus
             import time
-            for _ in range(20):
+            for _ in range(32):
                 time.sleep(0.25)
                 if self.is_running():
+                    time.sleep(0.5)
                     return True
             return True
         except Exception as e:
@@ -188,7 +260,7 @@ class KaffeineDbusClient:
                 else:
                     # Fallback to calling kaffeine CLI with --channel
                     env = self._get_display_env()
-                    cmd = ["kaffeine"]
+                    cmd = [self.get_kaffeine_bin()]
                     if view_mode == "minimal":
                         cmd.append("--minimal")
                     elif view_mode == "fullscreen":
@@ -204,7 +276,7 @@ class KaffeineDbusClient:
             return tuned
         else:
             env = self._get_display_env()
-            cmd = ["kaffeine"]
+            cmd = [self.get_kaffeine_bin()]
             if view_mode == "minimal":
                 cmd.append("--minimal")
             elif view_mode == "fullscreen":
@@ -260,7 +332,7 @@ class KaffeineDbusClient:
             return False
         env = self._get_display_env()
         try:
-            subprocess.Popen(["kaffeine", str(file_path)], env=env)
+            subprocess.Popen([self.get_kaffeine_bin(), str(file_path)], env=env)
             return True
         except Exception:
             try:

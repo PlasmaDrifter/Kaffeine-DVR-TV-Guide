@@ -7,6 +7,12 @@ Type=simple
 ExecStart=%h/.local/bin/kaffeine-dvr --watch
 Restart=on-failure
 RestartSec=10
+Environment="PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PYTHONUNBUFFERED=1"
+Environment="XDG_CURRENT_DESKTOP=KDE"
+Environment="KDE_FULL_SESSION=true"
+Environment="KDE_SESSION_VERSION=6"
+Environment="DESKTOP_SESSION=plasma.desktop"
 StandardOutput=journal
 StandardError=journal
 
