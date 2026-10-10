@@ -1846,6 +1846,44 @@ class MainWindow(QMainWindow):
         self.progress_bar.setVisible(False)
         self.status_bar.addPermanentWidget(self.progress_bar)
 
+        # Muted update notification badge in bottom-right status bar
+        self.update_badge_widget = QWidget()
+        self.update_badge_widget.setObjectName("updateBadge")
+        badge_layout = QHBoxLayout(self.update_badge_widget)
+        badge_layout.setContentsMargins(6, 1, 4, 1)
+        badge_layout.setSpacing(4)
+        self.update_badge_widget.setStyleSheet(
+            "QWidget#updateBadge { "
+            "  background-color: #141f17; "
+            "  border: 1px solid #244c2e; "
+            "  border-radius: 9px; "
+            "}"
+        )
+        self.update_badge_btn = QPushButton("Update Available")
+        self.update_badge_btn.setFlat(True)
+        self.update_badge_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.update_badge_btn.setToolTip("Click to view details and install update in Settings")
+        self.update_badge_btn.setStyleSheet(
+            "QPushButton { color: #4da666; font-size: 11px; font-weight: 500; border: none; padding: 0 2px; background: transparent; }"
+            "QPushButton:hover { color: #6bc284; text-decoration: underline; }"
+        )
+        self.update_badge_btn.clicked.connect(self.navigate_to_updates_tab)
+        badge_layout.addWidget(self.update_badge_btn)
+
+        self.update_badge_dismiss_btn = QToolButton()
+        self.update_badge_dismiss_btn.setText("x")
+        self.update_badge_dismiss_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.update_badge_dismiss_btn.setToolTip("Dismiss update notice")
+        self.update_badge_dismiss_btn.setStyleSheet(
+            "QToolButton { color: #556573; font-size: 10px; font-weight: bold; border: none; background: transparent; padding: 0 2px; }"
+            "QToolButton:hover { color: #b8c4d1; }"
+        )
+        self.update_badge_dismiss_btn.clicked.connect(self.dismiss_update_badge)
+        badge_layout.addWidget(self.update_badge_dismiss_btn)
+
+        self.update_badge_widget.setVisible(False)
+        self.status_bar.addPermanentWidget(self.update_badge_widget)
+
     def create_status_banner(self) -> QGridLayout:
         banner = QGridLayout()
         banner.setContentsMargins(0, 0, 0, 0)
@@ -1870,42 +1908,6 @@ class MainWindow(QMainWindow):
         )
         self.header_restore_btn.clicked.connect(self.restore_saved_window_size)
         left_layout.addWidget(self.header_restore_btn)
-
-        # Subtle green update notification badge with dismissal function
-        self.update_badge_widget = QWidget()
-        badge_layout = QHBoxLayout(self.update_badge_widget)
-        badge_layout.setContentsMargins(8, 2, 6, 2)
-        badge_layout.setSpacing(6)
-        self.update_badge_widget.setStyleSheet(
-            "QWidget { "
-            "  background-color: #122818; "
-            "  border: 1px solid #28a745; "
-            "  border-radius: 12px; "
-            "}"
-        )
-        self.update_badge_btn = QPushButton("Update Available")
-        self.update_badge_btn.setFlat(True)
-        self.update_badge_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.update_badge_btn.setStyleSheet(
-            "QPushButton { color: #74d98a; font-size: 11px; font-weight: bold; border: none; padding: 0; background: transparent; }"
-            "QPushButton:hover { color: #a3e635; text-decoration: underline; }"
-        )
-        self.update_badge_btn.clicked.connect(self.navigate_to_updates_tab)
-        badge_layout.addWidget(self.update_badge_btn)
-
-        self.update_badge_dismiss_btn = QToolButton()
-        self.update_badge_dismiss_btn.setText("x")
-        self.update_badge_dismiss_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.update_badge_dismiss_btn.setToolTip("Dismiss update notice")
-        self.update_badge_dismiss_btn.setStyleSheet(
-            "QToolButton { color: #8c98aa; font-size: 10px; font-weight: bold; border: none; background: transparent; padding: 0 2px; }"
-            "QToolButton:hover { color: #ffffff; }"
-        )
-        self.update_badge_dismiss_btn.clicked.connect(self.dismiss_update_badge)
-        badge_layout.addWidget(self.update_badge_dismiss_btn)
-
-        self.update_badge_widget.setVisible(False)
-        left_layout.addWidget(self.update_badge_widget)
         left_layout.addStretch()
 
         banner.addWidget(left_container, 0, 0, Qt.AlignmentFlag.AlignLeft)
@@ -3123,7 +3125,7 @@ class MainWindow(QMainWindow):
 
         check_desc = QLabel(
             "When enabled, Kaffeine DVR silently checks GitHub for new updates once every 30 days. "
-            "If an update is found, a subtle green badge appears in the top header with a dismissal button."
+            "If an update is found, a subtle green badge appears in the bottom-right status bar with a dismissal button."
         )
         check_desc.setStyleSheet("color: #8c98aa; font-size: 11px;")
         check_desc.setWordWrap(True)
@@ -3136,7 +3138,7 @@ class MainWindow(QMainWindow):
         btn_row.addWidget(self.check_updates_btn)
 
         self.preview_badge_btn = QPushButton("Simulate Update Badge")
-        self.preview_badge_btn.setToolTip("Show the subtle green update badge in the top header for testing")
+        self.preview_badge_btn.setToolTip("Show the subtle green update badge in the bottom-right status bar for testing")
         self.preview_badge_btn.clicked.connect(self._simulate_update_badge)
         btn_row.addWidget(self.preview_badge_btn)
 
@@ -3197,7 +3199,7 @@ class MainWindow(QMainWindow):
         self._latest_detected_version = "0.8.4"
         self.update_badge_btn.setText("Update Available: v0.8.4")
         self.update_badge_widget.setVisible(True)
-        self.status_bar.showMessage("Simulated update badge displayed in top header.", 4000)
+        self.status_bar.showMessage("Simulated update badge displayed in status bar.", 4000)
 
     def check_monthly_updates_on_startup(self):
         if not self.config_mgr.auto_check_updates:
