@@ -2502,7 +2502,7 @@ class MainWindow(QMainWindow):
             "Example: Fox = KSAZ-HD connects Fox to your antenna.\n"
             "If channels in Kaffeine already match, leave as Fox = Fox."
         )
-        self.mapping_tip_lbl.setStyleSheet("color: #8a99ad; font-size: 11px; line-height: 1.4; background: transparent;")
+        self.mapping_tip_lbl.setStyleSheet("color: #8a99ad; font-size: 13px; line-height: 1.5; background: transparent;")
         self.mapping_tip_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
         mapping_tip_layout = QHBoxLayout(self.mapping_text)
