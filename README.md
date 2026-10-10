@@ -13,29 +13,29 @@ Kaffeine is a powerful digital TV viewer for KDE and Linux desktop environments,
 **Kaffeine-DVR-TV-Guide** solves both problems:
 - **Zero-Block Power Operations:** Scheduled recordings are held in an external queue database (`recordings_queue.sqlite`). Kaffeine stays completely clean with zero active timers until minutes before showtime.
 - **Just-In-Time (JIT) Dispatching:** A lightweight systemd user background service monitors the queue. When a broadcast is about to begin (e.g. 5 minutes before airtime), it launches Kaffeine minimized and arms the timer over D-Bus automatically.
-- **Comprehensive EPG Providers:** Browse up to 14 days of TV listings across multiple providers:
-  - **TVMaze Cloud API (Free & Automatic):** Instant national broadcast network listings (FOX, CBS, NBC, ABC, PBS, The CW) with zero configuration or API keys required.
-  - **TV Passport (Web Station Directory):** Full 24/7 schedules including morning, daytime, and local syndicated programming for local affiliate stations and independent subchannels.
-  - **Free Hybrid Mode:** Simultaneously uses TV Passport for any configured local affiliate station IDs while automatically filling in any unmapped channels with TVMaze without duplicate show rows.
-  - **Custom XMLTV Feeds:** Supports local files or remote HTTP/HTTPS XMLTV feeds from tools like zap2xml or WebGrab+.
-  - **Schedules Direct:** Direct commercial Gracenote EPG integration by postal/zip code.
+- **Comprehensive EPG Providers:**
+  - **TVMaze Cloud API (Free & Automatic)**
+  - **TV Passport (Web Station Directory)**
+  - **Free Hybrid Mode**
+  - **Custom XMLTV Feeds**
+  - **Schedules Direct**
 - **Dual-Mode TV Guide (Traditional EPG Grid & Searchable List):**
-  - **Traditional Grid Layout:** Displays channels vertically and 48 half-hour time slots across the 24-hour day, with program tiles spanning their duration.
-  - **Intuitive Mouse Grab-and-Drag Scrolling:** Fluidly click and drag anywhere on the grid in any direction to smoothly pan through channels and time slots, with responsive hand cursor feedback and stationary click preservation.
-  - **Genre Color Coding:** Show titles dynamically styled by genre (Sports = Orange, News = Light Blue, Movies = Red, TV Shows = Green).
-  - **Smart Timeline Navigation:** Auto-centers on live programming when viewing Today, rewinds to 12:00 AM Midnight for future dates, with quick "Jump to Now" and "Prime Time (7 PM)" buttons.
-  - **Double-Click to Watch & Smart State:** Double-click any show tile or list row to watch live broadcasts in Kaffeine instantly. Evaluates timing states (Live Now, Upcoming, or Past): prompts to schedule recording vs. tune channel now for future shows, and plays existing recordings for past programs.
-  - **Adaptive "Watch Live / Tune Channel" Actions:** Detail panel dynamically provides one-click "Watch Live", "Tune Channel Now", or "Play Recording" buttons based on program air status.
-  - **Direct Startup Launch:** Opens directly to the Web TV Guide Browser on startup for instant listing access.
+  - **Traditional Grid Layout**
+  - **Intuitive Mouse Grab-and-Drag Scrolling**
+  - **Genre Color Coding**
+  - **Smart Timeline Navigation**
+  - **Double-Click to Watch & Smart State**
+  - **Adaptive "Watch Live / Tune Channel" Actions**
+  - **Direct Startup Launch**
 - **Configurable Recording End Buffers (Post-Roll Padding):**
-  - **Global Post-Roll Buffer:** Append extra minutes (0-180m) to scheduled recordings to safeguard against broadcast delays.
-  - **Sports Broadcast Auto-Extend:** Automatically adds extended post-roll padding (default: +30 minutes) to live sporting events (NFL, NBA, MLB, NCAA, Premier League, NASCAR, racing, etc.) so overtime and extra innings are never cut short.
-  - **Per-Rule Custom Overrides:** Override end buffer duration on individual series auto-record rules or manual schedule dialogs.
-- **Series Auto-Record Rules:** Define keyword-based auto-record rules (e.g., specific sports leagues, talk shows, or series titles) that automatically schedule upcoming episodes as guide data refreshes.
-- **Automated Video Retention & Storage Management:** Prevents recording drives from filling up:
-  - **Age Retention:** Automatically deletes recordings older than *N* days (configurable).
-  - **Low-Disk Auto-Purge:** If available disk space drops below a safety threshold (e.g., 25 GB), automatically purges the oldest unprotected recordings first.
-  - **Active Recording & Sidecar Safety:** Never deletes files actively being written, cleans up associated sidecars (`.txt`, `.log`), and allows users to flag favorite recordings as "Protected / Keep Forever".
+  - **Global Post-Roll Buffer**
+  - **Sports Broadcast Auto-Extend**
+  - **Per-Rule Custom Overrides**
+- **Series Auto-Record Rules**
+- **Automated Video Retention & Storage Management:**
+  - **Age Retention**
+  - **Low-Disk Auto-Purge**
+  - **Active Recording & Sidecar Safety**
 
 ---
 
