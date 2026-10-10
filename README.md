@@ -101,7 +101,16 @@ Kaffeine is a powerful digital TV viewer for KDE and Linux desktop environments,
 - Kaffeine (`kaffeine`)
 - Standard desktop tools: `systemd`, `notify-send` (optional, for notifications), `kdotool` or `xdotool` (optional, for window minimization)
 
-### Automated Installation (Recommended)
+### AppImage (Standalone Executable)
+Download the standalone AppImage from [GitHub Releases](https://github.com/PlasmaDrifter/Kaffeine-DVR-TV-Guide/releases/latest):
+```bash
+# Make executable and run directly:
+chmod +x Kaffeine-DVR-TV-Guide-x86_64.AppImage
+./Kaffeine-DVR-TV-Guide-x86_64.AppImage
+```
+You can also integrate and manage it with tools like **AppManager** or **Gear Lever**.
+
+### Automated Installation (From Source)
 Clone the repository and run the automated installer:
 ```bash
 git clone https://github.com/PlasmaDrifter/Kaffeine-DVR-TV-Guide.git
