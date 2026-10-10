@@ -1,7 +1,8 @@
 #!/bin/bash
 set -e
 
-REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_DIR"
 
 echo "=== 1. Building PyInstaller binary bundle ==="
@@ -48,10 +49,11 @@ APPRUN
 chmod +x AppDir/AppRun
 
 echo "=== 3. Packaging AppImage ==="
-OUTPUT_APPIMAGE="/home/jmc/Applications/KaffeineDVR/Kaffeine-DVR-TV-Guide-x86_64.AppImage"
-mkdir -p "/home/jmc/Applications/KaffeineDVR"
+OUTPUT_APPIMAGE="$SCRIPT_DIR/Kaffeine-DVR-TV-Guide-x86_64.AppImage"
+mkdir -p "$SCRIPT_DIR"
 ARCH=x86_64 NO_APPSTREAM=1 appimagetool AppDir "$OUTPUT_APPIMAGE"
 
 rm -rf AppDir build dist
 
 echo "=== AppImage created successfully at $OUTPUT_APPIMAGE ==="
+
