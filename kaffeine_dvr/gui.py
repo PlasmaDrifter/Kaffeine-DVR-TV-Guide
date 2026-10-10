@@ -2033,8 +2033,8 @@ class MainWindow(QMainWindow):
         self.jump_now_btn.clicked.connect(self.jump_guide_to_now)
         filter_bar.addWidget(self.jump_now_btn)
 
-        self.jump_prime_btn = QPushButton("Prime Time (8 PM)")
-        self.jump_prime_btn.setToolTip("Scroll guide grid to 8:00 PM evening prime time")
+        self.jump_prime_btn = QPushButton("Prime Time (7 PM)")
+        self.jump_prime_btn.setToolTip("Scroll guide grid to 7:00 PM (19:00) evening prime time")
         self.jump_prime_btn.setStyleSheet(jump_btn_style)
         self.jump_prime_btn.clicked.connect(self.jump_guide_to_primetime)
         filter_bar.addWidget(self.jump_prime_btn)
@@ -4025,8 +4025,8 @@ class MainWindow(QMainWindow):
         self._scroll_grid_to_slot(24, center=False)
 
     def jump_guide_to_primetime(self):
-        # 8:00 PM is 20:00 -> slot 40
-        self._scroll_grid_to_slot(40, center=False)
+        # 7:00 PM (19:00) is hour 19 -> slot 38
+        self._scroll_grid_to_slot(38, center=False)
 
     def zoom_in_guide(self):
         """Increase font and box size for both grid and list views."""
