@@ -3224,6 +3224,31 @@ class MainWindow(QMainWindow):
             self.days_spin
         )
 
+        self.notify_lead_spin = NumberStepper()
+        self.notify_lead_spin.setRange(0, 999)
+        self.notify_lead_spin.setValue(self.config_mgr.notification_lead_time_mins)
+        self.notify_lead_spin.setFixedWidth(160)
+        self.notify_lead_spin.setEnabled(self.config_mgr.enable_desktop_notifications)
+
+        self.notify_check = QCheckBox("Enable Desktop Notifications")
+        self.notify_check.setChecked(self.config_mgr.enable_desktop_notifications)
+        self.notify_check.toggled.connect(self.notify_lead_spin.setEnabled)
+
+        notify_row = QHBoxLayout()
+        notify_row.addWidget(self.notify_lead_spin)
+        notify_row.addSpacing(12)
+        notify_row.addWidget(self.notify_check)
+        notify_row.addStretch()
+        dvr_layout.addRow(
+            make_setting_label(
+                "Notification Lead Time (Mins):",
+                "Sends a persistent desktop notification via notify-send when a scheduled recording is starting.\n"
+                "• 0: Sends notification at the exact moment the recording begins.\n"
+                "• 1–999: Sends notification in advance before the recording starts."
+            ),
+            notify_row
+        )
+
         self.launch_mode_combo = QComboBox()
         self.launch_mode_combo.addItem("Minimized to Taskbar (Panel)", "taskbar")
         self.launch_mode_combo.addItem("Minimize to System Tray (-m minimal)", "tray")
@@ -3323,33 +3348,6 @@ class MainWindow(QMainWindow):
                 "• Custom Command: Specify any custom player command, binary, or wrapper script (supports {file} placeholder)."
             ),
             player_container
-        )
-
-        self.notify_check = QCheckBox("Show Persistent Desktop Notification when Recording Starts")
-        self.notify_check.setChecked(self.config_mgr.enable_desktop_notifications)
-        dvr_layout.addRow(
-            make_setting_label(
-                "Desktop Notifications:",
-                "Sends a persistent desktop notification via notify-send when a scheduled recording is starting."
-            ),
-            self.notify_check
-        )
-
-        self.notify_lead_spin = NumberStepper()
-        self.notify_lead_spin.setRange(0, 999)
-        self.notify_lead_spin.setValue(self.config_mgr.notification_lead_time_mins)
-        self.notify_lead_spin.setFixedWidth(160)
-        self.notify_lead_spin.setEnabled(self.config_mgr.enable_desktop_notifications)
-        self.notify_check.toggled.connect(self.notify_lead_spin.setEnabled)
-
-        dvr_layout.addRow(
-            make_setting_label(
-                "Notification Lead Time (Mins):",
-                "Minutes before show start time to send the desktop notification:\n"
-                "• 0: Sends notification at the exact moment the recording begins.\n"
-                "• 1–999: Sends notification in advance before the recording starts."
-            ),
-            self.notify_lead_spin
         )
 
         left_col.addWidget(dvr_group)
