@@ -503,6 +503,49 @@ class KaffeineDbusClient:
         except Exception:
             pass
 
+    def _prepare_standalone_smplayer_profile(self) -> Path:
+        """
+        Prepares a standalone SMPlayer configuration directory for live TV timeshifting.
+        Inherits all user settings, skins, themes, iconsets, and GUI choices from ~/.config/smplayer/
+        while ensuring single_instance_enabled=false so it never hijacks or affects other player windows.
+        """
+        import shutil
+        import re
+
+        base_user_dir = Path.home() / ".config" / "smplayer"
+        target_dir = Path.home() / ".config" / "kaffeine-dvr" / "smplayer"
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        if base_user_dir.exists():
+            for fname in ["smplayer.ini", "device_info.ini", "hdpi.ini", "styles.ass", "mpv.conf"]:
+                src = base_user_dir / fname
+                dst = target_dir / fname
+                if src.exists():
+                    if not dst.exists() or src.stat().st_mtime > dst.stat().st_mtime:
+                        try:
+                            shutil.copy2(src, dst)
+                        except Exception:
+                            pass
+
+        ini_path = target_dir / "smplayer.ini"
+        if ini_path.exists():
+            try:
+                content = ini_path.read_text(encoding="utf-8", errors="ignore")
+                if "[instances]" in content:
+                    content = re.sub(
+                        r"(?m)^\s*single_instance_enabled\s*=\s*true\b",
+                        "single_instance_enabled=false",
+                        content,
+                        flags=re.IGNORECASE
+                    )
+                else:
+                    content += "\n[instances]\nsingle_instance_enabled=false\n"
+                ini_path.write_text(content, encoding="utf-8")
+            except Exception:
+                pass
+
+        return target_dir
+
     def play_file(self, file_path: str, player: Optional[str] = None, custom_cmd: Optional[str] = None, standalone: bool = False) -> Any:
         """
         Play a recorded media file in the user's selected media player:
@@ -544,8 +587,7 @@ class KaffeineDbusClient:
             extra_args = []
             if standalone:
                 if player_mode == "smplayer":
-                    sm_profile = Path.home() / ".config" / "kaffeine-dvr" / "smplayer"
-                    sm_profile.mkdir(parents=True, exist_ok=True)
+                    sm_profile = self._prepare_standalone_smplayer_profile()
                     extra_args = ["-config-path", str(sm_profile)]
                 elif player_mode == "vlc":
                     extra_args = ["--no-one-instance"]
