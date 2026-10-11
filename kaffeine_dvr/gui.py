@@ -2577,6 +2577,8 @@ class MainWindow(QMainWindow):
         self.grid_pan_filter = GridPanFilter(self.guide_grid_table)
         self.guide_grid_table.viewport().installEventFilter(self.grid_pan_filter)
         self.guide_grid_table.horizontalHeader().viewport().installEventFilter(self.grid_pan_filter)
+        self.grid_resize_filter = TableViewportResizeFilter(self._apply_guide_zoom, self)
+        self.guide_grid_table.viewport().installEventFilter(self.grid_resize_filter)
         self.guide_grid_table.cellClicked.connect(self.on_grid_cell_clicked)
         self.guide_grid_table.cellDoubleClicked.connect(self.on_grid_cell_double_clicked)
         self.guide_stack.addWidget(self.guide_grid_table)
@@ -5015,49 +5017,70 @@ class MainWindow(QMainWindow):
         self._scroll_grid_to_slot(38, center=False)
 
     def zoom_in_guide(self):
-        """Increase font and box size for both grid and list views."""
+        """Increase font and box size for both grid and list views (fewer rows visible)."""
         if not hasattr(self, "guide_zoom_level"):
             self.guide_zoom_level = 0
-        if self.guide_zoom_level < 16:
+        target_rows = max(3, min(16, 8 - self.guide_zoom_level))
+        if target_rows > 3:
             self.guide_zoom_level += 1
             self.settings.setValue("guide_zoom_level", self.guide_zoom_level)
             self._apply_guide_zoom()
 
     def zoom_out_guide(self):
-        """Decrease font and box size for both grid and list views."""
+        """Decrease font and box size for both grid and list views (more rows visible)."""
         if not hasattr(self, "guide_zoom_level"):
             self.guide_zoom_level = 0
-        if self.guide_zoom_level > -4:
+        target_rows = max(3, min(16, 8 - self.guide_zoom_level))
+        if target_rows < 16:
             self.guide_zoom_level -= 1
             self.settings.setValue("guide_zoom_level", self.guide_zoom_level)
             self._apply_guide_zoom()
 
     def _apply_guide_zoom(self):
-        """Apply the current guide zoom level to Grid and List views."""
+        """Apply the current guide zoom level to Grid and List views with intelligent bottom alignment."""
         lvl = getattr(self, "guide_zoom_level", 0)
 
-        # Update enable state of buttons
-        if hasattr(self, "zoom_in_btn"):
-            self.zoom_in_btn.setEnabled(lvl < 16)
-        if hasattr(self, "zoom_out_btn"):
-            self.zoom_out_btn.setEnabled(lvl > -4)
-
-        # 1. Grid View sizing
-        # Base dimensions: col_width = 165, row_height = 62
-        col_w = max(110, 165 + (lvl * 25))
-        row_h = max(44, 62 + (lvl * 10))
-
+        # 1. Grid View intelligent sizing
         if hasattr(self, "guide_grid_table"):
+            # Target number of rows visible in the viewport:
+            # Baseline is 8 rows at lvl = 0.
+            # Zoom in (lvl > 0) shows fewer rows (e.g. 7, 6, 5, 4, 3) with taller tiles.
+            # Zoom out (lvl < 0) shows more rows (e.g. 9, 10, 11... up to 16) with compact tiles.
+            target_rows = max(3, min(16, 8 - lvl))
+
+            # Update enable state of buttons
+            if hasattr(self, "zoom_in_btn"):
+                self.zoom_in_btn.setEnabled(target_rows > 3)
+            if hasattr(self, "zoom_out_btn"):
+                self.zoom_out_btn.setEnabled(target_rows < 16)
+
+            vp = self.guide_grid_table.viewport()
+            vh = vp.height() if vp else 0
+
+            if vh < 100:
+                base_row_h = max(44, 62 + (lvl * 10))
+                rem = 0
+            else:
+                base_row_h = max(16, vh // target_rows)
+                rem = vh % target_rows
+
+            total_rows = self.guide_grid_table.rowCount()
+            for r in range(total_rows):
+                extra = 1 if (r % target_rows) < rem else 0
+                self.guide_grid_table.setRowHeight(r, base_row_h + extra)
+
+            self.guide_grid_table.verticalHeader().setDefaultSectionSize(base_row_h)
+            self.guide_grid_table.verticalScrollBar().setSingleStep(base_row_h)
+
+            col_w = max(130, int(base_row_h * 2.3))
             self.guide_grid_table.horizontalHeader().setDefaultSectionSize(col_w)
-            self.guide_grid_table.verticalHeader().setDefaultSectionSize(row_h)
 
-            # Update delegate font delta and trigger repaint
+            zoom_delta = int((base_row_h - 62) / 8)
             if hasattr(self, "grid_tile_delegate"):
-                self.grid_tile_delegate.set_zoom_delta(lvl)
+                self.grid_tile_delegate.set_zoom_delta(zoom_delta)
 
-            # Dynamic header font size
-            hdr_font_sz = max(9, 11 + lvl)
-            v_hdr_font_sz = max(10, 12 + lvl)
+            hdr_font_sz = max(9, min(24, 11 + zoom_delta))
+            v_hdr_font_sz = max(10, min(24, 12 + zoom_delta))
             self.guide_grid_table.setStyleSheet(
                 f"QTableWidget#guideGridTable QHeaderView::section:horizontal {{ font-size: {hdr_font_sz}px; }} "
                 f"QTableWidget#guideGridTable QHeaderView::section:vertical {{ font-size: {v_hdr_font_sz}px; }}"
@@ -5065,7 +5088,6 @@ class MainWindow(QMainWindow):
             self.guide_grid_table.viewport().update()
 
         # 2. List View sizing
-        # Base row height = 28, base font = 12px
         if hasattr(self, "guide_table"):
             list_font_sz = max(9, 12 + lvl)
             list_row_h = max(22, 28 + (lvl * 5))
@@ -5096,6 +5118,8 @@ class MainWindow(QMainWindow):
             else:
                 self.guide_maximize_btn.setToolTip("Maximize guide to fill window")
                 self.guide_maximize_btn.setIcon(self._create_guide_maximize_icon())
+
+        QTimer.singleShot(30, self._apply_guide_zoom)
 
     @staticmethod
     def _create_guide_maximize_icon() -> QIcon:
@@ -5723,6 +5747,9 @@ class MainWindow(QMainWindow):
                     self.guide_grid_table.setSpan(row_idx, start_col, 1, span)
 
                 current_col = start_col + span
+
+        # Ensure all populated rows fit intelligently flush at the bottom
+        self._apply_guide_zoom()
 
         # Auto-scroll based on selected date (unless preserving scroll position):
         if not keep_scroll:
