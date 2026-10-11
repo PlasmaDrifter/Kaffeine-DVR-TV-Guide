@@ -2323,11 +2323,13 @@ class MainWindow(QMainWindow):
             "QPushButton:pressed { background-color: #1a1e2b; border: 1px solid #353d50; }"
         )
         self.zoom_out_btn = QPushButton("-")
+        self.zoom_out_btn.setToolTip("Decrease guide font and box size")
         self.zoom_out_btn.setStyleSheet(zoom_btn_style)
         self.zoom_out_btn.clicked.connect(self.zoom_out_guide)
         filter_bar.addWidget(self.zoom_out_btn)
 
         self.zoom_in_btn = QPushButton("+")
+        self.zoom_in_btn.setToolTip("Increase guide font and box size")
         self.zoom_in_btn.setStyleSheet(zoom_btn_style)
         self.zoom_in_btn.clicked.connect(self.zoom_in_guide)
         filter_bar.addWidget(self.zoom_in_btn)
