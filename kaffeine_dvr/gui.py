@@ -3268,6 +3268,8 @@ class MainWindow(QMainWindow):
         self.playback_player_combo = QComboBox()
         from kaffeine_dvr.dbus_client import SUPPORTED_PLAYERS, detect_player_installation
 
+        cur_player = self.config_mgr.playback_player
+
         for key, pinfo in SUPPORTED_PLAYERS.items():
             pname = pinfo["name"]
             if key == "system":
@@ -3275,17 +3277,15 @@ class MainWindow(QMainWindow):
             else:
                 itype = detect_player_installation(key)
                 if itype == "native":
-                    label = f"{pname} (Installed)"
+                    self.playback_player_combo.addItem(f"{pname} (Installed)", key)
                 elif itype == "flatpak":
-                    label = f"{pname} (Flatpak)"
-                else:
-                    label = pname
-                self.playback_player_combo.addItem(label, key)
+                    self.playback_player_combo.addItem(f"{pname} (Flatpak)", key)
+                elif key == cur_player:
+                    self.playback_player_combo.addItem(f"{pname} (Not Detected)", key)
 
         self.playback_player_combo.addItem("Custom Command...", "custom")
         self.playback_player_combo.setFixedWidth(290)
 
-        cur_player = self.config_mgr.playback_player
         player_idx = self.playback_player_combo.findData(cur_player)
         if player_idx >= 0:
             self.playback_player_combo.setCurrentIndex(player_idx)
@@ -3315,10 +3315,9 @@ class MainWindow(QMainWindow):
             make_setting_label(
                 "Recorded Video Player:",
                 "Select which media player opens recorded shows from the Guide or Recordings:\n"
-                "• System Default: Opens using your desktop's default video player (xdg-open).\n"
-                "• SMPlayer / mpv / VLC: Launches the dedicated player directly.\n"
-                "• Kaffeine: Plays inside Kaffeine.\n"
-                "• Custom Command: Specify a custom player command (optional {file} placeholder)."
+                "• System Default: Opens videos with your desktop environment's default handler (xdg-open).\n"
+                "• Detected Players: Automatically discovers and lists media players installed on your system (supports both native package manager and Flatpak installations).\n"
+                "• Custom Command: Specify any custom player command, binary, or wrapper script (supports {file} placeholder)."
             ),
             player_container
         )
