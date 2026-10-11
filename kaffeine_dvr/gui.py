@@ -2605,6 +2605,7 @@ class MainWindow(QMainWindow):
                 pass
         hdr.sectionResized.connect(self._save_guide_table_header_state)
         hdr.sectionMoved.connect(self._save_guide_table_header_state)
+        self.guide_table.verticalHeader().setVisible(False)
         self.guide_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.guide_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.guide_table.itemSelectionChanged.connect(self.on_guide_selection_changed)
