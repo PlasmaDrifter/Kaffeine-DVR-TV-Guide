@@ -5018,7 +5018,7 @@ class MainWindow(QMainWindow):
         """Increase font and box size for both grid and list views."""
         if not hasattr(self, "guide_zoom_level"):
             self.guide_zoom_level = 0
-        if self.guide_zoom_level < 5:
+        if self.guide_zoom_level < 16:
             self.guide_zoom_level += 1
             self.settings.setValue("guide_zoom_level", self.guide_zoom_level)
             self._apply_guide_zoom()
@@ -5027,7 +5027,7 @@ class MainWindow(QMainWindow):
         """Decrease font and box size for both grid and list views."""
         if not hasattr(self, "guide_zoom_level"):
             self.guide_zoom_level = 0
-        if self.guide_zoom_level > -3:
+        if self.guide_zoom_level > -4:
             self.guide_zoom_level -= 1
             self.settings.setValue("guide_zoom_level", self.guide_zoom_level)
             self._apply_guide_zoom()
@@ -5038,9 +5038,9 @@ class MainWindow(QMainWindow):
 
         # Update enable state of buttons
         if hasattr(self, "zoom_in_btn"):
-            self.zoom_in_btn.setEnabled(lvl < 5)
+            self.zoom_in_btn.setEnabled(lvl < 16)
         if hasattr(self, "zoom_out_btn"):
-            self.zoom_out_btn.setEnabled(lvl > -3)
+            self.zoom_out_btn.setEnabled(lvl > -4)
 
         # 1. Grid View sizing
         # Base dimensions: col_width = 165, row_height = 62
