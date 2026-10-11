@@ -3336,20 +3336,18 @@ class MainWindow(QMainWindow):
         )
 
         self.notify_lead_spin = NumberStepper()
-        self.notify_lead_spin.setRange(0, 60)
+        self.notify_lead_spin.setRange(0, 999)
         self.notify_lead_spin.setValue(self.config_mgr.notification_lead_time_mins)
-        self.notify_lead_spin.setSpecialValueText("0 mins (at recording start)")
-        self.notify_lead_spin.setSuffix(" mins before start")
-        self.notify_lead_spin.setFixedWidth(240)
+        self.notify_lead_spin.setFixedWidth(160)
         self.notify_lead_spin.setEnabled(self.config_mgr.enable_desktop_notifications)
         self.notify_check.toggled.connect(self.notify_lead_spin.setEnabled)
 
         dvr_layout.addRow(
             make_setting_label(
-                "Notification Lead Time:",
-                "How many minutes before showtime to send the desktop notification:\n"
-                "• 0 mins: Sends notification at the exact moment the recording begins.\n"
-                "• 1–60 mins: Sends notification in advance before the recording starts."
+                "Notification Lead Time (Mins):",
+                "Minutes before show start time to send the desktop notification:\n"
+                "• 0: Sends notification at the exact moment the recording begins.\n"
+                "• 1–999: Sends notification in advance before the recording starts."
             ),
             self.notify_lead_spin
         )
