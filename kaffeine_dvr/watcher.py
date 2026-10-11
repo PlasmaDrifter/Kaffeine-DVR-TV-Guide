@@ -53,6 +53,8 @@ class Watcher:
 
     def check_and_dispatch(self, notify: bool = True) -> int:
         self.reap_children()
+        # Resolve any back-to-back buffer conflicts across different channels before arming
+        self.queue_mgr.resolve_consecutive_buffer_conflicts(dbus_client=self.dbus_client)
         due = self.queue_mgr.get_due_to_arm()
         armed_count = 0
         cfg = ConfigManager()

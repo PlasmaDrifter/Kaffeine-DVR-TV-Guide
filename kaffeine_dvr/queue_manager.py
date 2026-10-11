@@ -121,6 +121,7 @@ class QueueManager:
                 """, (title, effective_duration_iso, start_display, end_iso, lead_time_mins, buffer_mins, existing_id))
                 conn.commit()
             conn.close()
+            self.resolve_consecutive_buffer_conflicts()
             return existing_id
 
         now_str = datetime.now().isoformat()
@@ -133,7 +134,139 @@ class QueueManager:
         new_id = cur.lastrowid
         conn.commit()
         conn.close()
+        self.resolve_consecutive_buffer_conflicts()
         return new_id
+
+    def resolve_consecutive_buffer_conflicts(self, dbus_client=None) -> List[Dict[str, Any]]:
+        """
+        Detects back-to-back or consecutive scheduled recordings on different channels
+        where an earlier show's post-roll end buffer would collide with a subsequent
+        show's scheduled start time.
+
+        Automatically clamps the earlier show's end buffer to prevent tuner lock
+        contentions on single-tuner systems, ensuring the subsequent show starts on time.
+        """
+        conn = sqlite3.connect(str(self.db_path))
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT id, title, channel, start_iso, duration_iso, end_iso, buffer_mins, status, kaffeine_key
+            FROM recording_queue
+            WHERE status IN ('QUEUED', 'ARMED')
+            ORDER BY start_iso ASC, id ASC
+        """)
+        rows = [dict(r) for r in cur.fetchall()]
+        conn.close()
+
+        if len(rows) < 2:
+            return []
+
+        # Parse schedule records
+        parsed = []
+        for r in rows:
+            try:
+                start_dt = datetime.fromisoformat(r["start_iso"])
+                h, m, s = map(int, r["duration_iso"].split(":"))
+                total_secs = h * 3600 + m * 60 + s
+                buf_mins = int(r.get("buffer_mins") or 0)
+                base_secs = max(0, total_secs - (buf_mins * 60))
+                base_end_dt = start_dt + timedelta(seconds=base_secs)
+                buffered_end_dt = start_dt + timedelta(seconds=total_secs)
+                parsed.append({
+                    "id": r["id"],
+                    "title": r["title"],
+                    "channel": r["channel"].strip(),
+                    "status": r["status"],
+                    "kaffeine_key": r["kaffeine_key"],
+                    "start_dt": start_dt,
+                    "start_iso": r["start_iso"],
+                    "base_secs": base_secs,
+                    "base_end_dt": base_end_dt,
+                    "buf_mins": buf_mins,
+                    "buffered_end_dt": buffered_end_dt
+                })
+            except Exception:
+                continue
+
+        modified = []
+
+        for i in range(len(parsed)):
+            rec_a = parsed[i]
+            if rec_a["buf_mins"] <= 0:
+                continue
+
+            for j in range(i + 1, len(parsed)):
+                rec_b = parsed[j]
+                # If rec_b starts at or after rec_a's buffered end, no collision
+                if rec_b["start_dt"] >= rec_a["buffered_end_dt"]:
+                    continue
+
+                # Check if on different channels
+                if rec_a["channel"].lower() != rec_b["channel"].lower():
+                    # If rec_b starts at or after rec_a's base_end time:
+                    if rec_b["start_dt"] >= rec_a["base_end_dt"]:
+                        allowed_buffer_secs = max(0, int((rec_b["start_dt"] - rec_a["base_end_dt"]).total_seconds()))
+                        clamped_buf_mins = allowed_buffer_secs // 60
+
+                        if clamped_buf_mins < rec_a["buf_mins"]:
+                            old_buf = rec_a["buf_mins"]
+                            rec_a["buf_mins"] = clamped_buf_mins
+                            new_total_secs = rec_a["base_secs"] + (clamped_buf_mins * 60)
+                            rec_a["buffered_end_dt"] = rec_a["start_dt"] + timedelta(seconds=new_total_secs)
+
+                            bh = new_total_secs // 3600
+                            bm = (new_total_secs % 3600) // 60
+                            bs = new_total_secs % 60
+                            new_dur_iso = f"{bh:02d}:{bm:02d}:{bs:02d}"
+                            new_end_iso = rec_a["buffered_end_dt"].strftime("%Y-%m-%dT%H:%M:%S")
+
+                            # Persist to database
+                            conn = sqlite3.connect(str(self.db_path))
+                            c = conn.cursor()
+                            c.execute("""
+                                UPDATE recording_queue
+                                SET duration_iso = ?, end_iso = ?, buffer_mins = ?
+                                WHERE id = ?
+                            """, (new_dur_iso, new_end_iso, clamped_buf_mins, rec_a["id"]))
+                            conn.commit()
+                            conn.close()
+
+                            # If armed in Kaffeine, update the active Kaffeine timer
+                            if rec_a["status"] == "ARMED" and rec_a["kaffeine_key"] and dbus_client:
+                                try:
+                                    dbus_client.remove_recording(rec_a["kaffeine_key"])
+                                    new_key = dbus_client.schedule_recording(
+                                        rec_a["title"], rec_a["channel"],
+                                        rec_a["start_iso"], new_dur_iso, 0
+                                    )
+                                    if new_key and new_key > 0:
+                                        conn = sqlite3.connect(str(self.db_path))
+                                        c = conn.cursor()
+                                        c.execute("UPDATE recording_queue SET kaffeine_key = ? WHERE id = ?", (new_key, rec_a["id"]))
+                                        conn.commit()
+                                        conn.close()
+                                        rec_a["kaffeine_key"] = new_key
+                                except Exception as e:
+                                    print(f"Error updating Kaffeine timer for '{rec_a['title']}': {e}")
+
+                            now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                            print(
+                                f"[{now_str}] Buffer Conflict Resolved: Clamped end buffer for '{rec_a['title']}' "
+                                f"({rec_a['channel']}) from {old_buf}m to {clamped_buf_mins}m to allow consecutive show "
+                                f"'{rec_b['title']}' ({rec_b['channel']}) to start on time at {rec_b['start_iso']}.",
+                                flush=True
+                            )
+                            modified.append({
+                                "id": rec_a["id"],
+                                "title": rec_a["title"],
+                                "channel": rec_a["channel"],
+                                "old_buffer": old_buf,
+                                "new_buffer": clamped_buf_mins,
+                                "next_title": rec_b["title"],
+                                "next_channel": rec_b["channel"]
+                            })
+
+        return modified
 
     def update_recording_buffer(self, queue_id: int, new_buffer_mins: int) -> bool:
         """
@@ -177,6 +310,7 @@ class QueueManager:
             """, (new_dur_iso, new_end_iso, new_buffer_mins, queue_id))
             conn.commit()
             conn.close()
+            self.resolve_consecutive_buffer_conflicts()
             return True
         except Exception as e:
             print(f"Error updating buffer for recording {queue_id}: {e}")
