@@ -216,14 +216,14 @@ class KaffeineDbusClient:
                 import threading
                 threading.Thread(target=self._minimize_window_async, args=(mode,), daemon=True).start()
 
-            # Wait up to 8 seconds for Kaffeine to register on D-Bus
+            # Wait up to 10 seconds for Kaffeine to register on D-Bus
             import time
-            for _ in range(32):
+            for _ in range(40):
                 time.sleep(0.25)
                 if self.is_running():
                     time.sleep(0.5)
                     return True
-            return True
+            return self.is_running()
         except Exception as e:
             print(f"Error launching kaffeine: {e}")
             return False
@@ -264,8 +264,9 @@ class KaffeineDbusClient:
                     subprocess.run([kdotool_bin, "windowminimize", wid], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
                 return bool(kaffeine_wids)
             elif xdotool_bin:
+                # Use exact class regex '^kaffeine$' so kaffeine-dvr GUI window is strictly excluded
                 res = subprocess.run(
-                    [xdotool_bin, "search", "--class", "kaffeine"],
+                    [xdotool_bin, "search", "--class", "^kaffeine$"],
                     env=env,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
@@ -275,8 +276,8 @@ class KaffeineDbusClient:
                 wids = [w.strip() for w in res.stdout.strip().splitlines() if w.strip()]
                 kaffeine_wids = []
                 for wid in wids:
-                    cls = subprocess.run([xdotool_bin, "getwindowclassname", wid], env=env, stdout=subprocess.PIPE, text=True, timeout=1.0).stdout.strip().lower()
-                    if "dvr" in cls:
+                    w_title = subprocess.run([xdotool_bin, "getwindowname", wid], env=env, stdout=subprocess.PIPE, text=True, timeout=1.0).stdout.strip().lower()
+                    if "dvr" in w_title:
                         continue
                     kaffeine_wids.append(wid)
                     subprocess.run([xdotool_bin, "windowminimize", wid], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
@@ -345,8 +346,9 @@ class KaffeineDbusClient:
                         if time.time() - first_match_time >= post_match_duration:
                             break
                 elif xdotool_bin:
+                    # Use exact class regex '^kaffeine$' so kaffeine-dvr GUI window is strictly excluded
                     res = subprocess.run(
-                        [xdotool_bin, "search", "--class", "kaffeine"],
+                        [xdotool_bin, "search", "--class", "^kaffeine$"],
                         env=env,
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE,
@@ -356,9 +358,10 @@ class KaffeineDbusClient:
                     wids = [w.strip() for w in res.stdout.strip().splitlines() if w.strip()]
                     kaffeine_wids = []
                     for wid in wids:
-                        cls = subprocess.run([xdotool_bin, "getwindowclassname", wid], env=env, stdout=subprocess.PIPE, text=True, timeout=1.0).stdout.strip().lower()
-                        if "dvr" not in cls:
-                            kaffeine_wids.append(wid)
+                        w_title = subprocess.run([xdotool_bin, "getwindowname", wid], env=env, stdout=subprocess.PIPE, text=True, timeout=1.0).stdout.strip().lower()
+                        if "dvr" in w_title:
+                            continue
+                        kaffeine_wids.append(wid)
                     if kaffeine_wids:
                         if first_match_time is None:
                             first_match_time = time.time()
@@ -650,6 +653,13 @@ class KaffeineDbusClient:
         repeat: 0 for once, bitmask for recurring days
         Returns the recording ID.
         """
+        if not self.is_running():
+            import time
+            for _ in range(16):
+                time.sleep(0.25)
+                if self.is_running():
+                    break
+
         if self.is_running():
             # Check for existing scheduled/active timers in Kaffeine to avoid duplicate recording files
             try:

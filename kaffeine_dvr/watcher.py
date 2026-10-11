@@ -166,7 +166,10 @@ class Watcher:
                 # Ensure Kaffeine is running (launches if closed) and schedules via D-Bus
                 if not self.dbus_client.is_running():
                     self.dbus_client.launch_kaffeine(mode=cfg.launch_mode)
-                    time.sleep(1)
+                    for _ in range(20):
+                        if self.dbus_client.is_running():
+                            break
+                        time.sleep(0.25)
                 elif cfg.launch_mode in ("taskbar", "tray") or cfg.launch_minimized:
                     self.dbus_client.minimize_kaffeine(mode=cfg.launch_mode)
                 key = self.dbus_client.schedule_recording(title, channel, dispatch_start_iso, dispatch_dur_iso, 0)
