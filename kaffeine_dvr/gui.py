@@ -5451,9 +5451,11 @@ class MainWindow(QMainWindow):
             self._adjust_table_columns()
 
     def _update_time_jump_buttons_visibility(self):
-        is_grid = self.guide_stack.currentIndex() == 0
-        self.jump_now_btn.setVisible(is_grid)
-        self.jump_prime_btn.setVisible(is_grid)
+        # Keep Jump to Now and Prime Time buttons visible in both Grid and List views
+        if hasattr(self, "jump_now_btn"):
+            self.jump_now_btn.setVisible(True)
+        if hasattr(self, "jump_prime_btn"):
+            self.jump_prime_btn.setVisible(True)
 
     def _on_guide_view_toggled(self):
         if self.grid_view_btn.isChecked():
@@ -5485,16 +5487,18 @@ class MainWindow(QMainWindow):
         bar.setValue(max(0, min(bar.maximum(), target_val)))
 
     def jump_guide_to_now(self):
-        now = datetime.now()
-        # 10-minute buffer: if 50+ minutes past the hour, advance to the next hour's slot
-        if now.minute >= 50:
-            target_slot = min(47, (now.hour + 1) * 2)
-        elif now.minute >= 30:
-            target_slot = now.hour * 2 + 1
+        if self._is_grid_view_active():
+            now = datetime.now()
+            # 10-minute buffer: if 50+ minutes past the hour, advance to the next hour's slot
+            if now.minute >= 50:
+                target_slot = min(47, (now.hour + 1) * 2)
+            elif now.minute >= 30:
+                target_slot = now.hour * 2 + 1
+            else:
+                target_slot = now.hour * 2
+            self._scroll_grid_to_slot(target_slot, center=False)
         else:
-            target_slot = now.hour * 2
-
-        self._scroll_grid_to_slot(target_slot, center=False)
+            self._scroll_list_to_first_active()
 
     def jump_guide_to_start(self):
         self._scroll_grid_to_slot(0, center=False)
@@ -5504,8 +5508,44 @@ class MainWindow(QMainWindow):
         self._scroll_grid_to_slot(24, center=False)
 
     def jump_guide_to_primetime(self):
-        # 7:00 PM (19:00) is hour 19 -> slot 38
-        self._scroll_grid_to_slot(38, center=False)
+        if self._is_grid_view_active():
+            # 7:00 PM (19:00) is hour 19 -> slot 38
+            self._scroll_grid_to_slot(38, center=False)
+        else:
+            self._scroll_list_to_primetime()
+
+    def _scroll_list_to_primetime(self):
+        """Scroll list guide table to the first show at or after 7:00 PM (19:00)."""
+        if self.guide_stack.currentIndex() != 1:
+            return
+        programs = getattr(self, "current_guide_items", None) or []
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        prime_row = -1
+
+        for r, p in enumerate(programs):
+            start_iso = p.get("start_iso", "")
+            # Check for today's prime time (>= 19:00)
+            if start_iso.startswith(today_str) and len(start_iso) >= 16:
+                time_part = start_iso[11:16]
+                if time_part >= "19:00":
+                    prime_row = r
+                    break
+            elif start_iso > f"{today_str}T19:00":
+                prime_row = r
+                break
+
+        if prime_row < 0:
+            # Fallback to any show at or after 19:00
+            for r, p in enumerate(programs):
+                start_iso = p.get("start_iso", "")
+                if len(start_iso) >= 16 and start_iso[11:16] >= "19:00":
+                    prime_row = r
+                    break
+
+        if prime_row >= 0 and prime_row < self.guide_table.rowCount():
+            target_item = self.guide_table.item(prime_row, 1) or self.guide_table.item(prime_row, 0)
+            if target_item:
+                self.guide_table.scrollToItem(target_item, QTableWidget.ScrollHint.PositionAtTop)
 
     def _is_grid_view_active(self) -> bool:
         return hasattr(self, "guide_stack") and self.guide_stack.currentIndex() == 0
