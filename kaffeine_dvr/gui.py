@@ -2302,13 +2302,11 @@ class MainWindow(QMainWindow):
             "QPushButton:pressed { background-color: #1a1e2b; border: 1px solid #353d50; }"
         )
         self.jump_now_btn = QPushButton("Jump to Now")
-        self.jump_now_btn.setToolTip("Scroll guide grid to current time")
         self.jump_now_btn.setStyleSheet(jump_btn_style)
         self.jump_now_btn.clicked.connect(self.jump_guide_to_now)
         filter_bar.addWidget(self.jump_now_btn)
 
         self.jump_prime_btn = QPushButton("Prime Time (7 PM)")
-        self.jump_prime_btn.setToolTip("Scroll guide grid to 7:00 PM (19:00) evening prime time")
         self.jump_prime_btn.setStyleSheet(jump_btn_style)
         self.jump_prime_btn.clicked.connect(self.jump_guide_to_primetime)
         filter_bar.addWidget(self.jump_prime_btn)
@@ -2325,13 +2323,11 @@ class MainWindow(QMainWindow):
             "QPushButton:pressed { background-color: #1a1e2b; border: 1px solid #353d50; }"
         )
         self.zoom_out_btn = QPushButton("-")
-        self.zoom_out_btn.setToolTip("Decrease guide font and box size")
         self.zoom_out_btn.setStyleSheet(zoom_btn_style)
         self.zoom_out_btn.clicked.connect(self.zoom_out_guide)
         filter_bar.addWidget(self.zoom_out_btn)
 
         self.zoom_in_btn = QPushButton("+")
-        self.zoom_in_btn.setToolTip("Increase guide font and box size")
         self.zoom_in_btn.setStyleSheet(zoom_btn_style)
         self.zoom_in_btn.clicked.connect(self.zoom_in_guide)
         filter_bar.addWidget(self.zoom_in_btn)
@@ -5008,7 +5004,6 @@ class MainWindow(QMainWindow):
         self.day_nav_prev_btn.setIcon(self._create_nav_arrow_icon("left"))
         self.day_nav_prev_btn.setIconSize(QSize(20, 20))
         self.day_nav_prev_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.day_nav_prev_btn.setToolTip("Previous week (Sun - Sat)")
         self.day_nav_prev_btn.setFixedWidth(36)
         self.day_nav_prev_btn.setFixedHeight(44)
         self.day_nav_prev_btn.setStyleSheet(arrow_style)
@@ -5061,7 +5056,6 @@ class MainWindow(QMainWindow):
         self.day_nav_next_btn.setIcon(self._create_nav_arrow_icon("right"))
         self.day_nav_next_btn.setIconSize(QSize(20, 20))
         self.day_nav_next_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.day_nav_next_btn.setToolTip("Next week (Sun - Sat)")
         self.day_nav_next_btn.setFixedWidth(36)
         self.day_nav_next_btn.setFixedHeight(44)
         self.day_nav_next_btn.setStyleSheet(arrow_style)
@@ -5188,16 +5182,13 @@ class MainWindow(QMainWindow):
             full_label = f"{day_name}, {short_date}"
             if is_today and is_selected:
                 btn.setStyleSheet(self._day_style_today_selected)
-                btn.setToolTip(f"{full_label} (Current Day - Selected)")
             elif is_today:
                 btn.setStyleSheet(self._day_style_today_unselected)
-                btn.setToolTip(f"{full_label} (Current Day)")
             elif is_selected:
                 btn.setStyleSheet(self._day_style_selected)
-                btn.setToolTip(f"{full_label} (Selected)")
             else:
                 btn.setStyleSheet(self._day_style_unselected)
-                btn.setToolTip(full_label)
+            btn.setToolTip("")
 
         if hasattr(self, "day_nav_prev_btn"):
             self.day_nav_prev_btn.setEnabled(self.day_nav_offset > 0)
