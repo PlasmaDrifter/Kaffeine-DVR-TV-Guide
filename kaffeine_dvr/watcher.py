@@ -53,42 +53,46 @@ class Watcher:
 
     def stop_lingering_buffers_for_upcoming_shows(self):
         """
-        If an active recording is past its scheduled base end time (currently recording post-roll buffer)
-        and another show on a different channel is due to record, stop the buffer recording immediately
-        to release the hardware tuner.
+        Releases the hardware tuner when consecutive recordings on different channels
+        are scheduled.
+        1. If an active recording has reached its target end time (e.g. 10s early cutoff or post-roll buffer)
+           and another show on a different channel is starting soon, stops the active recording.
+        2. Queries Kaffeine via D-Bus: if an upcoming show on a different channel starts within 20s,
+           ensures any running stream on a different channel is stopped immediately.
         """
         active_recordings = self.queue_mgr.list_queue(include_completed=False)
         now = datetime.now()
 
-        currently_recording = [r for r in active_recordings if r.get("status") == "RECORDING"]
-        if not currently_recording:
-            return
+        upcoming = []
+        for r in active_recordings:
+            if r.get("status") in ("QUEUED", "ARMED"):
+                try:
+                    s_dt = datetime.fromisoformat(r["start_iso"])
+                    if s_dt <= now + timedelta(minutes=2):
+                        upcoming.append((r, s_dt))
+                except Exception:
+                    continue
 
-        upcoming = [
-            r for r in active_recordings
-            if r.get("status") in ("QUEUED", "ARMED")
-            and (datetime.fromisoformat(r["start_iso"]) <= now + timedelta(minutes=2))
-        ]
         if not upcoming:
             return
 
+        currently_recording = [r for r in active_recordings if r.get("status") == "RECORDING"]
+
         for rec_a in currently_recording:
             try:
-                start_dt = datetime.fromisoformat(rec_a["start_iso"])
-                h, m, s = map(int, rec_a["duration_iso"].split(":"))
-                total_secs = h * 3600 + m * 60 + s
-                buf_mins = int(rec_a.get("buffer_mins") or 0)
-                base_secs = max(0, total_secs - (buf_mins * 60))
-                base_end_dt = start_dt + timedelta(seconds=base_secs)
+                ch_a = rec_a.get("channel", "").strip().lower()
+                end_a_dt = datetime.fromisoformat(rec_a["end_iso"])
 
-                if now >= base_end_dt:
-                    for rec_b in upcoming:
-                        if rec_a.get("channel", "").strip().lower() != rec_b.get("channel", "").strip().lower():
-                            k_key = rec_a.get("kaffeine_key")
-                            if k_key:
+                for rec_b, s_b_dt in upcoming:
+                    ch_b = rec_b.get("channel", "").strip().lower()
+                    if ch_a != ch_b:
+                        diff = (s_b_dt - end_a_dt).total_seconds()
+                        if -60 <= diff <= 90:
+                            if now >= end_a_dt:
+                                k_key = rec_a.get("kaffeine_key")
                                 now_str = now.strftime('%Y-%m-%d %H:%M:%S')
                                 print(
-                                    f"[{now_str}] Releasing tuner: Stopping buffer on '{rec_a.get('title')}' "
+                                    f"[{now_str}] Releasing tuner (handover): Stopping '{rec_a.get('title')}' "
                                     f"({rec_a.get('channel')}) so '{rec_b.get('title')}' ({rec_b.get('channel')}) can record.",
                                     flush=True
                                 )
@@ -98,9 +102,35 @@ class Watcher:
                                     title=rec_a.get("title")
                                 )
                                 self.queue_mgr.archive_to_history(rec_a["id"])
-                            break
+                                break
             except Exception as e:
                 print(f"Error checking lingering buffers: {e}", flush=True)
+
+        # Safeguard via D-Bus: if an upcoming show starts in <= 15 seconds,
+        # ensure no active stream is running on another channel in Kaffeine
+        for rec_b, s_b_dt in upcoming:
+            secs_until_b = (s_b_dt - now).total_seconds()
+            if 0 <= secs_until_b <= 15:
+                ch_b = rec_b.get("channel", "").strip().lower()
+                try:
+                    active_dbus = self.dbus_client._list_via_dbus()
+                    for entry in active_dbus:
+                        if entry.get("is_running"):
+                            e_ch = (entry.get("channel") or "").strip().lower()
+                            if e_ch and e_ch != ch_b:
+                                now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                                print(
+                                    f"[{now_str}] Releasing tuner (D-Bus guard): Stopping running stream '{entry.get('name')}' "
+                                    f"({entry.get('channel')}) {secs_until_b:.0f}s before '{rec_b.get('title')}' ({rec_b.get('channel')}) starts.",
+                                    flush=True
+                                )
+                                self.dbus_client.cancel_recording(
+                                    key=entry.get("id"),
+                                    channel=entry.get("channel"),
+                                    title=entry.get("name")
+                                )
+                except Exception as e:
+                    print(f"Error checking D-Bus running streams: {e}", flush=True)
 
     def check_and_dispatch(self, notify: bool = True) -> int:
         self.reap_children()
@@ -119,9 +149,19 @@ class Watcher:
             duration_iso = rec["duration_iso"]
             start_local = rec.get("start_time_local", start_iso)
             rec_id = rec["id"]
-            
+
+            # Compute effective dispatch parameters (10s delayed start cheat for consecutive recordings on different channels)
+            dispatch_start_iso, dispatch_dur_iso = self.queue_mgr.get_effective_dispatch_params(rec)
+            if dispatch_start_iso != start_iso:
+                now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                print(
+                    f"[{now_str}] Tuner Handover Cheat: Offsetting start of '{title}' ({channel}) "
+                    f"by +10s to {dispatch_start_iso} (dur: {dispatch_dur_iso}) to ensure preceding channel releases tuner.",
+                    flush=True
+                )
+
             now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            print(f"[{now_str}] Program due: '{title}' on {channel} at {start_iso}. Arming into Kaffeine...", flush=True)
+            print(f"[{now_str}] Program due: '{title}' on {channel} at {dispatch_start_iso}. Arming into Kaffeine...", flush=True)
             try:
                 # Ensure Kaffeine is running (launches if closed) and schedules via D-Bus
                 if not self.dbus_client.is_running():
@@ -129,7 +169,7 @@ class Watcher:
                     time.sleep(1)
                 elif cfg.launch_mode in ("taskbar", "tray") or cfg.launch_minimized:
                     self.dbus_client.minimize_kaffeine(mode=cfg.launch_mode)
-                key = self.dbus_client.schedule_recording(title, channel, start_iso, duration_iso, 0)
+                key = self.dbus_client.schedule_recording(title, channel, dispatch_start_iso, dispatch_dur_iso, 0)
                 if key and key > 0:
                     self.queue_mgr.mark_armed(rec_id, key)
                     if cfg.launch_mode in ("taskbar", "tray") or cfg.launch_minimized:
@@ -197,6 +237,30 @@ class Watcher:
             except Exception as e:
                 print(f"[{now_str}] Error during periodic guide sync: {e}", flush=True)
 
+    def _calculate_sleep_interval(self, default_interval: int) -> int:
+        """
+        Dynamically adjusts sleep interval:
+        - If any recording is currently RECORDING or an upcoming show is due within 3 minutes:
+          sleep 5 seconds for responsive tuner handover, buffer trimming, and prompt dispatch.
+        - Otherwise, sleep the configured default interval.
+        """
+        try:
+            active = self.queue_mgr.list_queue(include_completed=False)
+            now = datetime.now()
+            if any(r.get("status") == "RECORDING" for r in active):
+                return 5
+            for r in active:
+                if r.get("status") in ("QUEUED", "ARMED"):
+                    try:
+                        s_dt = datetime.fromisoformat(r["start_iso"])
+                        if s_dt <= now + timedelta(minutes=3):
+                            return 5
+                    except Exception:
+                        continue
+        except Exception:
+            pass
+        return max(5, default_interval)
+
     def run_loop(self, interval_seconds: int = 120):
         print(f"Kaffeine DVR Watcher running (check interval: {interval_seconds}s).", flush=True)
         # Run an initial guide & rules check on daemon startup
@@ -208,4 +272,9 @@ class Watcher:
                 self.check_periodic_sync()
             except Exception as e:
                 print(f"Error in watcher cycle: {e}", flush=True)
-            time.sleep(interval_seconds)
+
+            sleep_time = self._calculate_sleep_interval(interval_seconds)
+            for _ in range(int(sleep_time)):
+                if not self.running:
+                    break
+                time.sleep(1)

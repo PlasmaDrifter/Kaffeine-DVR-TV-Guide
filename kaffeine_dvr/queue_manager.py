@@ -1,7 +1,7 @@
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 class QueueManager:
     def __init__(self, data_dir: Optional[Path] = None):
@@ -192,20 +192,100 @@ class QueueManager:
 
         for i in range(len(parsed)):
             rec_a = parsed[i]
-            if rec_a["buf_mins"] <= 0:
-                continue
 
             for j in range(i + 1, len(parsed)):
                 rec_b = parsed[j]
-                # If rec_b starts at or after rec_a's buffered end, no collision
-                if rec_b["start_dt"] >= rec_a["buffered_end_dt"]:
+                # If rec_b starts after rec_a's buffered end by more than 60s, no collision
+                if rec_b["start_dt"] >= rec_a["buffered_end_dt"] + timedelta(seconds=60):
                     continue
 
                 # Check if on different channels
                 if rec_a["channel"].lower() != rec_b["channel"].lower():
-                    # If rec_b starts at or after rec_a's base_end time:
-                    if rec_b["start_dt"] >= rec_a["base_end_dt"]:
-                        allowed_buffer_secs = max(0, int((rec_b["start_dt"] - rec_a["base_end_dt"]).total_seconds()))
+                    gap_secs = (rec_b["start_dt"] - rec_a["base_end_dt"]).total_seconds()
+
+                    # CASE 1: Back-to-back handover on different channels (|gap| <= 60s)
+                    if abs(gap_secs) <= 60:
+                        old_buf = rec_a["buf_mins"]
+                        rec_a["buf_mins"] = 0
+
+                        # Stop rec_a 10 seconds early (target end is rec_b["start_dt"] - 10s)
+                        target_end_a = rec_b["start_dt"] - timedelta(seconds=10)
+                        new_total_secs = max(30, int((target_end_a - rec_a["start_dt"]).total_seconds()))
+                        rec_a["buffered_end_dt"] = target_end_a
+                        rec_a["base_end_dt"] = target_end_a
+
+                        bh = new_total_secs // 3600
+                        bm = (new_total_secs % 3600) // 60
+                        bs = new_total_secs % 60
+                        new_dur_iso = f"{bh:02d}:{bm:02d}:{bs:02d}"
+                        new_end_iso = target_end_a.strftime("%Y-%m-%dT%H:%M:%S")
+
+                        # Persist to database if changed
+                        if (rec_a.get("duration_iso") != new_dur_iso) or (old_buf != 0):
+                            rec_a["duration_iso"] = new_dur_iso
+                            rec_a["end_iso"] = new_end_iso
+
+                            conn = sqlite3.connect(str(self.db_path))
+                            c = conn.cursor()
+                            c.execute("""
+                                UPDATE recording_queue
+                                SET duration_iso = ?, end_iso = ?, buffer_mins = 0
+                                WHERE id = ?
+                            """, (new_dur_iso, new_end_iso, rec_a["id"]))
+                            conn.commit()
+                            conn.close()
+
+                            # If armed in Kaffeine, update the active Kaffeine timer
+                            if rec_a["status"] == "ARMED" and rec_a["kaffeine_key"] and dbus_client:
+                                try:
+                                    dbus_client.remove_recording(rec_a["kaffeine_key"])
+                                    new_key = dbus_client.schedule_recording(
+                                        rec_a["title"], rec_a["channel"],
+                                        rec_a["start_iso"], new_dur_iso, 0
+                                    )
+                                    if new_key and new_key > 0:
+                                        conn = sqlite3.connect(str(self.db_path))
+                                        c = conn.cursor()
+                                        c.execute("UPDATE recording_queue SET kaffeine_key = ? WHERE id = ?", (new_key, rec_a["id"]))
+                                        conn.commit()
+                                        conn.close()
+                                        rec_a["kaffeine_key"] = new_key
+                                except Exception as e:
+                                    print(f"Error updating Kaffeine timer for '{rec_a['title']}': {e}")
+
+                            # If already in Kaffeine schedule, also sync new duration to Kaffeine's sqlite.db
+                            if rec_a["kaffeine_key"]:
+                                try:
+                                    k_db = Path.home() / ".local" / "share" / "kaffeine" / "sqlite.db"
+                                    if k_db.exists():
+                                        k_conn = sqlite3.connect(str(k_db))
+                                        k_cur = k_conn.cursor()
+                                        k_cur.execute("UPDATE RecordingSchedule SET Duration = ? WHERE Id = ?", (new_dur_iso, rec_a["kaffeine_key"]))
+                                        k_conn.commit()
+                                        k_conn.close()
+                                except Exception as e:
+                                    print(f"Error syncing Duration to Kaffeine sqlite.db: {e}")
+
+                            now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                            print(
+                                f"[{now_str}] Back-to-Back Handover Tuned: Stopped '{rec_a['title']}' ({rec_a['channel']}) "
+                                f"10s early at {new_end_iso} (dur: {new_dur_iso}, buffer: 0m) for consecutive show "
+                                f"'{rec_b['title']}' ({rec_b['channel']}) starting at {rec_b['start_iso']}.",
+                                flush=True
+                            )
+                            modified.append({
+                                "id": rec_a["id"],
+                                "title": rec_a["title"],
+                                "channel": rec_a["channel"],
+                                "old_buffer": old_buf,
+                                "new_buffer": 0,
+                                "next_title": rec_b["title"],
+                                "next_channel": rec_b["channel"]
+                            })
+
+                    # CASE 2: Not back-to-back, but buffer of rec_a extends into rec_b
+                    elif gap_secs > 60 and rec_b["start_dt"] < rec_a["buffered_end_dt"]:
+                        allowed_buffer_secs = max(0, int((rec_b["start_dt"] - rec_a["base_end_dt"]).total_seconds()) - 10)
                         clamped_buf_mins = allowed_buffer_secs // 60
 
                         if clamped_buf_mins < rec_a["buf_mins"]:
@@ -280,6 +360,54 @@ class QueueManager:
                             })
 
         return modified
+
+    def get_effective_dispatch_params(self, rec: Dict[str, Any]) -> Tuple[str, str]:
+        """
+        Determines the exact begin_iso and duration_iso to send to Kaffeine.
+        If this recording is consecutive with an earlier recording on a different channel
+        (predecessor finishes within 60s of this recording's start), applies a 10-second
+        delayed start cheat (start + 10s, duration - 10s) to give the tuner hardware a
+        guaranteed clear window to release and retune.
+        """
+        try:
+            start_dt = datetime.fromisoformat(rec["start_iso"])
+            h, m, s = map(int, rec["duration_iso"].split(":"))
+            total_secs = h * 3600 + m * 60 + s
+            ch = (rec.get("channel") or "").strip().lower()
+
+            conn = sqlite3.connect(str(self.db_path))
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT channel, end_iso, status FROM recording_queue
+                WHERE id != ? AND status IN ('QUEUED', 'ARMED', 'RECORDING')
+            """, (rec["id"],))
+            rows = [dict(r) for r in cur.fetchall()]
+            conn.close()
+
+            for r in rows:
+                r_ch = (r.get("channel") or "").strip().lower()
+                if r_ch == ch:
+                    continue
+                try:
+                    r_end = datetime.fromisoformat(r["end_iso"])
+                    diff = (start_dt - r_end).total_seconds()
+                    # If predecessor ends between 60s before and 60s after start_dt
+                    if -60 <= diff <= 60:
+                        adj_start = start_dt + timedelta(seconds=10)
+                        adj_secs = max(30, total_secs - 10)
+                        adj_start_iso = adj_start.strftime("%Y-%m-%dT%H:%M:%S")
+                        ah = adj_secs // 3600
+                        am = (adj_secs % 3600) // 60
+                        as_sec = adj_secs % 60
+                        adj_dur_iso = f"{ah:02d}:{am:02d}:{as_sec:02d}"
+                        return adj_start_iso, adj_dur_iso
+                except Exception:
+                    continue
+        except Exception as e:
+            print(f"Error computing dispatch params: {e}")
+
+        return rec["start_iso"], rec["duration_iso"]
 
     def update_recording_buffer(self, queue_id: int, new_buffer_mins: int) -> bool:
         """

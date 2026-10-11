@@ -667,7 +667,7 @@ class KaffeineDbusClient:
                                 flush=True
                             )
                             return int(entry["id"])
-                        elif entry.get("duration") == duration_iso:
+                        elif entry.get("duration") == duration_iso and (not entry.get("begin") or entry.get("begin") == begin_iso):
                             return int(entry["id"])
                         else:
                             # Stale schedule parameters: remove old timer before adding updated one
