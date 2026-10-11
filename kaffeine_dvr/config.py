@@ -75,6 +75,10 @@ class ConfigManager:
                         data["last_update_check_timestamp"] = 0.0
                     if "dismissed_update_version" not in data:
                         data["dismissed_update_version"] = ""
+                    if "playback_player" not in data:
+                        data["playback_player"] = "system"
+                    if "custom_playback_player_cmd" not in data:
+                        data["custom_playback_player_cmd"] = ""
                     return data
             except Exception:
                 pass
@@ -111,7 +115,9 @@ class ConfigManager:
             "auto_check_updates": False,
             "update_check_frequency": "monthly",
             "last_update_check_timestamp": 0.0,
-            "dismissed_update_version": ""
+            "dismissed_update_version": "",
+            "playback_player": "system",
+            "custom_playback_player_cmd": ""
         }
         self._save(default_data)
         return default_data
@@ -266,6 +272,24 @@ class ConfigManager:
     @guide_watch_mode.setter
     def guide_watch_mode(self, val: str):
         self.data["guide_watch_mode"] = val
+        self.save()
+
+    @property
+    def playback_player(self) -> str:
+        return self.data.get("playback_player", "system")
+
+    @playback_player.setter
+    def playback_player(self, val: str):
+        self.data["playback_player"] = val
+        self.save()
+
+    @property
+    def custom_playback_player_cmd(self) -> str:
+        return self.data.get("custom_playback_player_cmd", "")
+
+    @custom_playback_player_cmd.setter
+    def custom_playback_player_cmd(self, val: str):
+        self.data["custom_playback_player_cmd"] = val
         self.save()
 
     @property

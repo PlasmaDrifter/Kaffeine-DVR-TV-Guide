@@ -389,20 +389,63 @@ class KaffeineDbusClient:
         except Exception:
             pass
 
-    def play_file(self, file_path: str) -> bool:
-        """Play a recorded media file in Kaffeine or system default player."""
+    def play_file(self, file_path: str, player: Optional[str] = None, custom_cmd: Optional[str] = None) -> bool:
+        """
+        Play a recorded media file in the user's selected media player:
+        - 'system': system default handler (xdg-open)
+        - 'smplayer': SMPlayer
+        - 'mpv': mpv media player
+        - 'vlc': VLC media player
+        - 'kaffeine': Kaffeine
+        - 'custom': user-defined command template or command with file appended
+        Falls back to xdg-open or Kaffeine if the selected player is not found.
+        """
         if not file_path or not os.path.exists(file_path):
             return False
         env = self._get_display_env()
+        player_mode = (player or "system").lower().strip()
+
+        import shutil
+        import shlex
+
+        cmd = []
+        if player_mode == "custom" and custom_cmd and custom_cmd.strip():
+            cmd_str = custom_cmd.strip()
+            if "{file}" in cmd_str:
+                cmd = shlex.split(cmd_str.replace("{file}", str(file_path)))
+            else:
+                cmd = shlex.split(cmd_str) + [str(file_path)]
+        elif player_mode == "smplayer":
+            bin_path = shutil.which("smplayer")
+            if bin_path:
+                cmd = [bin_path, str(file_path)]
+        elif player_mode == "mpv":
+            bin_path = shutil.which("mpv")
+            if bin_path:
+                cmd = [bin_path, str(file_path)]
+        elif player_mode == "vlc":
+            bin_path = shutil.which("vlc")
+            if bin_path:
+                cmd = [bin_path, str(file_path)]
+        elif player_mode == "kaffeine":
+            bin_path = self.get_kaffeine_bin()
+            if bin_path:
+                cmd = [bin_path, str(file_path)]
+
+        if not cmd:
+            # Default or fallback to system default / xdg-open
+            cmd = ["xdg-open", str(file_path)]
+
         try:
-            subprocess.Popen([self.get_kaffeine_bin(), str(file_path)], env=env)
+            subprocess.Popen(cmd, env=env)
             return True
-        except Exception:
+        except Exception as e:
+            print(f"Error launching player ({cmd}): {e}")
             try:
                 subprocess.Popen(["xdg-open", str(file_path)], env=env)
                 return True
-            except Exception as e:
-                print(f"Error opening file {file_path}: {e}")
+            except Exception as e2:
+                print(f"Fallback to xdg-open failed for {file_path}: {e2}")
                 return False
 
 

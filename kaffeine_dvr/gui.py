@@ -2584,13 +2584,19 @@ class MainWindow(QMainWindow):
         # 2. Existing Detailed List Table
         self.guide_table = QTableWidget()
         self.guide_table.setColumnCount(6)
-        self.guide_table.setHorizontalHeaderLabels(["REC", "Start Time", "Channel", "Show Title", "Episode Title", "Duration"])
-        self.guide_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
-        self.guide_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
-        self.guide_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
-        self.guide_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
-        self.guide_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
-        self.guide_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.Interactive)
+        self.guide_table.setHorizontalHeaderLabels(["REC", "Start Time", "Channel", "Duration", "Show Title", "Episode Title"])
+        hdr = self.guide_table.horizontalHeader()
+        for c in range(6):
+            hdr.setSectionResizeMode(c, QHeaderView.ResizeMode.Interactive)
+        hdr.setSectionsMovable(True)
+        saved_hdr = self.settings.value("guide_table_header_state")
+        if saved_hdr:
+            try:
+                hdr.restoreState(saved_hdr)
+            except Exception:
+                pass
+        hdr.sectionResized.connect(self._save_guide_table_header_state)
+        hdr.sectionMoved.connect(self._save_guide_table_header_state)
         self.guide_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.guide_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.guide_table.itemSelectionChanged.connect(self.on_guide_selection_changed)
@@ -3258,6 +3264,59 @@ class MainWindow(QMainWindow):
             self.guide_watch_combo
         )
 
+        # Recorded Video Playback Player
+        self.playback_player_combo = QComboBox()
+        import shutil
+        smplayer_avail = bool(shutil.which("smplayer"))
+        mpv_avail = bool(shutil.which("mpv"))
+        vlc_avail = bool(shutil.which("vlc"))
+
+        self.playback_player_combo.addItem("System Default (xdg-open)", "system")
+        self.playback_player_combo.addItem(f"SMPlayer {'(Installed)' if smplayer_avail else ''}".strip(), "smplayer")
+        self.playback_player_combo.addItem(f"mpv {'(Installed)' if mpv_avail else ''}".strip(), "mpv")
+        self.playback_player_combo.addItem(f"VLC {'(Installed)' if vlc_avail else ''}".strip(), "vlc")
+        self.playback_player_combo.addItem("Kaffeine", "kaffeine")
+        self.playback_player_combo.addItem("Custom Command...", "custom")
+        self.playback_player_combo.setFixedWidth(290)
+
+        cur_player = self.config_mgr.playback_player
+        player_idx = self.playback_player_combo.findData(cur_player)
+        if player_idx >= 0:
+            self.playback_player_combo.setCurrentIndex(player_idx)
+        else:
+            self.playback_player_combo.setCurrentIndex(0)
+
+        self.custom_player_edit = QLineEdit()
+        self.custom_player_edit.setPlaceholderText("e.g. mpv --fs {file}")
+        self.custom_player_edit.setText(self.config_mgr.custom_playback_player_cmd)
+        self.custom_player_edit.setFixedWidth(290)
+        self.custom_player_edit.setVisible(cur_player == "custom")
+
+        def _on_player_combo_changed(idx):
+            mode = self.playback_player_combo.itemData(idx)
+            self.custom_player_edit.setVisible(mode == "custom")
+
+        self.playback_player_combo.currentIndexChanged.connect(_on_player_combo_changed)
+
+        player_container = QWidget()
+        player_vbox = QVBoxLayout(player_container)
+        player_vbox.setContentsMargins(0, 0, 0, 0)
+        player_vbox.setSpacing(4)
+        player_vbox.addWidget(self.playback_player_combo)
+        player_vbox.addWidget(self.custom_player_edit)
+
+        dvr_layout.addRow(
+            make_setting_label(
+                "Recorded Video Player:",
+                "Select which media player opens recorded shows from the Guide or Recordings:\n"
+                "• System Default: Opens using your desktop's default video player (xdg-open).\n"
+                "• SMPlayer / mpv / VLC: Launches the dedicated player directly.\n"
+                "• Kaffeine: Plays inside Kaffeine.\n"
+                "• Custom Command: Specify a custom player command (optional {file} placeholder)."
+            ),
+            player_container
+        )
+
         self.notify_check = QCheckBox("Show Persistent Desktop Notification on Record Launch")
         self.notify_check.setChecked(self.config_mgr.enable_desktop_notifications)
         dvr_layout.addRow(
@@ -3430,6 +3489,10 @@ class MainWindow(QMainWindow):
         self.days_spin.valueChanged.connect(self._auto_save_automation_settings)
         self.launch_mode_combo.currentIndexChanged.connect(self._auto_save_automation_settings)
         self.guide_watch_combo.currentIndexChanged.connect(self._auto_save_automation_settings)
+        if hasattr(self, "playback_player_combo"):
+            self.playback_player_combo.currentIndexChanged.connect(self._auto_save_automation_settings)
+        if hasattr(self, "custom_player_edit"):
+            self.custom_player_edit.textChanged.connect(self._auto_save_automation_settings)
         self.notify_check.stateChanged.connect(self._auto_save_automation_settings)
 
         scroll.setWidget(container)
@@ -4334,6 +4397,10 @@ class MainWindow(QMainWindow):
         self.config_mgr.launch_mode = self.launch_mode_combo.currentData()
         if hasattr(self, "guide_watch_combo"):
             self.config_mgr.guide_watch_mode = self.guide_watch_combo.currentData()
+        if hasattr(self, "playback_player_combo"):
+            self.config_mgr.playback_player = self.playback_player_combo.currentData()
+        if hasattr(self, "custom_player_edit"):
+            self.config_mgr.custom_playback_player_cmd = self.custom_player_edit.text().strip()
         self.config_mgr.enable_desktop_notifications = self.notify_check.isChecked()
 
         # Storage & Retention settings
@@ -5467,18 +5534,24 @@ class MainWindow(QMainWindow):
 
                 self.guide_table.setItem(row, 1, time_item)
                 self.guide_table.setItem(row, 2, chan_item)
-                self.guide_table.setItem(row, 3, title_item)
-                self.guide_table.setItem(row, 4, sub_item)
-                self.guide_table.setItem(row, 5, dur_item)
+                self.guide_table.setItem(row, 3, dur_item)
+                self.guide_table.setItem(row, 4, title_item)
+                self.guide_table.setItem(row, 5, sub_item)
 
-            for col in [0, 1, 2, 5]:
-                self.guide_table.resizeColumnToContents(col)
+            if not self.settings.contains("guide_table_header_state"):
+                for col in [0, 1, 2, 3]:
+                    self.guide_table.resizeColumnToContents(col)
 
             # Auto-scroll to first currently playing or upcoming show
             QTimer.singleShot(0, self._scroll_list_to_first_active)
         finally:
             self.guide_table.blockSignals(False)
             self.guide_table.setUpdatesEnabled(True)
+
+    def _save_guide_table_header_state(self, *args):
+        """Persists the user's custom column widths and section positions."""
+        if hasattr(self, "guide_table") and hasattr(self, "settings"):
+            self.settings.setValue("guide_table_header_state", self.guide_table.horizontalHeader().saveState())
 
     def _scroll_list_to_first_active(self):
         """Scroll list guide table to the first live or upcoming show."""
@@ -5937,7 +6010,11 @@ class MainWindow(QMainWindow):
         elif state == "past":
             rec_file = timing_info.get("recorded_file")
             if rec_file:
-                self.dbus_client.play_file(rec_file)
+                self.dbus_client.play_file(
+                    rec_file,
+                    player=self.config_mgr.playback_player,
+                    custom_cmd=self.config_mgr.custom_playback_player_cmd
+                )
                 self.status_bar.showMessage(f"Playing recording: {os.path.basename(rec_file)}", 4000)
 
     def handle_program_activation(self, prog: Dict[str, Any]):
@@ -5965,7 +6042,11 @@ class MainWindow(QMainWindow):
         elif state == "past":
             rec_file = timing_info.get("recorded_file")
             if rec_file:
-                self.dbus_client.play_file(rec_file)
+                self.dbus_client.play_file(
+                    rec_file,
+                    player=self.config_mgr.playback_player,
+                    custom_cmd=self.config_mgr.custom_playback_player_cmd
+                )
                 self.status_bar.showMessage(f"Playing recording: {os.path.basename(rec_file)}", 4000)
             else:
                 QMessageBox.information(
