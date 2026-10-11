@@ -3719,22 +3719,7 @@ class MainWindow(QMainWindow):
         self.update_status_lbl.setWordWrap(True)
         action_layout.addWidget(self.update_status_lbl)
 
-        self.update_notes_lbl = QLabel("What's New in this Release:")
-        self.update_notes_lbl.setStyleSheet("font-size: 12px; font-weight: bold; color: #52b774; margin-top: 4px;")
-        action_layout.addWidget(self.update_notes_lbl)
-
-        self.update_notes_view = QTextEdit()
-        self.update_notes_view.setReadOnly(True)
-        self.update_notes_view.setMinimumHeight(140)
-        self.update_notes_view.setMaximumHeight(220)
-        self.update_notes_view.setStyleSheet(
-            "QTextEdit { background-color: #12141d; border: 1px solid #2d3548; "
-            "border-radius: 5px; color: #d0d7de; font-size: 12px; padding: 8px; }"
-        )
-        self.update_notes_view.setPlaceholderText("Release notes will appear here once an update is detected or checked.")
-        action_layout.addWidget(self.update_notes_view)
-
-        # Pre-populate release notes asynchronously if already checked or cached
+        # Pre-query latest release notes in background for the dialog
         QTimer.singleShot(500, self._load_initial_release_notes)
 
         self.update_progress_lbl = QLabel("")
@@ -3750,7 +3735,7 @@ class MainWindow(QMainWindow):
         self.apply_update_btn.clicked.connect(self.start_apply_update)
         install_btn_row.addWidget(self.apply_update_btn)
 
-        self.view_notes_dialog_btn = QPushButton("Open Release Notes Dialog...")
+        self.view_notes_dialog_btn = QPushButton("View Release Notes...")
         self.view_notes_dialog_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.view_notes_dialog_btn.clicked.connect(self.open_release_notes_dialog)
         install_btn_row.addWidget(self.view_notes_dialog_btn)
@@ -3805,29 +3790,20 @@ class MainWindow(QMainWindow):
             self.start_update_check(silent=True)
 
     def _load_initial_release_notes(self):
-        """Asynchronously queries the latest release notes to pre-populate the UI."""
-        if hasattr(self, "update_notes_view") and not self.update_notes_view.toPlainText().strip():
+        """Asynchronously queries the latest release notes in the background for the dialog."""
+        if not getattr(self, "_cached_release_notes", ""):
             self._initial_notes_worker = UpdateCheckWorker()
             self._initial_notes_worker.finished.connect(self._on_initial_notes_loaded)
             self._initial_notes_worker.start()
 
     def _on_initial_notes_loaded(self, res: dict):
-        notes = res.get("release_notes", "").strip()
-        self._cached_release_notes = notes
+        self._cached_release_notes = res.get("release_notes", "").strip()
         self._cached_latest_version = res.get("latest_version", "")
         self._cached_update_available = res.get("update_available", False)
-        if hasattr(self, "update_notes_view") and notes:
-            try:
-                self.update_notes_view.setMarkdown(notes)
-            except Exception:
-                self.update_notes_view.setPlainText(notes)
 
     def open_release_notes_dialog(self):
         """Opens the interactive modal release notes dialog."""
-        notes = getattr(self, "_cached_release_notes", "")
-        if not notes and hasattr(self, "update_notes_view"):
-            notes = self.update_notes_view.toPlainText()
-
+        notes = getattr(self, "_cached_release_notes", "").strip()
         version = getattr(self, "_cached_latest_version", "") or getattr(self, "_latest_detected_version", "")
         if not version:
             from kaffeine_dvr import __version__
@@ -3878,18 +3854,6 @@ class MainWindow(QMainWindow):
         self._cached_release_notes = notes
         self._cached_latest_version = latest_ver
         self._cached_update_available = update_available
-        if hasattr(self, "update_notes_view") and hasattr(self, "update_notes_lbl"):
-            if notes and (update_available or notes):
-                # Try formatting markdown if available, else plain text
-                try:
-                    self.update_notes_view.setMarkdown(notes)
-                except Exception:
-                    self.update_notes_view.setPlainText(notes)
-                self.update_notes_lbl.setVisible(True)
-                self.update_notes_view.setVisible(True)
-            else:
-                self.update_notes_lbl.setVisible(False)
-                self.update_notes_view.setVisible(False)
 
         if update_available:
             self._latest_detected_version = latest_ver
