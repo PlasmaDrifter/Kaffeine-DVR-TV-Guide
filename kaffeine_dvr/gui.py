@@ -2795,7 +2795,8 @@ class MainWindow(QMainWindow):
         filter_bar.addWidget(QLabel("Search:"))
         self.guide_search_input = QLineEdit()
         self.guide_search_input.setPlaceholderText("Filter shows...")
-        self.guide_search_input.setFixedWidth(130)
+        self.guide_search_input.setClearButtonEnabled(True)
+        self.guide_search_input.setFixedWidth(160)
         self.guide_search_input.textChanged.connect(self.filter_guide)
         filter_bar.addWidget(self.guide_search_input)
 
