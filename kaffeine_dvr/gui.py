@@ -3266,16 +3266,22 @@ class MainWindow(QMainWindow):
 
         # Recorded Video Playback Player
         self.playback_player_combo = QComboBox()
-        import shutil
-        smplayer_avail = bool(shutil.which("smplayer"))
-        mpv_avail = bool(shutil.which("mpv"))
-        vlc_avail = bool(shutil.which("vlc"))
+        from kaffeine_dvr.dbus_client import SUPPORTED_PLAYERS, detect_player_installation
 
-        self.playback_player_combo.addItem("System Default (xdg-open)", "system")
-        self.playback_player_combo.addItem(f"SMPlayer {'(Installed)' if smplayer_avail else ''}".strip(), "smplayer")
-        self.playback_player_combo.addItem(f"mpv {'(Installed)' if mpv_avail else ''}".strip(), "mpv")
-        self.playback_player_combo.addItem(f"VLC {'(Installed)' if vlc_avail else ''}".strip(), "vlc")
-        self.playback_player_combo.addItem("Kaffeine", "kaffeine")
+        for key, pinfo in SUPPORTED_PLAYERS.items():
+            pname = pinfo["name"]
+            if key == "system":
+                self.playback_player_combo.addItem(pname, key)
+            else:
+                itype = detect_player_installation(key)
+                if itype == "native":
+                    label = f"{pname} (Installed)"
+                elif itype == "flatpak":
+                    label = f"{pname} (Flatpak)"
+                else:
+                    label = pname
+                self.playback_player_combo.addItem(label, key)
+
         self.playback_player_combo.addItem("Custom Command...", "custom")
         self.playback_player_combo.setFixedWidth(290)
 

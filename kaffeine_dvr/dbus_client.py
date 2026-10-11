@@ -5,6 +5,84 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
+SUPPORTED_PLAYERS = {
+    "system": {
+        "name": "System Default (xdg-open)",
+        "binary": None,
+        "flatpak_id": None,
+    },
+    "smplayer": {
+        "name": "SMPlayer",
+        "binary": "smplayer",
+        "flatpak_id": "info.smplayer.SMPlayer",
+    },
+    "mpv": {
+        "name": "mpv",
+        "binary": "mpv",
+        "flatpak_id": "io.mpv.Mpv",
+    },
+    "vlc": {
+        "name": "VLC",
+        "binary": "vlc",
+        "flatpak_id": "org.videolan.VLC",
+    },
+    "mpc-qt": {
+        "name": "MPC-QT",
+        "binary": "mpc-qt",
+        "flatpak_id": "io.github.mpc_qt.mpc-qt",
+    },
+    "celluloid": {
+        "name": "Celluloid",
+        "binary": "celluloid",
+        "flatpak_id": "io.github.celluloid_player.Celluloid",
+    },
+    "haruna": {
+        "name": "Haruna",
+        "binary": "haruna",
+        "flatpak_id": "org.kde.haruna",
+    },
+    "kaffeine": {
+        "name": "Kaffeine",
+        "binary": "kaffeine",
+        "flatpak_id": "org.kde.kaffeine",
+    },
+}
+
+
+def detect_player_installation(player_key: str) -> str:
+    """
+    Detect how a media player is installed on the system.
+    Returns:
+    - 'native': found in system PATH or local user bin
+    - 'flatpak': found via Flatpak app installation
+    - '': not detected
+    """
+    import shutil
+    info = SUPPORTED_PLAYERS.get(player_key)
+    if not info:
+        return ""
+
+    bin_name = info.get("binary")
+    if bin_name:
+        if player_key == "kaffeine":
+            local_bin = Path.home() / ".local" / "bin" / "kaffeine"
+            if local_bin.is_file() and os.access(local_bin, os.X_OK):
+                return "native"
+            if shutil.which("kaffeine"):
+                return "native"
+        elif shutil.which(bin_name):
+            return "native"
+
+    flatpak_id = info.get("flatpak_id")
+    if flatpak_id:
+        sys_fp = Path("/var/lib/flatpak/app") / flatpak_id
+        user_fp = Path.home() / ".local" / "share" / "flatpak" / "app" / flatpak_id
+        if sys_fp.is_dir() or user_fp.is_dir():
+            return "flatpak"
+
+    return ""
+
+
 class KaffeineDbusClient:
     def __init__(self, kaffeine_db_path: Optional[Path] = None):
         self.kaffeine_db_path = kaffeine_db_path or (Path.home() / ".local" / "share" / "kaffeine" / "sqlite.db")
@@ -393,12 +471,10 @@ class KaffeineDbusClient:
         """
         Play a recorded media file in the user's selected media player:
         - 'system': system default handler (xdg-open)
-        - 'smplayer': SMPlayer
-        - 'mpv': mpv media player
-        - 'vlc': VLC media player
-        - 'kaffeine': Kaffeine
+        - 'smplayer', 'mpv', 'vlc', 'mpc-qt', 'celluloid', 'haruna', 'kaffeine':
+          launches native binary if available, or Flatpak container if installed.
         - 'custom': user-defined command template or command with file appended
-        Falls back to xdg-open or Kaffeine if the selected player is not found.
+        Falls back to xdg-open if the selected player is not found or fails.
         """
         if not file_path or not os.path.exists(file_path):
             return False
@@ -415,22 +491,21 @@ class KaffeineDbusClient:
                 cmd = shlex.split(cmd_str.replace("{file}", str(file_path)))
             else:
                 cmd = shlex.split(cmd_str) + [str(file_path)]
-        elif player_mode == "smplayer":
-            bin_path = shutil.which("smplayer")
+        elif player_mode in SUPPORTED_PLAYERS and player_mode != "system":
+            info = SUPPORTED_PLAYERS[player_mode]
+            bin_name = info.get("binary")
+            flatpak_id = info.get("flatpak_id")
+
+            bin_path = None
+            if player_mode == "kaffeine":
+                bin_path = self.get_kaffeine_bin()
+            elif bin_name:
+                bin_path = shutil.which(bin_name)
+
             if bin_path:
                 cmd = [bin_path, str(file_path)]
-        elif player_mode == "mpv":
-            bin_path = shutil.which("mpv")
-            if bin_path:
-                cmd = [bin_path, str(file_path)]
-        elif player_mode == "vlc":
-            bin_path = shutil.which("vlc")
-            if bin_path:
-                cmd = [bin_path, str(file_path)]
-        elif player_mode == "kaffeine":
-            bin_path = self.get_kaffeine_bin()
-            if bin_path:
-                cmd = [bin_path, str(file_path)]
+            elif flatpak_id and shutil.which("flatpak") and detect_player_installation(player_mode) == "flatpak":
+                cmd = ["flatpak", "run", "--file-forwarding", flatpak_id, "@@", str(file_path), "@@"]
 
         if not cmd:
             # Default or fallback to system default / xdg-open
