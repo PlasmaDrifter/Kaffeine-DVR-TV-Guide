@@ -24,7 +24,10 @@ if [ -d AppDir/usr/bin/_internal ]; then
     mkdir -p AppDir/usr/bin/_internal/assets
     cp -r assets/* AppDir/usr/bin/_internal/assets/ 2>/dev/null || true
     cp RELEASE_NOTES.md AppDir/usr/bin/_internal/ 2>/dev/null || true
+    # Remove bundled libfontconfig to prevent SIGSEGV on Debian/Ubuntu/Kubuntu due to cache format mismatches
+    rm -f AppDir/usr/bin/_internal/libfontconfig.so*
 fi
+rm -f AppDir/usr/bin/libfontconfig.so*
 
 # Icons
 cp /usr/share/icons/Papirus/48x48/apps/kaffeine.svg AppDir/kaffeine.svg
