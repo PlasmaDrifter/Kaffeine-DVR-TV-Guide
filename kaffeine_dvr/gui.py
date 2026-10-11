@@ -1439,6 +1439,18 @@ class ProgramTileDelegate(QStyledItemDelegate):
 
         # Timing state & metadata
         is_selected = bool(option.state & QStyle.StateFlag.State_Selected)
+        if not is_selected:
+            view = getattr(self, "parent", None)
+            grid = view() if callable(view) else getattr(option, "widget", None)
+            if isinstance(grid, QTableWidget):
+                sel = grid.selectionModel()
+                if sel:
+                    row = index.row()
+                    col = index.column()
+                    span = grid.columnSpan(row, col)
+                    if any(sel.isSelected(grid.model().index(row, col + sc)) for sc in range(max(1, span))):
+                        is_selected = True
+
         is_scheduled = bool(prog.get("_scheduled_rec"))
         timing_state = prog.get("_timing_state")
         if not timing_state:
@@ -1469,7 +1481,7 @@ class ProgramTileDelegate(QStyledItemDelegate):
 
         if is_selected:
             bg_color = self.COLOR_SELECTED_BG
-            border_color = self.COLOR_SELECTED_BORDER_SCHED if is_scheduled else self.COLOR_SELECTED_BORDER
+            border_color = self.COLOR_SELECTED_BORDER
             pen_width = 2
         else:
             pen_width = 2 if is_scheduled else 1
@@ -6370,6 +6382,8 @@ class MainWindow(QMainWindow):
                 p_title, p_sub = get_program_display_titles(p)
                 p_copy["_primary_title"] = p_title
                 p_copy["_secondary_sub"] = p_sub
+                p_copy["_start_col"] = start_col
+                p_copy["_span"] = span
 
                 item = QTableWidgetItem(show_title)
                 item.setData(Qt.ItemDataRole.UserRole, p_copy)
@@ -6434,6 +6448,12 @@ class MainWindow(QMainWindow):
             return
 
         prog = item.data(Qt.ItemDataRole.UserRole)
+        root_col = prog.get("_start_col", col)
+        root_item = self.guide_grid_table.item(row, root_col)
+        if root_item:
+            self.guide_grid_table.setCurrentCell(row, root_col)
+            root_item.setSelected(True)
+
         self.selected_grid_program = prog
         self._display_program_details(prog)
 
@@ -7043,7 +7063,7 @@ class MainWindow(QMainWindow):
 
     def on_grid_cell_double_clicked(self, row: int, col: int):
         item = self.guide_grid_table.item(row, col)
-        if not item:
+        if not item or not item.data(Qt.ItemDataRole.UserRole):
             for c in range(col - 1, -1, -1):
                 it = self.guide_grid_table.item(row, c)
                 if it and it.data(Qt.ItemDataRole.UserRole):
@@ -7051,6 +7071,11 @@ class MainWindow(QMainWindow):
                     break
         if item and item.data(Qt.ItemDataRole.UserRole):
             prog = item.data(Qt.ItemDataRole.UserRole)
+            root_col = prog.get("_start_col", col)
+            root_item = self.guide_grid_table.item(row, root_col)
+            if root_item:
+                self.guide_grid_table.setCurrentCell(row, root_col)
+                root_item.setSelected(True)
             self.selected_grid_program = prog
             self._display_program_details(prog)
             self.handle_program_activation(prog)
