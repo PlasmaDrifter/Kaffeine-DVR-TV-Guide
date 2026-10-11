@@ -116,6 +116,7 @@ def check_for_updates() -> Dict[str, Any]:
         "latest_version": __version__,
         "current_version": __version__,
         "details": "Your installation is up to date.",
+        "release_notes": "",
         "is_git": info["is_git"],
         "repo_path": info["repo_path"],
     }
@@ -155,21 +156,50 @@ def check_for_updates() -> Dict[str, Any]:
             except Exception:
                 pass
 
+            # Try to get recent release notes or commit log
+            notes = ""
+            if behind > 0:
+                try:
+                    notes = subprocess.check_output(
+                        ["git", "log", f"-n", str(min(10, behind)), "--pretty=format:• %s", "HEAD..origin/main"],
+                        cwd=str(repo_root),
+                        text=True,
+                        timeout=5
+                    ).strip()
+                except Exception:
+                    pass
+
+            # Also try to fetch release notes from GitHub API for latest tag if available
+            if not notes:
+                try:
+                    req = urllib.request.Request(
+                        RELEASES_API,
+                        headers={"User-Agent": f"KaffeineDVR/{__version__}"}
+                    )
+                    with urllib.request.urlopen(req, timeout=5) as resp:
+                        api_data = json.loads(resp.read().decode("utf-8"))
+                        notes = api_data.get("body", "").strip()
+                except Exception:
+                    pass
+
             if behind > 0:
                 result["update_available"] = True
                 ver_display = latest_tag if latest_tag else f"{__version__}+{behind}"
                 result["latest_version"] = ver_display
                 result["details"] = f"{behind} new commit(s) available on origin/main."
+                result["release_notes"] = notes
                 return result
             elif latest_tag and is_newer_version(latest_tag, __version__):
                 result["update_available"] = True
                 result["latest_version"] = latest_tag
                 result["details"] = f"New version v{latest_tag} is available."
+                result["release_notes"] = notes
                 return result
             else:
                 result["update_available"] = False
                 result["latest_version"] = latest_tag if latest_tag else __version__
                 result["details"] = "Your repository clone is up to date with origin/main."
+                result["release_notes"] = notes
                 return result
         except Exception as e:
             # If git fetch fails (offline or non-git remote), fall through to HTTP API
@@ -184,6 +214,8 @@ def check_for_updates() -> Dict[str, Any]:
         with urllib.request.urlopen(req, timeout=8) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             tag = data.get("tag_name", "").lstrip("v")
+            notes = data.get("body", "").strip()
+            result["release_notes"] = notes
             if tag:
                 result["latest_version"] = tag
                 if is_newer_version(tag, __version__):

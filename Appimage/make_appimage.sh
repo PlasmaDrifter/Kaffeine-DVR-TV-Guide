@@ -18,8 +18,11 @@ cp -r dist/kaffeine-dvr/* AppDir/usr/bin/
 cp /usr/share/icons/Papirus/48x48/apps/kaffeine.svg AppDir/kaffeine.svg
 cp /usr/share/icons/Papirus/48x48/apps/kaffeine.svg AppDir/usr/share/icons/hicolor/scalable/apps/kaffeine.svg
 
+# Detect version dynamically from kaffeine_dvr/__init__.py
+APP_VERSION=$(python3 -c "import kaffeine_dvr; print(kaffeine_dvr.__version__)")
+
 # Desktop File with complete AppImage metadata recognized by AppManager
-cat << 'DESK' > AppDir/kaffeine-dvr.desktop
+cat << DESK > AppDir/kaffeine-dvr.desktop
 [Desktop Entry]
 Name=Kaffeine DVR and TV Guide
 GenericName=TV Guide and Recording Manager
@@ -32,7 +35,7 @@ Categories=AudioVideo;Video;TV;Recorder;
 StartupNotify=true
 StartupWMClass=kaffeine-dvr
 X-AppImage-Name=Kaffeine DVR and TV Guide
-X-AppImage-Version=0.8.4
+X-AppImage-Version=${APP_VERSION}
 X-AppImage-Arch=x86_64
 DESK
 

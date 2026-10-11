@@ -1208,12 +1208,16 @@ class ProgramTileDelegate(QStyledItemDelegate):
 
         # Background fill & border styling
         is_alt = (index.row() % 2 == 1)
+        rec_data = prog.get("_scheduled_rec")
+        rec_status = rec_data.get("status") if isinstance(rec_data, dict) else ""
+        is_recording = is_scheduled and (rec_status == "RECORDING" or (timing_state == "live" and rec_status in ("ARMED", "RECORDING")))
+
         if is_selected:
             bg_color = self.COLOR_SELECTED_BG
             border_color = self.COLOR_SELECTED_BORDER_SCHED if is_scheduled else self.COLOR_SELECTED_BORDER
             pen_width = 2
         else:
-            pen_width = 1
+            pen_width = 2 if is_scheduled else 1
             if timing_state == "past":
                 bg_color = self.COLOR_PAST_BG_ALT if is_alt else self.COLOR_PAST_BG
                 border_color = self.COLOR_PAST_BORDER_SCHED if is_scheduled else self.COLOR_PAST_BORDER
@@ -1234,11 +1238,11 @@ class ProgramTileDelegate(QStyledItemDelegate):
         pad_right = 10
         inner_width = max(10, rect.width() - pad_left - pad_right)
 
-        # Draw Badges (Red dot indicator in upper right corner if scheduled for recording)
+        # Draw Badges (Red dot indicator in upper right corner only if currently recording)
         badge_reserved_w = 0
         cur_right = rect.right() - pad_right
 
-        if is_scheduled:
+        if is_recording:
             dot_diameter = max(7, 8 + self.zoom_delta)
             dot_x = cur_right - dot_diameter
             # Center dot vertically with title line (line1_rect)
@@ -2034,7 +2038,7 @@ QListWidget#channelOrderList::item:selected {
 }
 
 /* EPG Grid Table Styles */
-QTableWidget#guideGridTable {
+QTableWidget#guideGridTable, QTableWidget#guideListTable {
     background-color: #161922;
     gridline-color: #2b3242;
     border: 1px solid #363c4e;
@@ -2585,6 +2589,8 @@ class MainWindow(QMainWindow):
 
         # 2. Existing Detailed List Table
         self.guide_table = QTableWidget()
+        self.guide_table.setObjectName("guideListTable")
+        self.guide_table.setShowGrid(True)
         self.guide_table.setColumnCount(6)
         self.guide_table.setHorizontalHeaderLabels(["REC", "Start Time", "Channel", "Duration", "Show Title", "Episode Title"])
         hdr = self.guide_table.horizontalHeader()
@@ -3625,6 +3631,21 @@ class MainWindow(QMainWindow):
         self.update_status_lbl.setWordWrap(True)
         action_layout.addWidget(self.update_status_lbl)
 
+        self.update_notes_lbl = QLabel("What's New in this Release:")
+        self.update_notes_lbl.setStyleSheet("font-size: 12px; font-weight: bold; color: #52b774; margin-top: 4px;")
+        self.update_notes_lbl.setVisible(False)
+        action_layout.addWidget(self.update_notes_lbl)
+
+        self.update_notes_view = QTextEdit()
+        self.update_notes_view.setReadOnly(True)
+        self.update_notes_view.setMaximumHeight(160)
+        self.update_notes_view.setStyleSheet(
+            "QTextEdit { background-color: #12141d; border: 1px solid #2d3548; "
+            "border-radius: 5px; color: #d0d7de; font-size: 12px; padding: 8px; }"
+        )
+        self.update_notes_view.setVisible(False)
+        action_layout.addWidget(self.update_notes_view)
+
         self.update_progress_lbl = QLabel("")
         self.update_progress_lbl.setStyleSheet("color: #55a84c; font-size: 12px; font-weight: bold;")
         self.update_progress_lbl.setVisible(False)
@@ -3714,6 +3735,20 @@ class MainWindow(QMainWindow):
             self.update_status_lbl.setText(details)
         if hasattr(self, "apply_update_btn"):
             self.apply_update_btn.setEnabled(update_available)
+
+        notes = res.get("release_notes", "").strip()
+        if hasattr(self, "update_notes_view") and hasattr(self, "update_notes_lbl"):
+            if notes and (update_available or notes):
+                # Try formatting markdown if available, else plain text
+                try:
+                    self.update_notes_view.setMarkdown(notes)
+                except Exception:
+                    self.update_notes_view.setPlainText(notes)
+                self.update_notes_lbl.setVisible(True)
+                self.update_notes_view.setVisible(True)
+            else:
+                self.update_notes_lbl.setVisible(False)
+                self.update_notes_view.setVisible(False)
 
         if update_available:
             self._latest_detected_version = latest_ver
@@ -5112,7 +5147,9 @@ class MainWindow(QMainWindow):
             list_font_sz = max(9, 12 + lvl)
             list_row_h = max(22, 28 + (lvl * 5))
             self.guide_table.verticalHeader().setDefaultSectionSize(list_row_h)
-            self.guide_table.setStyleSheet(f"QTableWidget {{ font-size: {list_font_sz}px; }}")
+            self.guide_table.setStyleSheet(
+                f"QTableWidget#guideListTable {{ font-size: {list_font_sz}px; gridline-color: #2b3242; }}"
+            )
             self.guide_table.viewport().update()
 
     def toggle_guide_maximized(self):
@@ -5529,14 +5566,29 @@ class MainWindow(QMainWindow):
                 timing_state = timing_info.get("state", "upcoming")
                 cat = p.get("_category") or classify_guide_category(p)
 
-                rec_item = QTableWidgetItem("● REC" if rec_info else "")
+                rec_status = rec_info.get("status", "") if isinstance(rec_info, dict) else ""
+                is_recording = bool(rec_info) and (rec_status == "RECORDING" or (timing_state == "live" and rec_status in ("ARMED", "RECORDING")))
+
+                if is_recording:
+                    rec_text = "● REC"
+                elif rec_info:
+                    rec_text = "○ SCHED"
+                else:
+                    rec_text = ""
+
+                rec_item = QTableWidgetItem(rec_text)
                 rec_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 if rec_info:
-                    rec_item.setForeground(QColor("#ff5252"))
+                    if is_recording:
+                        rec_item.setForeground(QColor("#ff5252"))
+                        tip_prefix = "Recording Now"
+                    else:
+                        rec_item.setForeground(QColor("#ffa028"))
+                        tip_prefix = "Recording Scheduled"
                     rec_item.setFont(QFont("", -1, QFont.Weight.Bold))
                     buf_val = rec_info.get("buffer_mins", 0)
                     buf_tip = f" | +{buf_val}m buffer" if buf_val else ""
-                    rec_item.setToolTip(f"Recording Scheduled (Queue #{rec_info.get('id')} - {rec_info.get('status')}{buf_tip})")
+                    rec_item.setToolTip(f"{tip_prefix} (Queue #{rec_info.get('id')} - {rec_info.get('status')}{buf_tip})")
                 self.guide_table.setItem(row, 0, rec_item)
 
                 raw_start = p.get("start_time_local", "")
