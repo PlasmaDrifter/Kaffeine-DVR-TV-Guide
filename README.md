@@ -142,7 +142,7 @@ The CW = CW6
 
 ### 3. TV Passport Setup (24/7 Local Affiliate Coverage & Independent Channels)
 To get complete 24/7 continuous schedules with local morning/evening news, daytime talk shows, or independent local channels:
-1. Search for your local affiliate station on [tvpassport.com](https://www.tvpassport.com).
+1. Search for your local affiliate station on [tvpassport.com Lineups](https://www.tvpassport.com/index.php/lineups) by entering your ZIP/postal code.
 2. Note the numeric ID from the station listings URL (for example, `/station/1812/`).
 3. Under **Settings > Guide Sources > TV Passport**, enter your station mapping:
    ```text
