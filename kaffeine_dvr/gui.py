@@ -41,17 +41,40 @@ except (ImportError, ValueError):
 
 
 def _get_checkmark_icon_path() -> str:
-    # First check relative to this source tree
-    base_dir = Path(__file__).resolve().parent.parent
-    asset_path = base_dir / "assets" / "checkmark.png"
-    if not asset_path.parent.exists():
-        try:
-            asset_path.parent.mkdir(parents=True, exist_ok=True)
-        except Exception:
-            pass
-    # If not writable or not found, fallback to user config/cache directory
-    if not asset_path.exists():
-        try:
+    # 1. Check PyInstaller bundle directory (sys._MEIPASS)
+    if hasattr(sys, "_MEIPASS"):
+        meipass_asset = Path(sys._MEIPASS) / "assets" / "checkmark.png"
+        if meipass_asset.is_file():
+            return str(meipass_asset).replace("\\", "/")
+
+    # 2. Check relative to executable (AppDir/usr/bin/_internal/assets/checkmark.png or similar)
+    try:
+        exe_dir = Path(sys.executable).resolve().parent
+        for cand in [
+            exe_dir / "assets" / "checkmark.png",
+            exe_dir / "_internal" / "assets" / "checkmark.png",
+            exe_dir.parent / "share" / "kaffeine-dvr" / "assets" / "checkmark.png",
+        ]:
+            if cand.is_file():
+                return str(cand).replace("\\", "/")
+    except Exception:
+        pass
+
+    # 3. Check relative to this source tree
+    try:
+        base_dir = Path(__file__).resolve().parent.parent
+        asset_path = base_dir / "assets" / "checkmark.png"
+        if asset_path.is_file():
+            return str(asset_path).replace("\\", "/")
+    except Exception:
+        pass
+
+    # 4. Fallback to writable user config directory (~/.config/kaffeine-dvr/assets/checkmark.png)
+    fallback_dir = Path.home() / ".config" / "kaffeine-dvr" / "assets"
+    try:
+        fallback_dir.mkdir(parents=True, exist_ok=True)
+        user_asset = fallback_dir / "checkmark.png"
+        if not user_asset.is_file():
             pix = QPixmap(14, 14)
             pix.fill(Qt.GlobalColor.transparent)
             p = QPainter(pix)
@@ -61,27 +84,13 @@ def _get_checkmark_icon_path() -> str:
             p.drawLine(2, 7, 5, 11)
             p.drawLine(5, 11, 12, 3)
             p.end()
-            pix.save(str(asset_path), 'PNG')
-        except Exception:
-            # Fallback location in user home
-            fallback_dir = Path.home() / ".config" / "kaffeine-dvr" / "assets"
-            fallback_dir.mkdir(parents=True, exist_ok=True)
-            asset_path = fallback_dir / "checkmark.png"
-            if not asset_path.exists():
-                try:
-                    pix = QPixmap(14, 14)
-                    pix.fill(Qt.GlobalColor.transparent)
-                    p = QPainter(pix)
-                    p.setRenderHint(QPainter.RenderHint.Antialiasing)
-                    pen = QPen(QColor('#ffffff'), 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
-                    p.setPen(pen)
-                    p.drawLine(2, 7, 5, 11)
-                    p.drawLine(5, 11, 12, 3)
-                    p.end()
-                    pix.save(str(asset_path), 'PNG')
-                except Exception:
-                    pass
-    return str(asset_path).replace("\\", "/")
+            pix.save(str(user_asset), 'PNG')
+        if user_asset.is_file():
+            return str(user_asset).replace("\\", "/")
+    except Exception:
+        pass
+
+    return ""
 
 
 def get_checkmark_icon_path() -> str:

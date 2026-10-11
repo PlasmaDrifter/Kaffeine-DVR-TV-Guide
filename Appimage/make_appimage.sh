@@ -14,6 +14,15 @@ mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hic
 
 cp -r dist/kaffeine-dvr/* AppDir/usr/bin/
 
+# Ensure assets are present in multiple discoverable AppDir locations
+mkdir -p AppDir/usr/bin/assets AppDir/usr/share/kaffeine-dvr/assets
+cp -r assets/* AppDir/usr/bin/assets/ 2>/dev/null || true
+cp -r assets/* AppDir/usr/share/kaffeine-dvr/assets/ 2>/dev/null || true
+if [ -d AppDir/usr/bin/_internal ]; then
+    mkdir -p AppDir/usr/bin/_internal/assets
+    cp -r assets/* AppDir/usr/bin/_internal/assets/ 2>/dev/null || true
+fi
+
 # Icons
 cp /usr/share/icons/Papirus/48x48/apps/kaffeine.svg AppDir/kaffeine.svg
 cp /usr/share/icons/Papirus/48x48/apps/kaffeine.svg AppDir/usr/share/icons/hicolor/scalable/apps/kaffeine.svg
