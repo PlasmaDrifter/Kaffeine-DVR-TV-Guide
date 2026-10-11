@@ -4,6 +4,13 @@ from typing import Dict, Any, List
 
 DEFAULT_CHANNEL_MAP = {}
 
+DEFAULT_CATEGORY_COLORS = {
+    "sports": "#ffa028",
+    "news": "#4fc3f7",
+    "movies": "#c084fc",
+    "tvshows": "#f1f5f9"
+}
+
 class ConfigManager:
     def __init__(self):
         self.home_dir = Path.home()
@@ -81,6 +88,12 @@ class ConfigManager:
                         data["playback_player"] = "system"
                     if "custom_playback_player_cmd" not in data:
                         data["custom_playback_player_cmd"] = ""
+                    if "category_colors" not in data or not isinstance(data.get("category_colors"), dict):
+                        data["category_colors"] = dict(DEFAULT_CATEGORY_COLORS)
+                    else:
+                        for cat, def_col in DEFAULT_CATEGORY_COLORS.items():
+                            if cat not in data["category_colors"]:
+                                data["category_colors"][cat] = def_col
                     return data
             except Exception:
                 pass
@@ -120,7 +133,8 @@ class ConfigManager:
             "last_update_check_timestamp": 0.0,
             "dismissed_update_version": "",
             "playback_player": "system",
-            "custom_playback_player_cmd": ""
+            "custom_playback_player_cmd": "",
+            "category_colors": dict(DEFAULT_CATEGORY_COLORS)
         }
         self._save(default_data)
         return default_data
@@ -494,3 +508,23 @@ class ConfigManager:
     def dismissed_update_version(self, val: str):
         self.data["dismissed_update_version"] = str(val)
         self.save()
+
+    @property
+    def category_colors(self) -> Dict[str, str]:
+        raw = self.data.get("category_colors")
+        if not isinstance(raw, dict):
+            raw = {}
+        merged = dict(DEFAULT_CATEGORY_COLORS)
+        merged.update(raw)
+        return merged
+
+    def set_category_color(self, category: str, hex_color: str):
+        colors = dict(self.category_colors)
+        colors[category] = str(hex_color).strip()
+        self.data["category_colors"] = colors
+        self.save()
+
+    def reset_category_colors(self):
+        self.data["category_colors"] = dict(DEFAULT_CATEGORY_COLORS)
+        self.save()
+

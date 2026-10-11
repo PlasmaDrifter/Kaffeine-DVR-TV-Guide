@@ -17,13 +17,13 @@ from PyQt6.QtWidgets import (
     QScrollArea, QToolButton, QSizePolicy, QAbstractSpinBox, QSlider,
     QStackedWidget, QButtonGroup, QStyledItemDelegate, QStyleOptionViewItem,
     QStyle, QListWidget, QListWidgetItem, QAbstractItemView, QToolTip,
-    QLayout, QPlainTextEdit, QProxyStyle, QStyleFactory
+    QLayout, QPlainTextEdit, QProxyStyle, QStyleFactory, QColorDialog
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QSettings, QByteArray, QEvent, QObject, QPoint, QPointF, QRect, QRectF, QSize
 from PyQt6.QtGui import QColor, QFont, QFontMetrics, QIcon, QWheelEvent, QPainter, QPalette, QPixmap, QPen, QPolygon, QBrush
 
 try:
-    from .config import ConfigManager, DEFAULT_CHANNEL_MAP
+    from .config import ConfigManager, DEFAULT_CHANNEL_MAP, DEFAULT_CATEGORY_COLORS
     from .dbus_client import KaffeineDbusClient
     from .guide_service import GuideService
     from .rules_engine import RulesEngine
@@ -31,7 +31,7 @@ try:
     from .watcher import Watcher
     from .storage_manager import StorageManager
 except (ImportError, ValueError):
-    from kaffeine_dvr.config import ConfigManager, DEFAULT_CHANNEL_MAP
+    from kaffeine_dvr.config import ConfigManager, DEFAULT_CHANNEL_MAP, DEFAULT_CATEGORY_COLORS
     from kaffeine_dvr.dbus_client import KaffeineDbusClient
     from kaffeine_dvr.guide_service import GuideService
     from kaffeine_dvr.rules_engine import RulesEngine
@@ -1403,12 +1403,30 @@ class ProgramTileDelegate(QStyledItemDelegate):
         "tvshows": QColor("#f1f5f9"),
     }
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, config_mgr=None):
         super().__init__(parent)
         self.zoom_delta = 0
+        self.config_mgr = config_mgr
+        self._qcolor_cache: Dict[str, QColor] = {}
+        self.refresh_category_colors()
 
     def set_zoom_delta(self, delta: int):
         self.zoom_delta = delta
+
+    def refresh_category_colors(self):
+        cfg_colors = self.config_mgr.category_colors if self.config_mgr else DEFAULT_CATEGORY_COLORS
+        self._qcolor_cache = {cat: QColor(hex_val) for cat, hex_val in cfg_colors.items()}
+
+    def get_category_color(self, cat: str) -> QColor:
+        if cat in self._qcolor_cache:
+            return self._qcolor_cache[cat]
+        if self.config_mgr:
+            val = self.config_mgr.category_colors.get(cat)
+            if val:
+                c = QColor(val)
+                self._qcolor_cache[cat] = c
+                return c
+        return self.CATEGORY_COLORS.get(cat, self.COLOR_UPCOMING_TITLE)
 
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index):
         prog = index.data(Qt.ItemDataRole.UserRole)
@@ -1503,12 +1521,12 @@ class ProgramTileDelegate(QStyledItemDelegate):
             subtext_color = self.COLOR_PAST_SUBTEXT
         elif timing_state == "live":
             if cat in ("sports", "news", "movies"):
-                title_color = self.CATEGORY_COLORS[cat]
+                title_color = self.get_category_color(cat)
             else:
                 title_color = self.COLOR_LIVE_TITLE
             subtext_color = self.COLOR_SUBTEXT
         else:
-            title_color = self.CATEGORY_COLORS.get(cat, self.COLOR_UPCOMING_TITLE)
+            title_color = self.get_category_color(cat)
             subtext_color = self.COLOR_SUBTEXT
 
         primary_title = prog.get("_primary_title")
@@ -2318,6 +2336,20 @@ QProgressBar#statusBarProgressBar::chunk {
         stop:0 #1d4ed8, stop:0.6 #2563eb, stop:1 #3b82f6);
     border-radius: 5px;
 }
+
+/* Category Color Picker Tile */
+QPushButton.category-color-tile {
+    border: 2px solid #3d465c;
+    border-radius: 6px;
+    padding: 0px;
+    margin: 0px;
+}
+QPushButton.category-color-tile:hover {
+    border: 2px solid #38bdf8;
+}
+QPushButton.category-color-tile:pressed {
+    border: 2px solid #ffffff;
+}
 """
 
 
@@ -2809,7 +2841,7 @@ class MainWindow(QMainWindow):
         self.guide_grid_table.horizontalHeader().setHighlightSections(False)
         self.guide_grid_table.verticalHeader().setDefaultSectionSize(62)
         self.guide_grid_table.verticalHeader().setHighlightSections(False)
-        self.grid_tile_delegate = ProgramTileDelegate(self.guide_grid_table)
+        self.grid_tile_delegate = ProgramTileDelegate(self.guide_grid_table, config_mgr=self.config_mgr)
         self.guide_grid_table.setItemDelegate(self.grid_tile_delegate)
         self.guide_grid_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.guide_grid_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
@@ -2970,7 +3002,7 @@ class MainWindow(QMainWindow):
 
         self.settings_subtabs = QTabWidget()
         self.settings_subtabs.setObjectName("settingsSubTabs")
-        self.settings_subtabs.addTab(self.create_settings_automation_tab(), "Automation and DVR")
+        self.settings_subtabs.addTab(self.create_settings_automation_tab(), "General")
         self.settings_subtabs.addTab(self.create_settings_channels_tab(), "Channel Source")
         self.settings_subtabs.addTab(self.create_settings_guide_tab(), "Guide Sources and Health")
         self.settings_subtabs.addTab(self.create_settings_updates_tab(), "Updates and Maintenance")
@@ -3742,6 +3774,65 @@ class MainWindow(QMainWindow):
         storage_layout.addLayout(storage_btn_row)
 
         right_col.addWidget(storage_box)
+
+        # Category Colors Card
+        color_box = QGroupBox("Guide Category Colors")
+        color_layout = QVBoxLayout(color_box)
+        color_layout.setContentsMargins(15, 15, 15, 15)
+        color_layout.setSpacing(12)
+
+        color_grid = QGridLayout()
+        color_grid.setSpacing(10)
+        color_grid.setColumnMinimumWidth(0, 150)
+        color_grid.setColumnMinimumWidth(1, 75)
+        color_grid.setColumnMinimumWidth(2, 75)
+
+        self._cat_swatches: Dict[str, QPushButton] = {}
+        self._cat_hex_labels: Dict[str, QLabel] = {}
+
+        cat_specs = [
+            ("sports", "Sports"),
+            ("news", "News"),
+            ("movies", "Movies"),
+            ("tvshows", "TV Shows / Series"),
+        ]
+
+        cur_colors = self.config_mgr.category_colors
+
+        for r_idx, (cat_key, cat_label) in enumerate(cat_specs):
+            hex_val = cur_colors.get(cat_key, DEFAULT_CATEGORY_COLORS.get(cat_key, "#ffffff"))
+
+            lbl_name = QLabel(f"<b>{cat_label}</b>")
+            lbl_name.setStyleSheet("font-size: 13px; color: #e2e8f0;")
+            color_grid.addWidget(lbl_name, r_idx, 0, Qt.AlignmentFlag.AlignVCenter)
+
+            swatch_btn = QPushButton()
+            swatch_btn.setProperty("class", "category-color-tile")
+            swatch_btn.setFixedSize(65, 24)
+            swatch_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            swatch_btn.setToolTip(f"Click to change {cat_label} color")
+            swatch_btn.setStyleSheet(f"background-color: {hex_val};")
+            swatch_btn.clicked.connect(lambda checked=False, k=cat_key, l=cat_label: self._choose_category_color(k, l))
+            color_grid.addWidget(swatch_btn, r_idx, 1, Qt.AlignmentFlag.AlignVCenter)
+            self._cat_swatches[cat_key] = swatch_btn
+
+            hex_lbl = QLabel(hex_val.upper())
+            hex_lbl.setStyleSheet("font-family: monospace; font-size: 12px; color: #94a3b8;")
+            color_grid.addWidget(hex_lbl, r_idx, 2, Qt.AlignmentFlag.AlignVCenter)
+            self._cat_hex_labels[cat_key] = hex_lbl
+
+        color_layout.addLayout(color_grid)
+
+        cat_btn_row = QHBoxLayout()
+        cat_btn_row.setSpacing(10)
+        self.reset_cat_colors_btn = QPushButton("Reset Defaults")
+        self.reset_cat_colors_btn.setToolTip("Reset all category colors to their default scheme")
+        self.reset_cat_colors_btn.clicked.connect(self._reset_category_colors)
+        cat_btn_row.addWidget(self.reset_cat_colors_btn)
+        cat_btn_row.addStretch()
+        color_layout.addLayout(cat_btn_row)
+
+        right_col.addWidget(color_box)
         right_col.addStretch()
         two_col_layout.addLayout(right_col, 50)
 
@@ -4733,6 +4824,60 @@ class MainWindow(QMainWindow):
 
         self.update_storage_status_ui()
         self.flash_save_indicator("Settings Saved")
+
+    def _choose_category_color(self, category_key: str, category_label: str):
+        """Open dark-themed QColorDialog to select a custom color for a guide category."""
+        cur_hex = self.config_mgr.category_colors.get(
+            category_key,
+            DEFAULT_CATEGORY_COLORS.get(category_key, "#ffffff")
+        )
+        initial_color = QColor(cur_hex)
+        chosen_color = QColorDialog.getColor(
+            initial_color,
+            self,
+            f"Select Color for {category_label}",
+            options=QColorDialog.ColorDialogOption.DontUseNativeDialog
+        )
+        if chosen_color.isValid():
+            new_hex = chosen_color.name()
+            self.config_mgr.set_category_color(category_key, new_hex)
+
+            # Update swatch tile and hex label
+            if hasattr(self, "_cat_swatches") and category_key in self._cat_swatches:
+                self._cat_swatches[category_key].setStyleSheet(f"background-color: {new_hex};")
+            if hasattr(self, "_cat_hex_labels") and category_key in self._cat_hex_labels:
+                self._cat_hex_labels[category_key].setText(new_hex.upper())
+
+            # Invalidate grid tile delegate color cache
+            if hasattr(self, "grid_tile_delegate") and self.grid_tile_delegate:
+                self.grid_tile_delegate.refresh_category_colors()
+
+            # Refresh views live
+            self._refresh_guide_view(keep_scroll=True)
+            active_prog = self._get_active_selected_program()
+            if active_prog:
+                self._display_program_details(active_prog)
+            self.flash_save_indicator(f"{category_label} Color Updated")
+
+    def _reset_category_colors(self):
+        """Reset all category colors to default factory values."""
+        self.config_mgr.reset_category_colors()
+
+        if hasattr(self, "_cat_swatches") and hasattr(self, "_cat_hex_labels"):
+            for cat_key, swatch in self._cat_swatches.items():
+                def_hex = DEFAULT_CATEGORY_COLORS.get(cat_key, "#ffffff")
+                swatch.setStyleSheet(f"background-color: {def_hex};")
+                if cat_key in self._cat_hex_labels:
+                    self._cat_hex_labels[cat_key].setText(def_hex.upper())
+
+        if hasattr(self, "grid_tile_delegate") and self.grid_tile_delegate:
+            self.grid_tile_delegate.refresh_category_colors()
+
+        self._refresh_guide_view(keep_scroll=True)
+        active_prog = self._get_active_selected_program()
+        if active_prog:
+            self._display_program_details(active_prog)
+        self.flash_save_indicator("Category Colors Reset to Defaults")
 
     def browse_custom_recording_folder(self):
         current = self.custom_folder_input.text().strip() or str(self.storage_mgr.get_recording_folder())
@@ -5885,6 +6030,7 @@ class MainWindow(QMainWindow):
                 dur_item = QTableWidgetItem(p.get("duration_iso", ""))
 
                 # Option 1 coloring for list view:
+                cat_colors = self.config_mgr.category_colors
                 if timing_state == "past":
                     gray_color = QColor("#788292")
                     time_item.setForeground(gray_color)
@@ -5893,12 +6039,8 @@ class MainWindow(QMainWindow):
                     sub_item.setForeground(gray_color)
                     dur_item.setForeground(gray_color)
                 elif timing_state == "live":
-                    if cat == "sports":
-                        t_color = QColor("#ffa028")
-                    elif cat == "news":
-                        t_color = QColor("#4fc3f7")
-                    elif cat == "movies":
-                        t_color = QColor("#c084fc")
+                    if cat in ("sports", "news", "movies"):
+                        t_color = QColor(cat_colors.get(cat, DEFAULT_CATEGORY_COLORS.get(cat, "#ffffff")))
                     else:
                         t_color = QColor("#66bb6a")
                     title_item.setForeground(t_color)
@@ -5906,14 +6048,7 @@ class MainWindow(QMainWindow):
                     title_font.setBold(True)
                     title_item.setFont(title_font)
                 else:
-                    if cat == "sports":
-                        t_color = QColor("#ffa028")
-                    elif cat == "news":
-                        t_color = QColor("#4fc3f7")
-                    elif cat == "movies":
-                        t_color = QColor("#c084fc")
-                    else:
-                        t_color = QColor("#f1f5f9")
+                    t_color = QColor(cat_colors.get(cat, cat_colors.get("tvshows", "#f1f5f9")))
                     title_item.setForeground(t_color)
 
                 self.guide_table.setItem(row, 1, time_item)
@@ -6167,26 +6302,16 @@ class MainWindow(QMainWindow):
 
         # Color-code the show title by its timing state and category (Option 1)
         cat = prog.get("_category") or classify_guide_category(prog)
+        cat_colors = self.config_mgr.category_colors
         if state == "past":
             title_color_hex = "#788292"  # Dark grey, readable
         elif state == "live":
-            if cat == "sports":
-                title_color_hex = "#ffa028"  # Orange
-            elif cat == "news":
-                title_color_hex = "#4fc3f7"  # Blue
-            elif cat == "movies":
-                title_color_hex = "#c084fc"  # Purple
+            if cat in ("sports", "news", "movies"):
+                title_color_hex = cat_colors.get(cat, DEFAULT_CATEGORY_COLORS.get(cat, "#ffa028"))
             else:
                 title_color_hex = "#66bb6a"  # Green used before
         else: # upcoming
-            if cat == "sports":
-                title_color_hex = "#ffa028"  # Orange
-            elif cat == "news":
-                title_color_hex = "#4fc3f7"  # Blue
-            elif cat == "movies":
-                title_color_hex = "#c084fc"  # Purple
-            else:
-                title_color_hex = "#f1f5f9"  # White / light grey
+            title_color_hex = cat_colors.get(cat, cat_colors.get("tvshows", "#f1f5f9"))
 
         primary_title, secondary_sub = get_program_display_titles(prog)
         escaped_title = html.escape(primary_title)
