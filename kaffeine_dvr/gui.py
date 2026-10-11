@@ -1726,7 +1726,8 @@ QTabWidget#mainTabs > QTabBar::tab:hover:!selected {
 
 /* Secondary Subtabs: Curved Flowing Subtabs */
 QTabWidget#recordingsSubTabs::pane,
-QTabWidget#settingsSubTabs::pane {
+QTabWidget#settingsSubTabs::pane,
+QTabWidget#helpSubTabs::pane {
     border: 1px solid #323a4d;
     border-top: 1.5px solid #3f4961;
     border-radius: 6px;
@@ -1735,7 +1736,8 @@ QTabWidget#settingsSubTabs::pane {
     top: -1px;
 }
 QTabWidget#recordingsSubTabs > QTabBar::tab,
-QTabWidget#settingsSubTabs > QTabBar::tab {
+QTabWidget#settingsSubTabs > QTabBar::tab,
+QTabWidget#helpSubTabs > QTabBar::tab {
     background-color: transparent;
     border: 1px solid transparent;
     border-top-left-radius: 7px;
@@ -1748,7 +1750,8 @@ QTabWidget#settingsSubTabs > QTabBar::tab {
     font-weight: 500;
 }
 QTabWidget#recordingsSubTabs > QTabBar::tab:selected,
-QTabWidget#settingsSubTabs > QTabBar::tab:selected {
+QTabWidget#settingsSubTabs > QTabBar::tab:selected,
+QTabWidget#helpSubTabs > QTabBar::tab:selected {
     background-color: #151822;
     border: 1px solid #323a4d;
     border-bottom: 2px solid #151822;
@@ -1758,7 +1761,8 @@ QTabWidget#settingsSubTabs > QTabBar::tab:selected {
     font-weight: bold;
 }
 QTabWidget#recordingsSubTabs > QTabBar::tab:hover:!selected,
-QTabWidget#settingsSubTabs > QTabBar::tab:hover:!selected {
+QTabWidget#settingsSubTabs > QTabBar::tab:hover:!selected,
+QTabWidget#helpSubTabs > QTabBar::tab:hover:!selected {
     background-color: #1e2332;
     border: 1px solid #2a3142;
     border-bottom: none;
