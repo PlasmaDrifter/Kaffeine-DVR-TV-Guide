@@ -3152,7 +3152,15 @@ class MainWindow(QMainWindow):
         self.pass_collapsible.addHeaderWidget(self.passport_header_warning)
 
         pass_content = QWidget()
-        pass_layout = QVBoxLayout(pass_content)
+        pass_layout = QHBoxLayout(pass_content)
+        pass_layout.setContentsMargins(12, 12, 12, 12)
+        pass_layout.setSpacing(25)
+
+        # Left Column: Instructions and guidelines
+        left_col_widget = QWidget()
+        left_col_layout = QVBoxLayout(left_col_widget)
+        left_col_layout.setContentsMargins(0, 0, 0, 0)
+        left_col_layout.setSpacing(10)
 
         pass_instructions = QLabel(
             "<b>24/7 Broadcast Station & Affiliate Guide (TV Passport):</b><br>"
@@ -3164,28 +3172,41 @@ class MainWindow(QMainWindow):
             "2. Select your channel to open its listings page. Look at the web address (URL):<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;<code>https://www.tvpassport.com/tv-listings/stations/station/<b>1812</b>/2026-10-07</code><br>"
             "3. The number right after <code>/station/</code> is your station ID (e.g. <b>1812</b>).<br>"
-            "4. Enter one mapping per line below using the format: <b>KaffeineChannelName = StationID</b> (e.g. <code>NBC = 1812</code> or <code>CW = 11611</code>).<br><br>"
+            "4. Enter one mapping per line using the format: <b>KaffeineChannelName = StationID</b> (e.g. <code>NBC = 1812</code> or <code>CW = 11611</code>).<br><br>"
             "<b>Automatic Sync:</b> When you click <i>Save Station IDs</i>, Kaffeine DVR immediately syncs guide listings in the background without needing a manual sync."
         )
         pass_instructions.setWordWrap(True)
         pass_instructions.setOpenExternalLinks(True)
         pass_instructions.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
         pass_instructions.setStyleSheet("color: #cdd6e2; font-size: 13px; line-height: 1.5;")
-        pass_layout.addWidget(pass_instructions)
+        left_col_layout.addWidget(pass_instructions)
 
         self.passport_notice = QLabel()
         self.passport_notice.setWordWrap(True)
         self.passport_notice.setOpenExternalLinks(True)
         self.passport_notice.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
-        pass_layout.addWidget(self.passport_notice)
+        left_col_layout.addWidget(self.passport_notice)
         self.update_tvpassport_notice()
+        left_col_layout.addStretch()
+
+        pass_layout.addWidget(left_col_widget, stretch=5)
+
+        # Right Column: Station Mappings Editor & Save Button
+        right_col_widget = QWidget()
+        right_col_layout = QVBoxLayout(right_col_widget)
+        right_col_layout.setContentsMargins(0, 0, 0, 0)
+        right_col_layout.setSpacing(8)
+
+        mapping_hdr = QLabel("<b>Station ID Mappings (KaffeineChannel = StationID):</b>")
+        mapping_hdr.setStyleSheet("color: #9cb0c6; font-size: 12px; font-weight: bold;")
+        right_col_layout.addWidget(mapping_hdr)
 
         self.passport_stations_text = QTextEdit()
         self.passport_stations_text.setPlaceholderText("Example:\nNBC = 1812\nABC = 4163\nFox = 1809")
         stations_lines = [f"{k} = {v}" for k, v in self.config_mgr.tvpassport_stations.items()]
         self.passport_stations_text.setPlainText("\n".join(stations_lines))
-        self.passport_stations_text.setMinimumHeight(200)
-        pass_layout.addWidget(self.passport_stations_text)
+        self.passport_stations_text.setMinimumHeight(180)
+        right_col_layout.addWidget(self.passport_stations_text)
 
         save_pass_btn = QPushButton("Save Station IDs")
         save_pass_btn.setObjectName("primaryActionBtn")
@@ -3193,7 +3214,10 @@ class MainWindow(QMainWindow):
         pass_btn_row = QHBoxLayout()
         pass_btn_row.addWidget(save_pass_btn)
         pass_btn_row.addStretch()
-        pass_layout.addLayout(pass_btn_row)
+        right_col_layout.addLayout(pass_btn_row)
+
+        pass_layout.addWidget(right_col_widget, stretch=5)
+
         self.pass_collapsible.setContentLayout(pass_layout)
         layout.addWidget(self.pass_collapsible)
 
