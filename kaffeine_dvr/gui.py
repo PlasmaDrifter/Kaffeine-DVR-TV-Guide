@@ -5795,13 +5795,15 @@ class MainWindow(QMainWindow):
         # 2. List View sizing
         if hasattr(self, "guide_table"):
             list_font_sz = max(9, 12 + list_lvl)
-            list_row_h = max(22, 28 + (list_lvl * 5))
+            list_row_h = max(22, list_font_sz + 14)
             self.guide_table.verticalHeader().setDefaultSectionSize(list_row_h)
             hl_hex = self.config_mgr.category_colors.get("highlight", "#38bdf8")
             hl_color = QColor(hl_hex)
             sel_bg = f"rgba({hl_color.red()}, {hl_color.green()}, {hl_color.blue()}, 0.35)"
+            list_hdr_sz = max(9, min(16, list_font_sz - 1))
             self.guide_table.setStyleSheet(
                 f"QTableWidget#guideListTable {{ font-size: {list_font_sz}px; gridline-color: #2b3242; }} "
+                f"QTableWidget#guideListTable QHeaderView::section {{ font-size: {list_hdr_sz}px; }} "
                 f"QTableWidget#guideListTable::item:selected {{ background-color: {sel_bg}; }}"
             )
             self.guide_table.viewport().update()
