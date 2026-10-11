@@ -91,7 +91,7 @@ class ConfigManager:
                     if "live_tv_watch_mode" not in data:
                         data["live_tv_watch_mode"] = "timeshift"
                     if "timeshift_buffer_seconds" not in data:
-                        data["timeshift_buffer_seconds"] = 4
+                        data["timeshift_buffer_seconds"] = 2
                     if "delete_timeshift_on_exit" not in data:
                         data["delete_timeshift_on_exit"] = True
                     if "category_colors" not in data or not isinstance(data.get("category_colors"), dict):
@@ -141,7 +141,7 @@ class ConfigManager:
             "playback_player": "system",
             "custom_playback_player_cmd": "",
             "live_tv_watch_mode": "timeshift",
-            "timeshift_buffer_seconds": 4,
+            "timeshift_buffer_seconds": 2,
             "delete_timeshift_on_exit": True,
             "category_colors": dict(DEFAULT_CATEGORY_COLORS)
         }
@@ -329,11 +329,11 @@ class ConfigManager:
 
     @property
     def timeshift_buffer_seconds(self) -> int:
-        return int(self.data.get("timeshift_buffer_seconds", 4))
+        return int(self.data.get("timeshift_buffer_seconds", 2))
 
     @timeshift_buffer_seconds.setter
     def timeshift_buffer_seconds(self, val: int):
-        self.data["timeshift_buffer_seconds"] = max(2, min(30, int(val)))
+        self.data["timeshift_buffer_seconds"] = max(1, min(30, int(val)))
         self.save()
 
     @property

@@ -290,11 +290,16 @@ class StorageManager:
             "delete_all": delete_all
         }
 
-    def find_active_or_recent_recording_file(self, show_title: str, max_age_seconds: int = 14400) -> Optional[Path]:
+    def find_active_or_recent_recording_file(
+        self,
+        show_title: str,
+        max_age_seconds: int = 14400,
+        min_size_bytes: int = 65536
+    ) -> Optional[Path]:
         """
         Locates the in-progress or recently created recording file matching show_title.
         Checks for exact and fuzzy title matches in the recording directory,
-        prioritizing recently modified files that contain sufficient playable data (> 256 KB).
+        prioritizing recently modified files that contain sufficient playable data (> 64 KB).
         """
         folder = self.get_recording_folder()
         if not folder or not folder.exists():
@@ -313,7 +318,7 @@ class StorageManager:
                 try:
                     stat = item.stat()
                     age = now_ts - stat.st_mtime
-                    if age > max_age_seconds or stat.st_size < 262144:
+                    if age > max_age_seconds or stat.st_size < min_size_bytes:
                         continue
 
                     fname = item.name

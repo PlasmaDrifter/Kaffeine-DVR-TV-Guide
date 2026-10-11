@@ -3593,10 +3593,10 @@ class MainWindow(QMainWindow):
         )
 
         self.timeshift_buffer_spin = QSpinBox()
-        self.timeshift_buffer_spin.setRange(2, 15)
+        self.timeshift_buffer_spin.setRange(1, 15)
         self.timeshift_buffer_spin.setSuffix(" sec")
         self.timeshift_buffer_spin.setFixedWidth(100)
-        self.timeshift_buffer_spin.setValue(getattr(self.config_mgr, "timeshift_buffer_seconds", 4))
+        self.timeshift_buffer_spin.setValue(getattr(self.config_mgr, "timeshift_buffer_seconds", 2))
 
         dvr_layout.addRow(
             make_setting_label(
@@ -6901,14 +6901,14 @@ class MainWindow(QMainWindow):
                 return
 
         qid = rec_info.get("id") if rec_info else None
-        buf_secs = getattr(self.config_mgr, "timeshift_buffer_seconds", 4)
+        buf_secs = getattr(self.config_mgr, "timeshift_buffer_seconds", 2)
         pname = self.config_mgr.playback_player.upper()
         self.status_bar.showMessage(f"Buffering live stream ({buf_secs}s) before opening in {pname}...", (buf_secs + 4) * 1000)
         QTimer.singleShot(
             buf_secs * 1000,
             lambda: self._on_timeshift_buffer_ready(
                 prog,
-                retries_left=4,
+                retries_left=6,
                 was_already_scheduled=was_already_scheduled,
                 queue_id=qid
             )
@@ -6917,7 +6917,7 @@ class MainWindow(QMainWindow):
     def _on_timeshift_buffer_ready(
         self,
         prog: Dict[str, Any],
-        retries_left: int = 4,
+        retries_left: int = 6,
         was_already_scheduled: bool = False,
         queue_id: Optional[int] = None
     ):
@@ -6954,9 +6954,9 @@ class MainWindow(QMainWindow):
             return
 
         if retries_left > 0:
-            self.status_bar.showMessage(f"Buffering stream data ({retries_left} retries left)...", 2000)
+            self.status_bar.showMessage(f"Buffering stream data...", 1000)
             QTimer.singleShot(
-                1500,
+                600,
                 lambda: self._on_timeshift_buffer_ready(
                     prog,
                     retries_left - 1,
