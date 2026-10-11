@@ -200,7 +200,7 @@ def check_for_updates() -> Dict[str, Any]:
     # 1. Git Clone check
     if repo_root:
         try:
-            # Fetch remote status
+            # Fetch remote status and tags
             subprocess.run(
                 ["git", "fetch", "--tags", "origin", "main"],
                 cwd=str(repo_root),
@@ -210,16 +210,7 @@ def check_for_updates() -> Dict[str, Any]:
                 check=True
             )
 
-            # Check commits behind origin/main
-            rev_out = subprocess.check_output(
-                ["git", "rev-list", "--count", "HEAD..origin/main"],
-                cwd=str(repo_root),
-                text=True,
-                timeout=5
-            ).strip()
-            behind = int(rev_out) if rev_out.isdigit() else 0
-
-            # Check latest tag
+            # Check latest release tag on origin/main
             latest_tag = ""
             try:
                 tag_out = subprocess.check_output(
@@ -232,22 +223,9 @@ def check_for_updates() -> Dict[str, Any]:
             except Exception:
                 pass
 
-            # Try to get recent release notes or commit log
-            notes = ""
-            if behind > 0:
-                try:
-                    notes = subprocess.check_output(
-                        ["git", "log", f"-n", str(min(10, behind)), "--pretty=format:• %s", "HEAD..origin/main"],
-                        cwd=str(repo_root),
-                        text=True,
-                        timeout=5
-                    ).strip()
-                except Exception:
-                    pass
-
-            # If behind origin/main or a newer tag is published on GitHub, fetch release notes from API
             is_newer_remote_tag = bool(latest_tag and is_newer_version(latest_tag, __version__))
-            if (behind > 0 or is_newer_remote_tag) and not notes:
+            if is_newer_remote_tag:
+                notes = ""
                 try:
                     req = urllib.request.Request(
                         RELEASES_API,
@@ -259,23 +237,15 @@ def check_for_updates() -> Dict[str, Any]:
                 except Exception:
                     pass
 
-            if behind > 0:
-                result["update_available"] = True
-                ver_display = latest_tag if latest_tag else f"{__version__}+{behind}"
-                result["latest_version"] = ver_display
-                result["details"] = f"{behind} new commit(s) available on origin/main."
-                result["release_notes"] = notes
-                return result
-            elif is_newer_remote_tag:
                 result["update_available"] = True
                 result["latest_version"] = latest_tag
-                result["details"] = f"New version v{latest_tag} is available."
+                result["details"] = f"New version v{latest_tag} is available on GitHub."
                 result["release_notes"] = notes
                 return result
             else:
                 result["update_available"] = False
                 result["latest_version"] = __version__
-                result["details"] = "Your repository clone is up to date with origin/main."
+                result["details"] = "Your installation is up to date."
                 result["release_notes"] = get_local_release_notes(__version__)
                 return result
         except Exception:
@@ -315,6 +285,12 @@ def apply_update(progress_cb: Optional[Callable[[str], None]] = None) -> Tuple[b
     Applies the latest update using git pull or pip upgrade.
     Returns (success, message).
     """
+    appimage_path = os.environ.get("APPIMAGE")
+    if appimage_path:
+        import webbrowser
+        webbrowser.open(f"https://github.com/{GITHUB_REPO}/releases/latest")
+        return True, "AppImage updates must be downloaded from GitHub Releases. Opened the releases page in your browser."
+
     repo_root = get_repo_root()
     pip_flags = get_pip_flags()
     service_active = is_watcher_service_active()
