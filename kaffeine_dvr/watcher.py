@@ -106,11 +106,11 @@ class Watcher:
             except Exception as e:
                 print(f"Error checking lingering buffers: {e}", flush=True)
 
-        # Safeguard via D-Bus: if an upcoming show starts in <= 15 seconds,
+        # Safeguard via D-Bus: if an upcoming show starts in <= 5 seconds,
         # ensure no active stream is running on another channel in Kaffeine
         for rec_b, s_b_dt in upcoming:
             secs_until_b = (s_b_dt - now).total_seconds()
-            if 0 <= secs_until_b <= 15:
+            if 0 <= secs_until_b <= 5:
                 ch_b = rec_b.get("channel", "").strip().lower()
                 try:
                     active_dbus = self.dbus_client._list_via_dbus()
@@ -150,13 +150,13 @@ class Watcher:
             start_local = rec.get("start_time_local", start_iso)
             rec_id = rec["id"]
 
-            # Compute effective dispatch parameters (10s delayed start cheat for consecutive recordings on different channels)
+            # Compute effective dispatch parameters (2s delayed start cheat for consecutive recordings on different channels)
             dispatch_start_iso, dispatch_dur_iso = self.queue_mgr.get_effective_dispatch_params(rec)
             if dispatch_start_iso != start_iso:
                 now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 print(
                     f"[{now_str}] Tuner Handover Cheat: Offsetting start of '{title}' ({channel}) "
-                    f"by +10s to {dispatch_start_iso} (dur: {dispatch_dur_iso}) to ensure preceding channel releases tuner.",
+                    f"by +2s to {dispatch_start_iso} (dur: {dispatch_dur_iso}) to ensure preceding channel releases tuner.",
                     flush=True
                 )
 

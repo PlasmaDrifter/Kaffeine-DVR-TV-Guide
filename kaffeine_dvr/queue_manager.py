@@ -222,8 +222,8 @@ class QueueManager:
                         old_buf = rec_a["buf_mins"]
                         rec_a["buf_mins"] = 0
 
-                        # Stop rec_a 10 seconds early (target end is rec_b["start_dt"] - 10s)
-                        target_end_a = rec_b["start_dt"] - timedelta(seconds=10)
+                        # Stop rec_a 5 seconds early (target end is rec_b["start_dt"] - 5s)
+                        target_end_a = rec_b["start_dt"] - timedelta(seconds=5)
                         new_total_secs = max(30, int((target_end_a - rec_a["start_dt"]).total_seconds()))
                         rec_a["buffered_end_dt"] = target_end_a
                         rec_a["base_end_dt"] = target_end_a
@@ -283,7 +283,7 @@ class QueueManager:
                             now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                             print(
                                 f"[{now_str}] Back-to-Back Handover Tuned: Stopped '{rec_a['title']}' ({rec_a['channel']}) "
-                                f"10s early at {new_end_iso} (dur: {new_dur_iso}, buffer: 0m) for consecutive show "
+                                f"5s early at {new_end_iso} (dur: {new_dur_iso}, buffer: 0m) for consecutive show "
                                 f"'{rec_b['title']}' ({rec_b['channel']}) starting at {rec_b['start_iso']}.",
                                 flush=True
                             )
@@ -299,7 +299,7 @@ class QueueManager:
 
                     # CASE 2: Not back-to-back, but buffer of rec_a extends into rec_b
                     elif gap_secs > 60 and rec_b["start_dt"] < rec_a["buffered_end_dt"]:
-                        allowed_buffer_secs = max(0, int((rec_b["start_dt"] - rec_a["base_end_dt"]).total_seconds()) - 10)
+                        allowed_buffer_secs = max(0, int((rec_b["start_dt"] - rec_a["base_end_dt"]).total_seconds()) - 5)
                         clamped_buf_mins = allowed_buffer_secs // 60
 
                         if clamped_buf_mins < rec_a["buf_mins"]:
@@ -379,8 +379,8 @@ class QueueManager:
         """
         Determines the exact begin_iso and duration_iso to send to Kaffeine.
         If this recording is consecutive with an earlier recording on a different channel
-        (predecessor finishes within 60s of this recording's start), applies a 10-second
-        delayed start cheat (start + 10s, duration - 10s) to give the tuner hardware a
+        (predecessor finishes within 60s of this recording's start), applies a 2-second
+        delayed start cheat (start + 2s, duration - 2s) to give the tuner hardware a
         guaranteed clear window to release and retune.
         """
         try:
@@ -408,8 +408,8 @@ class QueueManager:
                     diff = (start_dt - r_end).total_seconds()
                     # If predecessor ends between 60s before and 60s after start_dt
                     if -60 <= diff <= 60:
-                        adj_start = start_dt + timedelta(seconds=10)
-                        adj_secs = max(30, total_secs - 10)
+                        adj_start = start_dt + timedelta(seconds=2)
+                        adj_secs = max(30, total_secs - 2)
                         adj_start_iso = adj_start.strftime("%Y-%m-%dT%H:%M:%S")
                         ah = adj_secs // 3600
                         am = (adj_secs % 3600) // 60
