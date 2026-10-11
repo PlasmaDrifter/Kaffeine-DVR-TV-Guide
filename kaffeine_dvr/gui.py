@@ -1020,7 +1020,7 @@ def classify_guide_category(prog: Dict[str, Any]) -> str:
     Color mapping:
     - Sports: Orange (#ffa028)
     - News: Blue (#4fc3f7)
-    - Movies: Red (#ff5c5c)
+    - Movies: Purple (#c084fc)
     - TV Shows: Green (#66bb6a)
     """
     title = (prog.get("show_title") or "").strip()
@@ -1134,7 +1134,7 @@ class ProgramTileDelegate(QStyledItemDelegate):
     """
     Custom item delegate for rendering traditional EPG grid program tiles.
     - Flawlessly aligns multi-line text flush to the left edge with uniform padding.
-    - Colors show titles: Sports = Orange (#ffa028), News = Blue (#4fc3f7), Movies = Red (#ff5c5c), TV Shows = Green (#66bb6a).
+    - Colors show titles: Sports = Orange (#ffa028), News = Blue (#4fc3f7), Movies = Purple (#c084fc), TV Shows = Green (#66bb6a).
     - Subtext displays time range and episode title with high legibility.
     """
     COLOR_SELECTED_BG = QColor("#2b3e4f")
@@ -1162,7 +1162,7 @@ class ProgramTileDelegate(QStyledItemDelegate):
     CATEGORY_COLORS = {
         "sports": QColor("#ffa028"),
         "news": QColor("#4fc3f7"),
-        "movies": QColor("#ff5c5c"),
+        "movies": QColor("#c084fc"),
         "tvshows": QColor("#f1f5f9"),
     }
 
@@ -5514,7 +5514,7 @@ class MainWindow(QMainWindow):
                     elif cat == "news":
                         t_color = QColor("#4fc3f7")
                     elif cat == "movies":
-                        t_color = QColor("#ff5c5c")
+                        t_color = QColor("#c084fc")
                     else:
                         t_color = QColor("#66bb6a")
                     title_item.setForeground(t_color)
@@ -5527,7 +5527,7 @@ class MainWindow(QMainWindow):
                     elif cat == "news":
                         t_color = QColor("#4fc3f7")
                     elif cat == "movies":
-                        t_color = QColor("#ff5c5c")
+                        t_color = QColor("#c084fc")
                     else:
                         t_color = QColor("#f1f5f9")
                     title_item.setForeground(t_color)
@@ -5788,7 +5788,7 @@ class MainWindow(QMainWindow):
             elif cat == "news":
                 title_color_hex = "#4fc3f7"  # Blue
             elif cat == "movies":
-                title_color_hex = "#ff5c5c"  # Red
+                title_color_hex = "#c084fc"  # Purple
             else:
                 title_color_hex = "#66bb6a"  # Green used before
         else: # upcoming
@@ -5797,7 +5797,7 @@ class MainWindow(QMainWindow):
             elif cat == "news":
                 title_color_hex = "#4fc3f7"  # Blue
             elif cat == "movies":
-                title_color_hex = "#ff5c5c"  # Red
+                title_color_hex = "#c084fc"  # Purple
             else:
                 title_color_hex = "#f1f5f9"  # White / light grey
 
