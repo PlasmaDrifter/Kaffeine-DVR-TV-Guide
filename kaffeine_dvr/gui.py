@@ -5515,14 +5515,14 @@ class MainWindow(QMainWindow):
         is_grid = self._is_grid_view_active()
         if is_grid:
             grid_lvl = getattr(self, "guide_grid_zoom_level", 0)
-            target_rows = max(3, min(16, 8 - grid_lvl))
-            can_zoom_in = target_rows > 3
+            target_rows = max(1, min(16, 8 - grid_lvl))
+            can_zoom_in = target_rows > 1
             can_zoom_out = target_rows < 16
             tooltip_in = "Increase grid font and tile size"
             tooltip_out = "Decrease grid font and tile size"
         else:
             list_lvl = getattr(self, "guide_list_zoom_level", 0)
-            can_zoom_in = list_lvl < 6
+            can_zoom_in = list_lvl < 14
             can_zoom_out = list_lvl > -3
             tooltip_in = "Increase list view font size"
             tooltip_out = "Decrease list view font size"
@@ -5539,15 +5539,15 @@ class MainWindow(QMainWindow):
         if self._is_grid_view_active():
             if not hasattr(self, "guide_grid_zoom_level"):
                 self.guide_grid_zoom_level = 0
-            target_rows = max(3, min(16, 8 - self.guide_grid_zoom_level))
-            if target_rows > 3:
+            target_rows = max(1, min(16, 8 - self.guide_grid_zoom_level))
+            if target_rows > 1:
                 self.guide_grid_zoom_level += 1
                 self.settings.setValue("guide_grid_zoom_level", self.guide_grid_zoom_level)
                 self._apply_guide_zoom()
         else:
             if not hasattr(self, "guide_list_zoom_level"):
                 self.guide_list_zoom_level = 0
-            if self.guide_list_zoom_level < 6:
+            if self.guide_list_zoom_level < 14:
                 self.guide_list_zoom_level += 1
                 self.settings.setValue("guide_list_zoom_level", self.guide_list_zoom_level)
                 self._apply_guide_zoom()
@@ -5558,7 +5558,7 @@ class MainWindow(QMainWindow):
         if self._is_grid_view_active():
             if not hasattr(self, "guide_grid_zoom_level"):
                 self.guide_grid_zoom_level = 0
-            target_rows = max(3, min(16, 8 - self.guide_grid_zoom_level))
+            target_rows = max(1, min(16, 8 - self.guide_grid_zoom_level))
             if target_rows < 16:
                 self.guide_grid_zoom_level -= 1
                 self.settings.setValue("guide_grid_zoom_level", self.guide_grid_zoom_level)
@@ -5581,15 +5581,15 @@ class MainWindow(QMainWindow):
         if hasattr(self, "guide_grid_table"):
             # Target number of rows visible in the viewport:
             # Baseline is 8 rows at lvl = 0.
-            # Zoom in (lvl > 0) shows fewer rows (e.g. 7, 6, 5, 4, 3) with taller tiles.
-            # Zoom out (lvl < 0) shows more rows (e.g. 9, 10, 11... up to 16) with compact tiles.
-            target_rows = max(3, min(16, 8 - grid_lvl))
+            # Zoom in (lvl > 0) shows fewer rows (down to 1 row) with large tiles and text.
+            # Zoom out (lvl < 0) shows more rows (up to 16) with compact tiles.
+            target_rows = max(1, min(16, 8 - grid_lvl))
 
             vp = self.guide_grid_table.viewport()
             vh = vp.height() if vp else 0
 
             if vh < 100:
-                base_row_h = max(44, 62 + (grid_lvl * 10))
+                base_row_h = max(44, 62 + (grid_lvl * 12))
                 rem = 0
             else:
                 base_row_h = max(16, vh // target_rows)
@@ -5610,8 +5610,8 @@ class MainWindow(QMainWindow):
             if hasattr(self, "grid_tile_delegate"):
                 self.grid_tile_delegate.set_zoom_delta(zoom_delta)
 
-            hdr_font_sz = max(9, min(24, 11 + zoom_delta))
-            v_hdr_font_sz = max(10, min(24, 12 + zoom_delta))
+            hdr_font_sz = max(9, min(36, 11 + zoom_delta))
+            v_hdr_font_sz = max(10, min(36, 12 + zoom_delta))
             self.guide_grid_table.setStyleSheet(
                 f"QTableWidget#guideGridTable QHeaderView::section:horizontal {{ font-size: {hdr_font_sz}px; }} "
                 f"QTableWidget#guideGridTable QHeaderView::section:vertical {{ font-size: {v_hdr_font_sz}px; }}"
