@@ -958,6 +958,37 @@ class AdjustBufferDialog(QDialog):
         return self.buf_spin.value()
 
 
+class CollapsibleHeaderButton(QToolButton):
+    def __init__(self, subtitle: str = "", parent=None):
+        super().__init__(parent)
+        self._subtitle = subtitle
+
+    def sizeHint(self) -> QSize:
+        sh = super().sizeHint()
+        if self._subtitle:
+            sub_w = self.fontMetrics().horizontalAdvance(self._subtitle) + 24
+            return QSize(sh.width() + sub_w, sh.height())
+        return sh
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if self._subtitle:
+            painter = QPainter(self)
+            painter.setPen(QColor("#788496"))
+            font = QFont(self.font())
+            font.setItalic(True)
+            font.setBold(False)
+            font.setPointSize(10)
+            painter.setFont(font)
+
+            fm = self.fontMetrics()
+            text_w = fm.horizontalAdvance(self.text())
+            x = 12 + 16 + text_w + 14
+            y = (self.height() + painter.fontMetrics().ascent() - painter.fontMetrics().descent()) // 2
+            painter.drawText(x, y, self._subtitle)
+            painter.end()
+
+
 class CollapsibleSection(QWidget):
     def __init__(self, title: str = "", initially_expanded: bool = False, parent=None, subtitle: str = ""):
         super().__init__(parent)
@@ -969,7 +1000,7 @@ class CollapsibleSection(QWidget):
         self.header_layout.setContentsMargins(0, 0, 0, 0)
         self.header_layout.setSpacing(8)
 
-        self.toggle_btn = QToolButton()
+        self.toggle_btn = CollapsibleHeaderButton(subtitle=subtitle)
         self.toggle_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.toggle_btn.setStyleSheet(
             "QToolButton { "
@@ -988,32 +1019,12 @@ class CollapsibleSection(QWidget):
             "  color: #ffffff; "
             "}"
         )
+        self.toggle_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.toggle_btn.setArrowType(Qt.ArrowType.DownArrow if initially_expanded else Qt.ArrowType.RightArrow)
+        self.toggle_btn.setText("  " + title)
         self.toggle_btn.setCheckable(True)
         self.toggle_btn.setChecked(initially_expanded)
         self.toggle_btn.clicked.connect(self.on_toggled)
-
-        if subtitle:
-            self.toggle_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
-            self.toggle_btn.setArrowType(Qt.ArrowType.DownArrow if initially_expanded else Qt.ArrowType.RightArrow)
-            btn_layout = QHBoxLayout(self.toggle_btn)
-            btn_layout.setContentsMargins(24, 0, 12, 0)
-            btn_layout.setSpacing(8)
-
-            title_lbl = QLabel(f"<b>{title}</b>")
-            title_lbl.setStyleSheet("color: #d3dae3; font-size: 12px; background: transparent;")
-            title_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-
-            sub_lbl = QLabel(subtitle)
-            sub_lbl.setStyleSheet("color: #788496; font-size: 11px; font-weight: normal; font-style: italic; background: transparent;")
-            sub_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-
-            btn_layout.addWidget(title_lbl)
-            btn_layout.addWidget(sub_lbl)
-            btn_layout.addStretch()
-        else:
-            self.toggle_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-            self.toggle_btn.setArrowType(Qt.ArrowType.DownArrow if initially_expanded else Qt.ArrowType.RightArrow)
-            self.toggle_btn.setText("  " + title)
         self.header_layout.addWidget(self.toggle_btn)
         self.main_layout.addLayout(self.header_layout)
 
