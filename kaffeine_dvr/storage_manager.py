@@ -289,3 +289,54 @@ class StorageManager:
             "folder": str(folder),
             "delete_all": delete_all
         }
+
+    def find_active_or_recent_recording_file(self, show_title: str, max_age_seconds: int = 14400) -> Optional[Path]:
+        """
+        Locates the in-progress or recently created recording file matching show_title.
+        Checks for exact and fuzzy title matches in the recording directory,
+        prioritizing recently modified files that contain sufficient playable data (> 256 KB).
+        """
+        folder = self.get_recording_folder()
+        if not folder or not folder.exists():
+            return None
+
+        clean_query = re.sub(r'[^a-zA-Z0-9]', '', (show_title or "")).lower()
+        query_words = [w.lower() for w in re.findall(r'\w+', show_title or "") if len(w) > 2]
+
+        now_ts = datetime.now().timestamp()
+        candidates = []
+
+        try:
+            for item in folder.iterdir():
+                if not item.is_file() or item.suffix.lower() not in self.VIDEO_EXTENSIONS:
+                    continue
+                try:
+                    stat = item.stat()
+                    age = now_ts - stat.st_mtime
+                    if age > max_age_seconds or stat.st_size < 262144:
+                        continue
+
+                    fname = item.name
+                    clean_fname = re.sub(r'[^a-zA-Z0-9]', '', fname).lower()
+
+                    score = 0
+                    if clean_query and clean_query in clean_fname:
+                        score = 100
+                    elif clean_fname and clean_fname in clean_query:
+                        score = 80
+                    elif query_words and any(w in clean_fname for w in query_words):
+                        matches = sum(1 for w in query_words if w in clean_fname)
+                        score = int((matches / len(query_words)) * 60)
+
+                    if score > 0:
+                        candidates.append((score, stat.st_mtime, item))
+                except Exception:
+                    continue
+        except Exception as e:
+            print(f"Error searching for active recording: {e}")
+
+        if candidates:
+            candidates.sort(key=lambda c: (c[0], c[1]), reverse=True)
+            return candidates[0][2]
+
+        return None

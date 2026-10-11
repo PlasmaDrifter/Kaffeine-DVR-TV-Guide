@@ -88,6 +88,10 @@ class ConfigManager:
                         data["playback_player"] = "system"
                     if "custom_playback_player_cmd" not in data:
                         data["custom_playback_player_cmd"] = ""
+                    if "live_tv_watch_mode" not in data:
+                        data["live_tv_watch_mode"] = "timeshift"
+                    if "timeshift_buffer_seconds" not in data:
+                        data["timeshift_buffer_seconds"] = 4
                     if "category_colors" not in data or not isinstance(data.get("category_colors"), dict):
                         data["category_colors"] = dict(DEFAULT_CATEGORY_COLORS)
                     else:
@@ -134,6 +138,8 @@ class ConfigManager:
             "dismissed_update_version": "",
             "playback_player": "system",
             "custom_playback_player_cmd": "",
+            "live_tv_watch_mode": "timeshift",
+            "timeshift_buffer_seconds": 4,
             "category_colors": dict(DEFAULT_CATEGORY_COLORS)
         }
         self._save(default_data)
@@ -307,6 +313,24 @@ class ConfigManager:
     @custom_playback_player_cmd.setter
     def custom_playback_player_cmd(self, val: str):
         self.data["custom_playback_player_cmd"] = val
+        self.save()
+
+    @property
+    def live_tv_watch_mode(self) -> str:
+        return self.data.get("live_tv_watch_mode", "timeshift")
+
+    @live_tv_watch_mode.setter
+    def live_tv_watch_mode(self, val: str):
+        self.data["live_tv_watch_mode"] = val
+        self.save()
+
+    @property
+    def timeshift_buffer_seconds(self) -> int:
+        return int(self.data.get("timeshift_buffer_seconds", 4))
+
+    @timeshift_buffer_seconds.setter
+    def timeshift_buffer_seconds(self, val: int):
+        self.data["timeshift_buffer_seconds"] = max(2, min(30, int(val)))
         self.save()
 
     @property

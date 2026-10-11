@@ -2962,6 +2962,12 @@ class MainWindow(QMainWindow):
         self.watch_guide_btn.clicked.connect(self.watch_or_tune_selected_guide_item)
         action_bar.addWidget(self.watch_guide_btn)
 
+        self.alt_watch_guide_btn = QPushButton("Tune in Kaffeine")
+        self.alt_watch_guide_btn.setStyleSheet("padding: 4px 12px;")
+        self.alt_watch_guide_btn.setVisible(False)
+        self.alt_watch_guide_btn.clicked.connect(self.alt_watch_or_tune_selected_guide_item)
+        action_bar.addWidget(self.alt_watch_guide_btn)
+
         self.adjust_buffer_guide_btn = QPushButton("Adjust Buffer...")
         self.adjust_buffer_guide_btn.setStyleSheet("font-weight: bold;")
         self.adjust_buffer_guide_btn.setVisible(False)
@@ -3560,6 +3566,39 @@ class MainWindow(QMainWindow):
             self.launch_mode_combo
         )
 
+        # Live TV Playback Mode (Timeshift vs Direct Kaffeine)
+        self.live_tv_mode_combo = QComboBox()
+        self.live_tv_mode_combo.addItem("Timeshift via Video Player (SMPlayer / MPV / VLC)", "timeshift")
+        self.live_tv_mode_combo.addItem("Watch in Kaffeine (Direct Tuner)", "kaffeine")
+        self.live_tv_mode_combo.setFixedWidth(290)
+        cur_live_mode = getattr(self.config_mgr, "live_tv_watch_mode", "timeshift")
+        l_idx = self.live_tv_mode_combo.findData(cur_live_mode)
+        self.live_tv_mode_combo.setCurrentIndex(l_idx if l_idx >= 0 else 0)
+
+        dvr_layout.addRow(
+            make_setting_label(
+                "Live TV Playback Mode:",
+                "Controls how live broadcast TV is played from the Guide:\n"
+                "• Timeshift via Video Player: Records broadcast in background with Kaffeine minimized, buffers for a few seconds, then opens the stream in your selected Recorded Video Player with full pause, rewind, and seek capabilities.\n"
+                "• Watch in Kaffeine: Tunes directly into Kaffeine's live window via D-Bus."
+            ),
+            self.live_tv_mode_combo
+        )
+
+        self.timeshift_buffer_spin = QSpinBox()
+        self.timeshift_buffer_spin.setRange(2, 15)
+        self.timeshift_buffer_spin.setSuffix(" sec")
+        self.timeshift_buffer_spin.setFixedWidth(100)
+        self.timeshift_buffer_spin.setValue(getattr(self.config_mgr, "timeshift_buffer_seconds", 4))
+
+        dvr_layout.addRow(
+            make_setting_label(
+                "Timeshift Initial Buffer:",
+                "Initial wait duration (seconds) before opening your video player when timeshifting live TV. Allows Kaffeine to lock the tuner frequency and write stream packets."
+            ),
+            self.timeshift_buffer_spin
+        )
+
         self.guide_watch_combo = QComboBox()
         self.guide_watch_combo.addItem("Minimal Mode (-m clean player)", "minimal")
         self.guide_watch_combo.addItem("Full Screen (-f fullscreen)", "fullscreen")
@@ -3854,6 +3893,10 @@ class MainWindow(QMainWindow):
         self.days_spin.valueChanged.connect(self._auto_save_automation_settings)
         self.launch_mode_combo.currentIndexChanged.connect(self._auto_save_automation_settings)
         self.guide_watch_combo.currentIndexChanged.connect(self._auto_save_automation_settings)
+        if hasattr(self, "live_tv_mode_combo"):
+            self.live_tv_mode_combo.currentIndexChanged.connect(self._auto_save_automation_settings)
+        if hasattr(self, "timeshift_buffer_spin"):
+            self.timeshift_buffer_spin.valueChanged.connect(self._auto_save_automation_settings)
         if hasattr(self, "playback_player_combo"):
             self.playback_player_combo.currentIndexChanged.connect(self._auto_save_automation_settings)
         if hasattr(self, "custom_player_edit"):
@@ -4815,6 +4858,10 @@ class MainWindow(QMainWindow):
         self.config_mgr.launch_mode = self.launch_mode_combo.currentData()
         if hasattr(self, "guide_watch_combo"):
             self.config_mgr.guide_watch_mode = self.guide_watch_combo.currentData()
+        if hasattr(self, "live_tv_mode_combo"):
+            self.config_mgr.live_tv_watch_mode = self.live_tv_mode_combo.currentData()
+        if hasattr(self, "timeshift_buffer_spin"):
+            self.config_mgr.timeshift_buffer_seconds = self.timeshift_buffer_spin.value()
         if hasattr(self, "playback_player_combo"):
             self.config_mgr.playback_player = self.playback_player_combo.currentData()
         if hasattr(self, "custom_player_edit"):
@@ -6422,12 +6469,27 @@ class MainWindow(QMainWindow):
         self.guide_detail_title.setText(header_prefix + colored_title + rest_of_header)
         self.guide_detail_text.setText(summary)
 
+        live_mode = getattr(self.config_mgr, "live_tv_watch_mode", "timeshift")
+        rec_file = timing_info.get("recorded_file")
+        is_live_rec = timing_info.get("is_active_recording") or bool(rec_file)
+        player_name = self.config_mgr.playback_player
+        player_disp = "Player" if player_name == "system" else player_name.upper()
+
         if hasattr(self, "watch_guide_btn"):
             if state == "live":
                 self.watch_guide_btn.setVisible(True)
-                self.watch_guide_btn.setText("Watch Live")
-                self.watch_guide_btn.setToolTip(f"Watch live broadcast on {channel} in Kaffeine")
-                self.watch_guide_btn.setStyleSheet("font-weight: bold; background-color: #2e7d32; color: #ffffff; padding: 4px 12px;")
+                if is_live_rec and rec_file:
+                    self.watch_guide_btn.setText(f"Watch in {player_disp}")
+                    self.watch_guide_btn.setToolTip(f"Play active live recording in {player_disp} ({os.path.basename(rec_file)})")
+                    self.watch_guide_btn.setStyleSheet("font-weight: bold; background-color: #1976d2; color: #ffffff; padding: 4px 12px;")
+                elif live_mode == "timeshift":
+                    self.watch_guide_btn.setText(f"Watch Live ({player_disp})")
+                    self.watch_guide_btn.setToolTip(f"Timeshift broadcast in {player_disp} with background recording on {channel}")
+                    self.watch_guide_btn.setStyleSheet("font-weight: bold; background-color: #1976d2; color: #ffffff; padding: 4px 12px;")
+                else:
+                    self.watch_guide_btn.setText("Watch Live (Kaffeine)")
+                    self.watch_guide_btn.setToolTip(f"Watch live broadcast on {channel} directly in Kaffeine")
+                    self.watch_guide_btn.setStyleSheet("font-weight: bold; background-color: #2e7d32; color: #ffffff; padding: 4px 12px;")
             elif state == "upcoming":
                 self.watch_guide_btn.setVisible(True)
                 self.watch_guide_btn.setText("Tune Channel Now")
@@ -6437,10 +6499,25 @@ class MainWindow(QMainWindow):
                 if timing_info.get("recorded_file"):
                     self.watch_guide_btn.setVisible(True)
                     self.watch_guide_btn.setText("Play Recording")
-                    self.watch_guide_btn.setToolTip(f"Play recorded file in player: {os.path.basename(timing_info['recorded_file'])}")
+                    self.watch_guide_btn.setToolTip(f"Play recorded file in {player_disp}: {os.path.basename(timing_info['recorded_file'])}")
                     self.watch_guide_btn.setStyleSheet("font-weight: bold; background-color: #1976d2; color: #ffffff; padding: 4px 12px;")
                 else:
                     self.watch_guide_btn.setVisible(False)
+
+        if hasattr(self, "alt_watch_guide_btn"):
+            if state == "live":
+                self.alt_watch_guide_btn.setVisible(True)
+                if is_live_rec and rec_file:
+                    self.alt_watch_guide_btn.setText("Tune in Kaffeine")
+                    self.alt_watch_guide_btn.setToolTip(f"Tune directly into Kaffeine live window on {channel}")
+                elif live_mode == "timeshift":
+                    self.alt_watch_guide_btn.setText("Tune in Kaffeine")
+                    self.alt_watch_guide_btn.setToolTip(f"Tune directly into Kaffeine live window on {channel}")
+                else:
+                    self.alt_watch_guide_btn.setText(f"Timeshift in {player_disp}")
+                    self.alt_watch_guide_btn.setToolTip(f"Timeshift in {player_disp} with background recording on {channel}")
+            else:
+                self.alt_watch_guide_btn.setVisible(False)
 
         if hasattr(self, "record_guide_btn"):
             self.record_guide_btn.setVisible(rec_info is None)
@@ -6459,6 +6536,8 @@ class MainWindow(QMainWindow):
             self.guide_detail_text.clear()
             if hasattr(self, "watch_guide_btn"):
                 self.watch_guide_btn.setVisible(False)
+            if hasattr(self, "alt_watch_guide_btn"):
+                self.alt_watch_guide_btn.setVisible(False)
             if hasattr(self, "record_guide_btn"):
                 self.record_guide_btn.setVisible(True)
                 self.record_guide_btn.setText("Record This Program")
@@ -6514,11 +6593,34 @@ class MainWindow(QMainWindow):
 
         if start_dt <= now < end_dt:
             mins_left = max(1, int((end_dt - now).total_seconds() // 60))
+            active_file = None
+            title = (prog.get("show_title") or prog.get("title") or "").strip()
+            ch = (prog.get("kaffeine_channel") or "").strip().lower()
+            start_iso_prefix = (start_iso or "")[:16]
+
+            # Check if this live program has an active recording or recording file
+            rec_data = prog.get("_scheduled_rec")
+            if not rec_data:
+                try:
+                    active_map = self.queue_mgr.get_active_scheduled_map()
+                    rec_data = active_map.get((ch, start_iso_prefix))
+                except Exception:
+                    pass
+
+            if rec_data or prog.get("_scheduled_rec"):
+                try:
+                    cand = self.storage_mgr.find_active_or_recent_recording_file(title)
+                    if cand:
+                        active_file = str(cand)
+                except Exception:
+                    pass
+
             return {
                 "state": "live",
                 "time_desc": f"Live Now ({mins_left}m remaining)",
                 "start_fmt": start_fmt,
-                "recorded_file": None,
+                "recorded_file": active_file,
+                "is_active_recording": bool(rec_data and active_file),
                 "start_dt": start_dt,
                 "end_dt": end_dt
             }
@@ -6600,17 +6702,29 @@ class MainWindow(QMainWindow):
         state = timing_info.get("state")
         ch = prog.get("kaffeine_channel", "")
         title = prog.get("show_title") or prog.get("title") or "Program"
-
+        rec_file = timing_info.get("recorded_file")
+        is_live_rec = timing_info.get("is_active_recording") or bool(rec_file)
+        live_mode = getattr(self.config_mgr, "live_tv_watch_mode", "timeshift")
         watch_mode = self.config_mgr.guide_watch_mode
+
         if state == "live":
-            self.dbus_client.tune_channel(ch, raise_window=True, view_mode=watch_mode)
-            self.status_bar.showMessage(f"Tuned to {ch} - Watching '{title}' live.", 4000)
+            if is_live_rec and rec_file:
+                self.dbus_client.play_file(
+                    rec_file,
+                    player=self.config_mgr.playback_player,
+                    custom_cmd=self.config_mgr.custom_playback_player_cmd
+                )
+                self.status_bar.showMessage(f"Playing live recording: {os.path.basename(rec_file)}", 4000)
+            elif live_mode == "timeshift":
+                self.start_timeshift_playback(prog)
+            else:
+                self.dbus_client.tune_channel(ch, raise_window=True, view_mode=watch_mode)
+                self.status_bar.showMessage(f"Tuned to {ch} - Watching '{title}' live in Kaffeine.", 4000)
         elif state == "upcoming":
             # Direct button click in detail pane tunes directly without popup
             self.dbus_client.tune_channel(ch, raise_window=True, view_mode=watch_mode)
             self.status_bar.showMessage(f"Tuned to {ch} (Upcoming: '{title}' {timing_info.get('time_desc')}).", 4000)
         elif state == "past":
-            rec_file = timing_info.get("recorded_file")
             if rec_file:
                 self.dbus_client.play_file(
                     rec_file,
@@ -6618,6 +6732,27 @@ class MainWindow(QMainWindow):
                     custom_cmd=self.config_mgr.custom_playback_player_cmd
                 )
                 self.status_bar.showMessage(f"Playing recording: {os.path.basename(rec_file)}", 4000)
+
+    def alt_watch_or_tune_selected_guide_item(self):
+        prog = self._get_active_selected_program()
+        if not prog:
+            return
+
+        timing_info = self._get_program_timing_state(prog)
+        state = timing_info.get("state")
+        ch = prog.get("kaffeine_channel", "")
+        title = prog.get("show_title") or prog.get("title") or "Program"
+        rec_file = timing_info.get("recorded_file")
+        is_live_rec = timing_info.get("is_active_recording") or bool(rec_file)
+        live_mode = getattr(self.config_mgr, "live_tv_watch_mode", "timeshift")
+        watch_mode = self.config_mgr.guide_watch_mode
+
+        if state == "live":
+            if (is_live_rec and rec_file) or (live_mode == "timeshift"):
+                self.dbus_client.tune_channel(ch, raise_window=True, view_mode=watch_mode)
+                self.status_bar.showMessage(f"Tuned to {ch} - Watching '{title}' live in Kaffeine.", 4000)
+            else:
+                self.start_timeshift_playback(prog)
 
     def handle_program_activation(self, prog: Dict[str, Any]):
         if not prog:
@@ -6627,11 +6762,24 @@ class MainWindow(QMainWindow):
         state = timing_info.get("state")
         ch = prog.get("kaffeine_channel", "")
         title = prog.get("show_title") or prog.get("title") or "Program"
+        rec_file = timing_info.get("recorded_file")
+        is_live_rec = timing_info.get("is_active_recording") or bool(rec_file)
+        live_mode = getattr(self.config_mgr, "live_tv_watch_mode", "timeshift")
         watch_mode = self.config_mgr.guide_watch_mode
 
         if state == "live":
-            self.dbus_client.tune_channel(ch, raise_window=True, view_mode=watch_mode)
-            self.status_bar.showMessage(f"Tuned to {ch} - Watching '{title}' live.", 4000)
+            if is_live_rec and rec_file:
+                self.dbus_client.play_file(
+                    rec_file,
+                    player=self.config_mgr.playback_player,
+                    custom_cmd=self.config_mgr.custom_playback_player_cmd
+                )
+                self.status_bar.showMessage(f"Playing live recording: {os.path.basename(rec_file)}", 4000)
+            elif live_mode == "timeshift":
+                self.start_timeshift_playback(prog)
+            else:
+                self.dbus_client.tune_channel(ch, raise_window=True, view_mode=watch_mode)
+                self.status_bar.showMessage(f"Tuned to {ch} - Watching '{title}' live in Kaffeine.", 4000)
         elif state == "upcoming":
             # Option A: Smart Choice Dialog
             dlg = UpcomingShowDialog(prog, timing_info, parent=self)
@@ -6642,7 +6790,6 @@ class MainWindow(QMainWindow):
                 self.dbus_client.tune_channel(ch, raise_window=True, view_mode=watch_mode)
                 self.status_bar.showMessage(f"Tuned to {ch} (Upcoming: '{title}' {timing_info.get('time_desc')}).", 4000)
         elif state == "past":
-            rec_file = timing_info.get("recorded_file")
             if rec_file:
                 self.dbus_client.play_file(
                     rec_file,
@@ -6655,6 +6802,72 @@ class MainWindow(QMainWindow):
                     self, "Broadcast Ended",
                     f"'{title}' on {ch} has already finished broadcasting ({timing_info.get('time_desc')})."
                 )
+
+    def start_timeshift_playback(self, prog: Dict[str, Any]):
+        """
+        Timeshifts a live broadcast in the user's selected video player:
+        - If already recording and .m2t file exists, opens immediately in player.
+        - Otherwise, queues recording, dispatches to Kaffeine (minimized in background),
+          waits a few seconds for tuner lock and stream buffering, then launches the player.
+        """
+        if not prog:
+            return
+
+        title = prog.get("show_title") or prog.get("title") or "Live Program"
+        ch = prog.get("kaffeine_channel", "")
+
+        # Check if file is already active on disk
+        active_file = self.storage_mgr.find_active_or_recent_recording_file(title, max_age_seconds=7200)
+        if active_file and active_file.exists():
+            self.dbus_client.play_file(
+                str(active_file),
+                player=self.config_mgr.playback_player,
+                custom_cmd=self.config_mgr.custom_playback_player_cmd
+            )
+            pname = self.config_mgr.playback_player.upper()
+            self.status_bar.showMessage(f"Playing active recording '{title}' in {pname}.", 5000)
+            return
+
+        # Ensure program is queued and recording is dispatched
+        active_map = self.queue_mgr.get_active_scheduled_map()
+        ch_key = (ch or "").strip().lower()
+        iso_key = (prog.get("start_iso") or "")[:16]
+        rec_info = active_map.get((ch_key, iso_key))
+
+        if not rec_info:
+            try:
+                self.record_selected_guide_item()
+            except Exception as e:
+                self.status_bar.showMessage(f"Error starting background recording for timeshift: {e}", 4000)
+                return
+
+        buf_secs = getattr(self.config_mgr, "timeshift_buffer_seconds", 4)
+        pname = self.config_mgr.playback_player.upper()
+        self.status_bar.showMessage(f"Buffering live stream ({buf_secs}s) before opening in {pname}...", (buf_secs + 4) * 1000)
+        QTimer.singleShot(buf_secs * 1000, lambda: self._on_timeshift_buffer_ready(prog, retries_left=4))
+
+    def _on_timeshift_buffer_ready(self, prog: Dict[str, Any], retries_left: int = 4):
+        title = prog.get("show_title") or prog.get("title") or ""
+        active_file = self.storage_mgr.find_active_or_recent_recording_file(title, max_age_seconds=600)
+
+        if active_file and active_file.exists():
+            self.dbus_client.play_file(
+                str(active_file),
+                player=self.config_mgr.playback_player,
+                custom_cmd=self.config_mgr.custom_playback_player_cmd
+            )
+            pname = self.config_mgr.playback_player.upper()
+            self.status_bar.showMessage(f"Playing timeshifted broadcast '{title}' in {pname}.", 5000)
+            self._display_program_details(prog)
+            return
+
+        if retries_left > 0:
+            self.status_bar.showMessage(f"Buffering stream data ({retries_left} retries left)...", 2000)
+            QTimer.singleShot(1500, lambda: self._on_timeshift_buffer_ready(prog, retries_left - 1))
+        else:
+            self.status_bar.showMessage(
+                f"Recording started on '{title}', but could not locate playable .m2t file yet. Check recording folder.", 6000
+            )
 
     def on_grid_cell_double_clicked(self, row: int, col: int):
         item = self.guide_grid_table.item(row, col)
