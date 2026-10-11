@@ -69,6 +69,8 @@ class ConfigManager:
                         data["max_history_entries"] = 50
                     if "auto_check_updates" not in data:
                         data["auto_check_updates"] = False
+                    if "update_check_frequency" not in data:
+                        data["update_check_frequency"] = "monthly"
                     if "last_update_check_timestamp" not in data:
                         data["last_update_check_timestamp"] = 0.0
                     if "dismissed_update_version" not in data:
@@ -107,6 +109,7 @@ class ConfigManager:
             "auto_buffer_sports": True,
             "max_history_entries": 50,
             "auto_check_updates": False,
+            "update_check_frequency": "monthly",
             "last_update_check_timestamp": 0.0,
             "dismissed_update_version": ""
         }
@@ -425,6 +428,17 @@ class ConfigManager:
     @auto_check_updates.setter
     def auto_check_updates(self, val: bool):
         self.data["auto_check_updates"] = bool(val)
+        self.save()
+
+    @property
+    def update_check_frequency(self) -> str:
+        freq = str(self.data.get("update_check_frequency", "monthly")).lower()
+        return freq if freq in ("weekly", "monthly") else "monthly"
+
+    @update_check_frequency.setter
+    def update_check_frequency(self, val: str):
+        freq = str(val).lower()
+        self.data["update_check_frequency"] = freq if freq in ("weekly", "monthly") else "monthly"
         self.save()
 
     @property

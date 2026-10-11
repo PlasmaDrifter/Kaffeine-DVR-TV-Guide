@@ -3319,18 +3319,27 @@ class MainWindow(QMainWindow):
         pref_layout.setContentsMargins(15, 15, 15, 15)
         pref_layout.setSpacing(12)
 
-        self.auto_check_updates_cb = QCheckBox("Automatically check for updates monthly")
+        freq_row = QHBoxLayout()
+        freq_row.setSpacing(10)
+        self.auto_check_updates_cb = QCheckBox("Automatically check for updates:")
         self.auto_check_updates_cb.setChecked(self.config_mgr.auto_check_updates)
         self.auto_check_updates_cb.toggled.connect(self._on_auto_check_updates_toggled)
-        pref_layout.addWidget(self.auto_check_updates_cb)
+        freq_row.addWidget(self.auto_check_updates_cb)
 
-        check_desc = QLabel(
-            "When enabled, Kaffeine DVR silently checks GitHub for new updates once every 30 days. "
-            "If an update is found, a subtle green badge appears in the bottom action bar with a dismissal button."
-        )
-        check_desc.setStyleSheet("color: #8c98aa; font-size: 11px;")
-        check_desc.setWordWrap(True)
-        pref_layout.addWidget(check_desc)
+        self.update_freq_combo = QComboBox()
+        self.update_freq_combo.addItems(["Weekly", "Monthly"])
+        current_freq = self.config_mgr.update_check_frequency.capitalize()
+        self.update_freq_combo.setCurrentText(current_freq if current_freq in ("Weekly", "Monthly") else "Monthly")
+        self.update_freq_combo.setEnabled(self.config_mgr.auto_check_updates)
+        self.update_freq_combo.currentTextChanged.connect(self._on_update_freq_changed)
+        freq_row.addWidget(self.update_freq_combo)
+        freq_row.addStretch()
+        pref_layout.addLayout(freq_row)
+
+        self.check_desc = QLabel(self._get_update_freq_desc_text())
+        self.check_desc.setStyleSheet("color: #8c98aa; font-size: 11px;")
+        self.check_desc.setWordWrap(True)
+        pref_layout.addWidget(self.check_desc)
 
         btn_row = QHBoxLayout()
         self.check_updates_btn = QPushButton("Check for Updates Now")
@@ -3379,9 +3388,25 @@ class MainWindow(QMainWindow):
         scroll.setWidget(container)
         return scroll
 
+    def _get_update_freq_desc_text(self) -> str:
+        freq = self.config_mgr.update_check_frequency
+        days_str = "7 days" if freq == "weekly" else "30 days"
+        return (
+            f"When enabled, Kaffeine DVR silently checks GitHub for new updates once every {days_str}. "
+            "If an update is found, a subtle green badge appears in the bottom action bar with a dismissal button."
+        )
+
     def _on_auto_check_updates_toggled(self, checked: bool):
         self.config_mgr.auto_check_updates = checked
+        if hasattr(self, "update_freq_combo"):
+            self.update_freq_combo.setEnabled(checked)
         self.flash_save_indicator("Update settings saved")
+
+    def _on_update_freq_changed(self, text: str):
+        self.config_mgr.update_check_frequency = text.lower()
+        if hasattr(self, "check_desc"):
+            self.check_desc.setText(self._get_update_freq_desc_text())
+        self.flash_save_indicator(f"Update check set to {text.lower()}")
 
     def navigate_to_updates_tab(self):
         self.tabs.setCurrentIndex(2)
@@ -3397,8 +3422,10 @@ class MainWindow(QMainWindow):
             return
         now = time.time()
         last_check = self.config_mgr.last_update_check_timestamp
-        # Check monthly (30 days = 30 * 86400 = 2592000 seconds)
-        if now - last_check >= 2592000:
+        freq = self.config_mgr.update_check_frequency
+        # Weekly: 7 days = 7 * 86400 = 604800s. Monthly: 30 days = 30 * 86400 = 2592000s
+        interval_seconds = 604800 if freq == "weekly" else 2592000
+        if now - last_check >= interval_seconds:
             self.start_update_check(silent=True)
 
     def start_update_check(self, silent: bool = False):
