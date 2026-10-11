@@ -3813,7 +3813,6 @@ class MainWindow(QMainWindow):
             swatch_btn.setProperty("class", "category-color-tile")
             swatch_btn.setFixedSize(26, 26)
             swatch_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            swatch_btn.setToolTip(f"Click to change {cat_label} color")
             swatch_btn.setStyleSheet(f"QPushButton.category-color-tile {{ background-color: {hex_val}; }}")
             swatch_btn.clicked.connect(lambda checked=False, k=cat_key, l=cat_label: self._choose_category_color(k, l))
             color_grid.addWidget(swatch_btn, r_idx, 0, Qt.AlignmentFlag.AlignVCenter)
