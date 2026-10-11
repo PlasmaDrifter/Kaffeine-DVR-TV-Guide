@@ -1064,7 +1064,7 @@ class GridPanFilter(QObject):
                         h_bar.setValue(h_bar.value() - delta.x())
                     if delta.y() != 0 and v_bar and watched is vp:
                         v_bar.setValue(v_bar.value() - delta.y())
-                    return True
+                return True
 
         elif evt_type == QEvent.Type.MouseButtonRelease:
             if event.button() in (Qt.MouseButton.LeftButton, Qt.MouseButton.MiddleButton):
