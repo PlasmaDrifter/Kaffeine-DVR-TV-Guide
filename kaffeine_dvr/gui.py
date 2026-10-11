@@ -3689,10 +3689,11 @@ class MainWindow(QMainWindow):
         dvr_layout.addRow(
             make_setting_label(
                 "Recorded Video Player:",
-                "Select which media player opens recorded shows from the Guide or Recordings:\n"
-                "• System Default: Opens videos with your desktop environment's default handler (xdg-open).\n"
-                "• Detected Players: Automatically discovers and lists media players installed on your system (supports both native package manager and Flatpak installations).\n"
-                "• Custom Command: Specify any custom player command, binary, or wrapper script (supports {file} placeholder)."
+                "Select which media player opens recorded shows and Live TV timeshift streams from the Guide:\n"
+                "• Playback & Timeshift: Used to play completed recordings as well as timeshift live broadcasts with full pause, rewind, and seek capabilities.\n"
+                "• Instance Isolation: When timeshifting live TV, players like SMPlayer launch as an independent window (inheriting your configured GUI layout, theme, and skins from ~/.config/smplayer) so it will never hijack or close any separate videos you have open.\n"
+                "• Auto-Stop & Tuner Release: Closing the player window during live timeshifting automatically stops background capture in Kaffeine and releases the tuner hardware.\n"
+                "• Supported Players: Automatically discovers native and Flatpak players (SMPlayer, MPV, VLC, MPC-Qt, Celluloid, Haruna, Kaffeine) or accepts custom command templates ({file})."
             ),
             player_container
         )
