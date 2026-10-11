@@ -1390,7 +1390,7 @@ class ProgramTileDelegate(QStyledItemDelegate):
     COLOR_REC_BADGE_BRUSH = QColor("#b71c1c")
     COLOR_LIVE_DOT = QColor("#66bb6a")
     COLOR_WHITE = QColor("#ffffff")
-    COLOR_UPCOMING_TITLE = QColor("#dadde2")
+    COLOR_UPCOMING_TITLE = QColor("#b9feff")
     COLOR_PAST_TITLE = QColor("#788292")
     COLOR_PAST_SUBTEXT = QColor("#5a6474")
     COLOR_LIVE_TITLE = QColor("#66bb6a")
@@ -1400,7 +1400,7 @@ class ProgramTileDelegate(QStyledItemDelegate):
         "sports": QColor("#ffa028"),
         "news": QColor("#4fc3f7"),
         "movies": QColor("#c084fc"),
-        "tvshows": QColor("#dadde2"),
+        "tvshows": QColor("#b9feff"),
         "highlight": QColor("#38bdf8"),
     }
 
@@ -6255,7 +6255,7 @@ class MainWindow(QMainWindow):
                     title_font.setBold(True)
                     title_item.setFont(title_font)
                 else:
-                    t_color = QColor(cat_colors.get(cat, cat_colors.get("tvshows", "#dadde2")))
+                    t_color = QColor(cat_colors.get(cat, cat_colors.get("tvshows", "#b9feff")))
                     title_item.setForeground(t_color)
 
                 self.guide_table.setItem(row, 1, time_item)
@@ -6526,7 +6526,7 @@ class MainWindow(QMainWindow):
             else:
                 title_color_hex = "#66bb6a"  # Green used before
         else: # upcoming
-            title_color_hex = cat_colors.get(cat, cat_colors.get("tvshows", "#dadde2"))
+            title_color_hex = cat_colors.get(cat, cat_colors.get("tvshows", "#b9feff"))
 
         primary_title, secondary_sub = get_program_display_titles(prog)
         escaped_title = html.escape(primary_title)
