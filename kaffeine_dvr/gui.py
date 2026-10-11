@@ -3782,13 +3782,10 @@ class MainWindow(QMainWindow):
         color_layout.setSpacing(12)
 
         color_grid = QGridLayout()
-        color_grid.setSpacing(10)
-        color_grid.setColumnMinimumWidth(0, 150)
-        color_grid.setColumnMinimumWidth(1, 75)
-        color_grid.setColumnMinimumWidth(2, 75)
+        color_grid.setHorizontalSpacing(12)
+        color_grid.setVerticalSpacing(8)
 
         self._cat_swatches: Dict[str, QPushButton] = {}
-        self._cat_hex_labels: Dict[str, QLabel] = {}
 
         cat_specs = [
             ("sports", "Sports"),
@@ -3802,25 +3799,21 @@ class MainWindow(QMainWindow):
         for r_idx, (cat_key, cat_label) in enumerate(cat_specs):
             hex_val = cur_colors.get(cat_key, DEFAULT_CATEGORY_COLORS.get(cat_key, "#ffffff"))
 
-            lbl_name = QLabel(f"<b>{cat_label}</b>")
-            lbl_name.setStyleSheet("font-size: 13px; color: #e2e8f0;")
-            color_grid.addWidget(lbl_name, r_idx, 0, Qt.AlignmentFlag.AlignVCenter)
-
             swatch_btn = QPushButton()
             swatch_btn.setProperty("class", "category-color-tile")
-            swatch_btn.setFixedSize(65, 24)
+            swatch_btn.setFixedSize(26, 26)
             swatch_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             swatch_btn.setToolTip(f"Click to change {cat_label} color")
             swatch_btn.setStyleSheet(f"background-color: {hex_val};")
             swatch_btn.clicked.connect(lambda checked=False, k=cat_key, l=cat_label: self._choose_category_color(k, l))
-            color_grid.addWidget(swatch_btn, r_idx, 1, Qt.AlignmentFlag.AlignVCenter)
+            color_grid.addWidget(swatch_btn, r_idx, 0, Qt.AlignmentFlag.AlignVCenter)
             self._cat_swatches[cat_key] = swatch_btn
 
-            hex_lbl = QLabel(hex_val.upper())
-            hex_lbl.setStyleSheet("font-family: monospace; font-size: 12px; color: #94a3b8;")
-            color_grid.addWidget(hex_lbl, r_idx, 2, Qt.AlignmentFlag.AlignVCenter)
-            self._cat_hex_labels[cat_key] = hex_lbl
+            lbl_name = QLabel(f"<b>{cat_label}</b>")
+            lbl_name.setStyleSheet("font-size: 13px; color: #e2e8f0;")
+            color_grid.addWidget(lbl_name, r_idx, 1, Qt.AlignmentFlag.AlignVCenter)
 
+        color_grid.setColumnStretch(1, 1)
         color_layout.addLayout(color_grid)
 
         cat_btn_row = QHBoxLayout()
@@ -4842,7 +4835,7 @@ class MainWindow(QMainWindow):
             new_hex = chosen_color.name()
             self.config_mgr.set_category_color(category_key, new_hex)
 
-            # Update swatch tile and hex label
+            # Update swatch tile
             if hasattr(self, "_cat_swatches") and category_key in self._cat_swatches:
                 self._cat_swatches[category_key].setStyleSheet(f"background-color: {new_hex};")
             if hasattr(self, "_cat_hex_labels") and category_key in self._cat_hex_labels:
@@ -4863,11 +4856,11 @@ class MainWindow(QMainWindow):
         """Reset all category colors to default factory values."""
         self.config_mgr.reset_category_colors()
 
-        if hasattr(self, "_cat_swatches") and hasattr(self, "_cat_hex_labels"):
+        if hasattr(self, "_cat_swatches"):
             for cat_key, swatch in self._cat_swatches.items():
                 def_hex = DEFAULT_CATEGORY_COLORS.get(cat_key, "#ffffff")
                 swatch.setStyleSheet(f"background-color: {def_hex};")
-                if cat_key in self._cat_hex_labels:
+                if hasattr(self, "_cat_hex_labels") and cat_key in self._cat_hex_labels:
                     self._cat_hex_labels[cat_key].setText(def_hex.upper())
 
         if hasattr(self, "grid_tile_delegate") and self.grid_tile_delegate:
