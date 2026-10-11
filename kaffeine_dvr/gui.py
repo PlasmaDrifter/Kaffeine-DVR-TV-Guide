@@ -1401,6 +1401,7 @@ class ProgramTileDelegate(QStyledItemDelegate):
         "news": QColor("#4fc3f7"),
         "movies": QColor("#c084fc"),
         "tvshows": QColor("#dadde2"),
+        "highlight": QColor("#38bdf8"),
     }
 
     def __init__(self, parent=None, config_mgr=None):
@@ -1480,8 +1481,11 @@ class ProgramTileDelegate(QStyledItemDelegate):
         is_recording = is_scheduled and (rec_status == "RECORDING" or (timing_state == "live" and rec_status in ("ARMED", "RECORDING")))
 
         if is_selected:
-            bg_color = self.COLOR_SELECTED_BG
-            border_color = self.COLOR_SELECTED_BORDER
+            border_color = self.get_category_color("highlight")
+            r = int(0.18 * border_color.red() + 0.82 * 20)
+            g = int(0.18 * border_color.green() + 0.82 * 25)
+            b = int(0.18 * border_color.blue() + 0.82 * 35)
+            bg_color = QColor(r, g, b)
             pen_width = 2
         else:
             pen_width = 2 if is_scheduled else 1
@@ -3883,8 +3887,8 @@ class MainWindow(QMainWindow):
 
         right_col.addWidget(storage_box)
 
-        # Category Colors Card
-        color_box = QGroupBox("Guide Category Colors")
+        # Guide Colors Card
+        color_box = QGroupBox("Guide Colors")
         color_layout = QVBoxLayout(color_box)
         color_layout.setContentsMargins(15, 15, 15, 15)
         color_layout.setSpacing(12)
@@ -3900,6 +3904,7 @@ class MainWindow(QMainWindow):
             ("news", "News"),
             ("movies", "Movies"),
             ("tvshows", "TV Shows / Series"),
+            ("highlight", "Selection Highlighter"),
         ]
 
         cur_colors = self.config_mgr.category_colors
@@ -4965,6 +4970,7 @@ class MainWindow(QMainWindow):
                 self.grid_tile_delegate.refresh_category_colors()
 
             # Refresh views live
+            self._apply_guide_zoom()
             self._refresh_guide_view(keep_scroll=True)
             active_prog = self._get_active_selected_program()
             if active_prog:
@@ -4985,11 +4991,12 @@ class MainWindow(QMainWindow):
         if hasattr(self, "grid_tile_delegate") and self.grid_tile_delegate:
             self.grid_tile_delegate.refresh_category_colors()
 
+        self._apply_guide_zoom()
         self._refresh_guide_view(keep_scroll=True)
         active_prog = self._get_active_selected_program()
         if active_prog:
             self._display_program_details(active_prog)
-        self.flash_save_indicator("Category Colors Reset to Defaults")
+        self.flash_save_indicator("Guide Colors Reset to Defaults")
 
     def browse_custom_recording_folder(self):
         current = self.custom_folder_input.text().strip() or str(self.storage_mgr.get_recording_folder())
@@ -5769,8 +5776,12 @@ class MainWindow(QMainWindow):
             list_font_sz = max(9, 12 + list_lvl)
             list_row_h = max(22, 28 + (list_lvl * 5))
             self.guide_table.verticalHeader().setDefaultSectionSize(list_row_h)
+            hl_hex = self.config_mgr.category_colors.get("highlight", "#38bdf8")
+            hl_color = QColor(hl_hex)
+            sel_bg = f"rgba({hl_color.red()}, {hl_color.green()}, {hl_color.blue()}, 0.35)"
             self.guide_table.setStyleSheet(
-                f"QTableWidget#guideListTable {{ font-size: {list_font_sz}px; gridline-color: #2b3242; }}"
+                f"QTableWidget#guideListTable {{ font-size: {list_font_sz}px; gridline-color: #2b3242; }} "
+                f"QTableWidget#guideListTable::item:selected {{ background-color: {sel_bg}; }}"
             )
             self.guide_table.viewport().update()
 
