@@ -5090,9 +5090,15 @@ class MainWindow(QMainWindow):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         if confirm == QMessageBox.StandardButton.Yes:
-            k_key = self.queue_mgr.remove_recording(int(qid))
-            if k_key:
-                self.dbus_client.remove_recording(k_key)
+            rec_info = self.queue_mgr.remove_recording(int(qid))
+            if rec_info:
+                self.dbus_client.cancel_recording(
+                    key=rec_info.get("kaffeine_key"),
+                    channel=rec_info.get("channel"),
+                    title=rec_info.get("title")
+                )
+            else:
+                self.dbus_client.cancel_recording(title=rec_title)
             self.status_bar.showMessage(f"Cancelled recording '{rec_title}'.", 3000)
             self.refresh_recordings()
             self._refresh_guide_view(keep_scroll=True)
@@ -6320,9 +6326,13 @@ class MainWindow(QMainWindow):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         if confirm == QMessageBox.StandardButton.Yes:
-            k_key = self.queue_mgr.remove_recording(int(qid))
-            if k_key:
-                self.dbus_client.remove_recording(k_key)
+            removed_info = self.queue_mgr.remove_recording(int(qid))
+            target_info = removed_info or rec_info or {}
+            self.dbus_client.cancel_recording(
+                key=target_info.get("kaffeine_key"),
+                channel=target_info.get("channel") or prog.get("kaffeine_channel"),
+                title=target_info.get("title") or prog.get("show_title") or rec_title
+            )
             self.status_bar.showMessage(f"Cancelled recording '{rec_title}'.", 3000)
             self.refresh_recordings()
             self._refresh_guide_view(keep_scroll=True)

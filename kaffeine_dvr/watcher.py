@@ -92,7 +92,11 @@ class Watcher:
                                     f"({rec_a.get('channel')}) so '{rec_b.get('title')}' ({rec_b.get('channel')}) can record.",
                                     flush=True
                                 )
-                                self.dbus_client.remove_recording(k_key)
+                                self.dbus_client.cancel_recording(
+                                    key=k_key,
+                                    channel=rec_a.get("channel"),
+                                    title=rec_a.get("title")
+                                )
                                 self.queue_mgr.archive_to_history(rec_a["id"])
                             break
             except Exception as e:

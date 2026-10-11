@@ -644,12 +644,37 @@ class KaffeineDbusClient:
     def schedule_recording(self, name: str, channel: str, begin_iso: str, duration_iso: str, repeat: int = 0) -> int:
         """
         Schedule a recording via D-Bus (if running) or direct SQLite insertion (if offline).
+        Prevents duplicate active timers in Kaffeine for the same show and channel.
         begin_iso: e.g. '2026-10-07T20:00:00'
         duration_iso: e.g. '01:00:00'
         repeat: 0 for once, bitmask for recurring days
-        Returns the new recording ID.
+        Returns the recording ID.
         """
         if self.is_running():
+            # Check for existing scheduled/active timers in Kaffeine to avoid duplicate recording files
+            try:
+                existing_entries = self._list_via_dbus()
+                ch_target = (channel or "").strip().lower()
+                name_target = (name or "").strip().lower()
+                for entry in existing_entries:
+                    e_ch = (entry.get("channel") or "").strip().lower()
+                    e_name = (entry.get("name") or "").strip().lower()
+                    if e_ch == ch_target and (e_name == name_target or name_target in e_name):
+                        if entry.get("is_running"):
+                            print(
+                                f"Active recording already running in Kaffeine for '{name}' on {channel} "
+                                f"(Key {entry['id']}). Reusing existing active timer.",
+                                flush=True
+                            )
+                            return int(entry["id"])
+                        elif entry.get("duration") == duration_iso:
+                            return int(entry["id"])
+                        else:
+                            # Stale schedule parameters: remove old timer before adding updated one
+                            self.remove_recording(int(entry["id"]))
+            except Exception as e:
+                print(f"Notice: Duplicate timer pre-check encountered: {e}", flush=True)
+
             # Try dbus-python call
             try:
                 import dbus
@@ -723,15 +748,21 @@ class KaffeineDbusClient:
         conn.close()
         return new_id
 
-
     def remove_recording(self, key: int) -> bool:
-        """Cancel/remove a scheduled recording."""
+        """Cancel/remove a scheduled recording by its Kaffeine numeric key."""
+        if not key:
+            return False
+        try:
+            key_int = int(key)
+        except (ValueError, TypeError):
+            return False
+
         if not self.is_running():
             # If offline, remove directly from SQLite
             try:
                 conn = sqlite3.connect(str(self.kaffeine_db_path))
                 cur = conn.cursor()
-                cur.execute("DELETE FROM RecordingSchedule WHERE Id = ?", (key,))
+                cur.execute("DELETE FROM RecordingSchedule WHERE Id = ?", (key_int,))
                 conn.commit()
                 conn.close()
                 return True
@@ -739,18 +770,109 @@ class KaffeineDbusClient:
                 print(f"Failed to delete recording from SQLite: {e}")
                 return False
 
+        success = False
         try:
             import dbus
             bus = dbus.SessionBus()
             proxy = bus.get_object(self.service_name, self.object_path)
             try:
                 iface = dbus.Interface(proxy, dbus_interface=self.interface_name)
-                iface.RemoveProgram(dbus.UInt32(key))
+                iface.RemoveProgram(dbus.UInt32(key_int))
             except Exception:
-                proxy.RemoveProgram(key)
-            return True
-        except Exception as e:
+                proxy.RemoveProgram(key_int)
+            success = True
+        except Exception:
             # Fallback to qdbus CLI
-            res = subprocess.run(["qdbus", self.service_name, self.object_path, "RemoveProgram", str(key)],
-                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            return res.returncode == 0
+            res = subprocess.run(
+                ["qdbus", self.service_name, self.object_path, "RemoveProgram", str(key_int)],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+            )
+            success = (res.returncode == 0)
+
+        # Also purge from SQLite directly to guarantee clean state
+        try:
+            if self.kaffeine_db_path.exists():
+                conn = sqlite3.connect(str(self.kaffeine_db_path))
+                cur = conn.cursor()
+                cur.execute("DELETE FROM RecordingSchedule WHERE Id = ?", (key_int,))
+                conn.commit()
+                conn.close()
+        except Exception:
+            pass
+
+        return success
+
+    def cancel_recording(
+        self,
+        key: Optional[int] = None,
+        channel: Optional[str] = None,
+        title: Optional[str] = None
+    ) -> bool:
+        """
+        Thoroughly cancels and halts a recording in Kaffeine:
+        1. If key is provided, stops and deletes it by key.
+        2. Queries active and scheduled timers in Kaffeine via D-Bus; stops and deletes
+           any matching timers for the same channel/title to prevent lingering streams.
+        3. Cleans matching records from Kaffeine's sqlite.db.
+        """
+        removed_any = False
+
+        # Step 1: Remove by primary key if provided
+        if key is not None:
+            try:
+                k_int = int(key)
+                if k_int > 0:
+                    if self.remove_recording(k_int):
+                        removed_any = True
+            except (ValueError, TypeError):
+                pass
+
+        # Step 2: Query active/scheduled timers in Kaffeine and purge matching duplicates/orphans
+        if self.is_running():
+            try:
+                active_entries = self._list_via_dbus()
+                ch_target = (channel or "").strip().lower()
+                t_target = (title or "").strip().lower()
+
+                for entry in active_entries:
+                    e_id = entry.get("id")
+                    if not e_id:
+                        continue
+
+                    e_ch = (entry.get("channel") or "").strip().lower()
+                    e_name = (entry.get("name") or "").strip().lower()
+
+                    match_key = (key is not None and int(key) == int(e_id))
+                    match_show = False
+                    if ch_target and t_target:
+                        ch_matches = (e_ch == ch_target)
+                        name_matches = (e_name == t_target) or (t_target in e_name) or (e_name in t_target)
+                        match_show = ch_matches and name_matches
+
+                    if match_key or match_show:
+                        if self.remove_recording(int(e_id)):
+                            removed_any = True
+            except Exception as e:
+                print(f"Error checking Kaffeine schedule during cancellation: {e}", flush=True)
+
+        # Step 3: SQLite cleanup
+        if self.kaffeine_db_path.exists():
+            try:
+                conn = sqlite3.connect(str(self.kaffeine_db_path))
+                cur = conn.cursor()
+                if key is not None:
+                    try:
+                        cur.execute("DELETE FROM RecordingSchedule WHERE Id = ?", (int(key),))
+                    except (ValueError, TypeError):
+                        pass
+                if channel and title:
+                    cur.execute(
+                        "DELETE FROM RecordingSchedule WHERE LOWER(Channel) = LOWER(?) AND (LOWER(Name) = LOWER(?) OR Name LIKE ?)",
+                        (channel.strip(), title.strip(), f"%{title.strip()}%")
+                    )
+                conn.commit()
+                conn.close()
+            except Exception as e:
+                print(f"Error purging Kaffeine SQLite schedule: {e}", flush=True)
+
+        return removed_any

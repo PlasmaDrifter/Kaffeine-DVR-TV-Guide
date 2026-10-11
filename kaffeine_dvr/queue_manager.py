@@ -356,22 +356,24 @@ class QueueManager:
                 mapping[(ch, start)] = r
         return mapping
 
-    def remove_recording(self, queue_id: int) -> Optional[int]:
+    def remove_recording(self, queue_id: int) -> Optional[Dict[str, Any]]:
         """
-        Removes/cancels from queue. Returns the kaffeine_key if it was armed.
+        Removes/cancels a recording from queue. Returns the recording's details dictionary
+        (including kaffeine_key, channel, title, start_iso) so Kaffeine timers can be purged.
         """
         conn = sqlite3.connect(str(self.db_path))
+        conn.row_factory = sqlite3.Row
         cur = conn.cursor()
-        cur.execute("SELECT kaffeine_key, status FROM recording_queue WHERE id = ?", (queue_id,))
+        cur.execute("SELECT * FROM recording_queue WHERE id = ?", (queue_id,))
         row = cur.fetchone()
         if not row:
             conn.close()
             return None
-        k_key, status = row
+        rec_data = dict(row)
         cur.execute("DELETE FROM recording_queue WHERE id = ?", (queue_id,))
         conn.commit()
         conn.close()
-        return k_key if (k_key and status in ('ARMED', 'RECORDING')) else None
+        return rec_data
 
     def get_due_to_arm(self) -> List[Dict[str, Any]]:
         """
