@@ -8,7 +8,7 @@ DEFAULT_CATEGORY_COLORS = {
     "sports": "#ffa028",
     "news": "#4fc3f7",
     "movies": "#c084fc",
-    "tvshows": "#f1f5f9"
+    "tvshows": "#dadde2"
 }
 
 class ConfigManager:
