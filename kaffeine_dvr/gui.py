@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
     QScrollArea, QToolButton, QSizePolicy, QAbstractSpinBox, QSlider,
     QStackedWidget, QButtonGroup, QStyledItemDelegate, QStyleOptionViewItem,
     QStyle, QListWidget, QListWidgetItem, QAbstractItemView, QToolTip,
-    QLayout
+    QLayout, QPlainTextEdit
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QSettings, QByteArray, QEvent, QObject, QPoint, QPointF, QRect, QRectF, QSize
 from PyQt6.QtGui import QColor, QFont, QFontMetrics, QIcon, QWheelEvent, QPainter, QPalette, QPixmap, QPen, QPolygon, QBrush
@@ -182,6 +182,169 @@ class UpdateApplyWorker(QThread):
             self.finished.emit(success, msg)
         except Exception as e:
             self.finished.emit(False, str(e))
+
+
+class ServiceLogsWorker(QThread):
+    finished = pyqtSignal(str, bool)
+
+    def __init__(self, lines: int = 100):
+        super().__init__()
+        self.lines = lines
+
+    def run(self):
+        try:
+            cmd = ["journalctl", "--user", "-u", "kaffeine-dvr-watcher.service", "-n", str(self.lines), "--no-pager"]
+            res = subprocess.run(cmd, capture_output=True, text=True, check=False)
+            output = res.stdout.strip() or res.stderr.strip() or "No log entries found for kaffeine-dvr-watcher.service."
+            self.finished.emit(output, True)
+        except Exception as e:
+            self.finished.emit(f"Failed to fetch journal logs: {e}", False)
+
+
+class ServiceLogsDialog(QDialog):
+    """
+    Log viewer dialog displaying recent journalctl entries for kaffeine-dvr-watcher.service.
+    Features fast live refresh, text search/filtering, line limit selection, and clipboard export.
+    """
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Background Watcher Service Logs")
+        self.resize(860, 560)
+        self.raw_logs = ""
+        self._worker = None
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(10)
+
+        # Header bar
+        header_row = QHBoxLayout()
+        header_info = QLabel("<b>kaffeine-dvr-watcher.service</b> &nbsp;•&nbsp; Systemd User Journal")
+        header_info.setStyleSheet("font-size: 13px; color: #cdd6e2;")
+        header_row.addWidget(header_info)
+        header_row.addStretch()
+
+        self.status_badge = QLabel("Checking...")
+        self.status_badge.setStyleSheet("font-size: 11px; font-weight: bold; color: #8c98aa;")
+        header_row.addWidget(self.status_badge)
+        layout.addLayout(header_row)
+
+        # Controls row
+        ctrl_row = QHBoxLayout()
+        ctrl_row.setSpacing(10)
+
+        ctrl_row.addWidget(QLabel("Lines:"))
+        self.lines_combo = QComboBox()
+        self.lines_combo.addItems(["50", "100", "250", "500", "1000"])
+        self.lines_combo.setCurrentText("100")
+        self.lines_combo.currentIndexChanged.connect(self.refresh_logs)
+        ctrl_row.addWidget(self.lines_combo)
+
+        self.filter_input = QLineEdit()
+        self.filter_input.setPlaceholderText("Filter logs by text...")
+        self.filter_input.setClearButtonEnabled(True)
+        self.filter_input.textChanged.connect(self._apply_filter)
+        ctrl_row.addWidget(self.filter_input, 1)
+
+        self.refresh_btn = QPushButton("Refresh Logs")
+        self.refresh_btn.clicked.connect(self.refresh_logs)
+        ctrl_row.addWidget(self.refresh_btn)
+
+        self.copy_btn = QPushButton("Copy to Clipboard")
+        self.copy_btn.clicked.connect(self._copy_to_clipboard)
+        ctrl_row.addWidget(self.copy_btn)
+
+        layout.addLayout(ctrl_row)
+
+        # Log content view
+        self.log_view = QPlainTextEdit()
+        self.log_view.setReadOnly(True)
+        self.log_view.setFont(QFont("Monospace", 9))
+        self.log_view.setStyleSheet(
+            "QPlainTextEdit { background-color: #0f1218; color: #d0d8e2; border: 1px solid #2b3242; border-radius: 4px; padding: 8px; }"
+        )
+        layout.addWidget(self.log_view, 1)
+
+        # Footer
+        footer_row = QHBoxLayout()
+        self.line_count_lbl = QLabel("")
+        self.line_count_lbl.setStyleSheet("color: #8c98aa; font-size: 11px;")
+        footer_row.addWidget(self.line_count_lbl)
+        footer_row.addStretch()
+
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(self.accept)
+        footer_row.addWidget(close_btn)
+        layout.addLayout(footer_row)
+
+        self._update_status_badge()
+        self.refresh_logs()
+
+    def _update_status_badge(self):
+        try:
+            res = subprocess.run(
+                ["systemctl", "--user", "is-active", "kaffeine-dvr-watcher.service"],
+                capture_output=True, text=True, check=False
+            )
+            if res.stdout.strip() == "active":
+                self.status_badge.setText("● Active (Running)")
+                self.status_badge.setStyleSheet("font-size: 11px; font-weight: bold; color: #55a84c;")
+            else:
+                self.status_badge.setText("● Inactive / Stopped")
+                self.status_badge.setStyleSheet("font-size: 11px; font-weight: bold; color: #e57373;")
+        except Exception:
+            self.status_badge.setText("● Status Unknown")
+            self.status_badge.setStyleSheet("font-size: 11px; font-weight: bold; color: #8c98aa;")
+
+    def refresh_logs(self):
+        self._update_status_badge()
+        self.refresh_btn.setEnabled(False)
+        self.refresh_btn.setText("Loading...")
+        try:
+            line_count = int(self.lines_combo.currentText())
+        except (ValueError, TypeError):
+            line_count = 100
+
+        self._worker = ServiceLogsWorker(lines=line_count)
+        self._worker.finished.connect(self._on_logs_loaded)
+        self._worker.start()
+
+    def _on_logs_loaded(self, output: str, ok: bool):
+        self.refresh_btn.setEnabled(True)
+        self.refresh_btn.setText("Refresh Logs")
+        self.raw_logs = output
+        self._apply_filter()
+
+    def _apply_filter(self):
+        query = self.filter_input.text().strip().lower()
+        if not self.raw_logs:
+            self.log_view.setPlainText("")
+            self.line_count_lbl.setText("0 lines")
+            return
+
+        lines = self.raw_logs.splitlines()
+        if query:
+            filtered = [l for l in lines if query in l.lower()]
+            self.log_view.setPlainText("\n".join(filtered))
+            self.line_count_lbl.setText(f"Showing {len(filtered)} of {len(lines)} lines (filtered)")
+        else:
+            self.log_view.setPlainText(self.raw_logs)
+            self.line_count_lbl.setText(f"Showing {len(lines)} lines")
+
+        # Autoscroll to bottom for latest entries
+        scrollbar = self.log_view.verticalScrollBar()
+        if scrollbar:
+            scrollbar.setValue(scrollbar.maximum())
+
+    def _copy_to_clipboard(self):
+        text = self.log_view.toPlainText()
+        if text:
+            clipboard = QApplication.clipboard()
+            if clipboard:
+                clipboard.setText(text)
+                self.copy_btn.setText("Copied!")
+                QTimer.singleShot(1500, lambda: self.copy_btn.setText("Copy to Clipboard"))
+
 
 
 class ManualRecordDialog(QDialog):
@@ -2994,6 +3157,11 @@ class MainWindow(QMainWindow):
         self.restart_svc_btn = QPushButton("Restart Service")
         self.restart_svc_btn.clicked.connect(self.restart_background_service)
         svc_btn_row.addWidget(self.restart_svc_btn)
+
+        self.view_svc_logs_btn = QPushButton("View Logs")
+        self.view_svc_logs_btn.clicked.connect(self.open_service_logs_dialog)
+        svc_btn_row.addWidget(self.view_svc_logs_btn)
+
         svc_btn_row.addStretch()
         service_layout.addLayout(svc_btn_row)
 
@@ -3126,7 +3294,18 @@ class MainWindow(QMainWindow):
             self.updates_service_lbl.setStyleSheet("color: #28a745; font-weight: bold;")
         else:
             self.updates_service_lbl.setStyleSheet("color: #8c98aa;")
-        env_layout.addRow("Background Watcher Service:", self.updates_service_lbl)
+
+        svc_row_widget = QWidget()
+        svc_row_layout = QHBoxLayout(svc_row_widget)
+        svc_row_layout.setContentsMargins(0, 0, 0, 0)
+        svc_row_layout.setSpacing(12)
+        svc_row_layout.addWidget(self.updates_service_lbl)
+        self.updates_view_logs_btn = QPushButton("View Service Logs")
+        self.updates_view_logs_btn.clicked.connect(self.open_service_logs_dialog)
+        svc_row_layout.addWidget(self.updates_view_logs_btn)
+        svc_row_layout.addStretch()
+
+        env_layout.addRow("Background Watcher Service:", svc_row_widget)
 
         main_layout.addWidget(env_box)
 
@@ -4082,6 +4261,10 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "Service Error", f"Failed to restart service:\n{err}")
         except Exception as e:
             QMessageBox.warning(self, "Service Error", f"Failed to restart service: {e}")
+
+    def open_service_logs_dialog(self):
+        dlg = ServiceLogsDialog(self)
+        dlg.exec()
 
     # ------------------ LOGIC & REFRESH ------------------
     def setup_timers(self):
