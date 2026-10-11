@@ -1929,6 +1929,8 @@ class TooltipDelayStyle(QProxyStyle):
     def styleHint(self, hint, option=None, widget=None, returnData=None):
         if hint == QStyle.StyleHint.SH_ToolTip_WakeUpDelay:
             return 1200  # 1.2 second delay before showing tooltips on hover
+        if hint == QStyle.StyleHint.SH_ToolTip_FallAsleepDelay:
+            return 0  # Put tooltip engine back to sleep immediately so moving between buttons requires full delay
         return super().styleHint(hint, option, widget, returnData)
 
 
