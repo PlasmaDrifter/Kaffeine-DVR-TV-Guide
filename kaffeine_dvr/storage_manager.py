@@ -21,6 +21,10 @@ class StorageManager:
         self.config_mgr = config_mgr or ConfigManager()
         self.queue_mgr = queue_mgr or QueueManager()
 
+    def get_active_recording_folder(self) -> Path:
+        """Alias for get_recording_folder for API compatibility."""
+        return self.get_recording_folder()
+
     def get_recording_folder(self) -> Path:
         """
         Determines the recording directory:
@@ -195,14 +199,14 @@ class StorageManager:
             print(f"Error deleting recording {file_path}: {e}")
             return False
 
-    def run_cleanup_cycle(self) -> Dict[str, Any]:
+    def run_cleanup_cycle(self, force: bool = False) -> Dict[str, Any]:
         """
         Executes retention policy:
         1. Age-based cleanup (if retention_days > 0).
         2. Disk space threshold cleanup (if min_free_disk_gb > 0 and free space < threshold).
         Returns a summary report of actions taken.
         """
-        if not self.config_mgr.auto_cleanup_enabled:
+        if not force and not self.config_mgr.auto_cleanup_enabled:
             return {"enabled": False, "deleted_count": 0, "freed_gb": 0.0}
 
         retention_days = self.config_mgr.retention_days

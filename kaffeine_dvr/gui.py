@@ -4633,45 +4633,72 @@ class MainWindow(QMainWindow):
     def run_manual_cleanup(self):
         retention_days = self.retention_days_spin.value()
         min_free = self.min_free_spin.value()
-        folder = self.custom_folder_input.text().strip() or self.storage_mgr.get_active_recording_folder()
+        folder = self.custom_folder_input.text().strip() or str(self.storage_mgr.get_recording_folder())
+
+        if retention_days == 0 and min_free == 0:
+            QMessageBox.information(
+                self,
+                "Retention Cleanup Disabled",
+                "Both the Retention Window (days) and Minimum Free Disk Space (GB) are set to 0.\n\n"
+                "Please configure at least one retention policy rule before running cleanup."
+            )
+            return
+
+        policies = []
+        if retention_days > 0:
+            policies.append(f"Delete unprotected recordings older than {retention_days} days")
+        else:
+            policies.append("Age-based pruning: Disabled (0 days)")
+
+        if min_free > 0:
+            policies.append(f"Purge oldest recordings if free space is below {min_free} GB")
+        else:
+            policies.append("Disk space threshold: Disabled (0 GB)")
+
+        policy_text = "\n• ".join(policies)
 
         confirm = QMessageBox.warning(
             self,
             "Confirm Retention Cleanup",
             f"Are you sure you want to run retention cleanup now?\n\n"
-            f"Target Directory: {folder}\n"
-            f"Retention Policy: Delete unprotected recordings older than {retention_days} days "
-            f"or if free space is below {min_free} GB.\n\n"
-            f"Recordings matching these criteria will be permanently deleted.",
+            f"Target Directory:\n{folder}\n\n"
+            f"Active Policies:\n• {policy_text}\n\n"
+            f"Note: Protected recordings are never deleted.\n"
+            f"Unprotected recordings matching these criteria will be permanently deleted.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No
         )
         if confirm != QMessageBox.StandardButton.Yes:
             return
 
-        # Apply current settings to manager first
-        self.config_mgr.auto_cleanup_enabled = True
-        self.config_mgr.retention_days = retention_days
-        self.config_mgr.min_free_disk_gb = min_free
-        self.config_mgr.custom_recording_folder = self.custom_folder_input.text().strip()
+        try:
+            # Apply current settings to manager first
+            self.config_mgr.retention_days = retention_days
+            self.config_mgr.min_free_disk_gb = min_free
+            self.config_mgr.custom_recording_folder = self.custom_folder_input.text().strip()
 
-        res = self.storage_mgr.run_cleanup_cycle()
-        self.update_storage_status_ui()
-        self.refresh_recordings()
+            res = self.storage_mgr.run_cleanup_cycle(force=True)
+            self.update_storage_status_ui()
+            self.refresh_recordings()
 
-        cnt = res.get("deleted_count", 0)
-        freed = res.get("freed_gb", 0.0)
-        target = res.get("folder", "")
-        if cnt > 0:
-            deleted_list = "\n".join(f"• {f}" for f in res.get("deleted_files", []))
-            QMessageBox.information(
-                self, "Retention Cleanup Completed",
-                f"Successfully deleted {cnt} recording(s), reclaiming {freed} GB in:\n{target}\n\nDeleted files:\n{deleted_list}"
-            )
-        else:
-            QMessageBox.information(
-                self, "Retention Cleanup",
-                f"No old recordings met the purge criteria in:\n{target}\n\nFree space remains within configured limits."
+            cnt = res.get("deleted_count", 0)
+            freed = res.get("freed_gb", 0.0)
+            target = res.get("folder", "")
+            if cnt > 0:
+                deleted_list = "\n".join(f"• {f}" for f in res.get("deleted_files", []))
+                QMessageBox.information(
+                    self, "Retention Cleanup Completed",
+                    f"Successfully deleted {cnt} recording(s), reclaiming {freed} GB in:\n{target}\n\nDeleted files:\n{deleted_list}"
+                )
+            else:
+                QMessageBox.information(
+                    self, "Retention Cleanup",
+                    f"No old recordings met the purge criteria in:\n{target}\n\nFree space remains within configured limits."
+                )
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Retention Cleanup Error",
+                f"An error occurred while running retention cleanup:\n{e}"
             )
 
     def update_service_status_ui(self):
