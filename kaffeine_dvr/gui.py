@@ -858,6 +858,100 @@ class TableViewportResizeFilter(QObject):
         return super().eventFilter(obj, event)
 
 
+class NumberStepper(QWidget):
+    """
+    Horizontal stepper control with [-] [ Number Box ] [+] layout.
+    Provides clear, easy-to-click decrement and increment buttons with auto-repeat,
+    while keeping precise keyboard number typing and full QSpinBox API compatibility.
+    """
+    valueChanged = pyqtSignal(int)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        self._btn_minus = QPushButton("−")
+        self._btn_minus.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._btn_minus.setAutoRepeat(True)
+        self._btn_minus.setAutoRepeatDelay(400)
+        self._btn_minus.setAutoRepeatInterval(80)
+        self._btn_minus.setStyleSheet(
+            "QPushButton { "
+            "min-width: 28px; max-width: 28px; min-height: 28px; max-height: 28px; "
+            "font-size: 15px; font-weight: bold; border: 1px solid #3c465d; "
+            "border-top-left-radius: 4px; border-bottom-left-radius: 4px; "
+            "border-top-right-radius: 0px; border-bottom-right-radius: 0px; "
+            "border-right: none; background-color: #212635; color: #c8d2df; padding: 0px; } "
+            "QPushButton:hover { background-color: #313d56; color: #ffffff; border-color: #5a80b8; } "
+            "QPushButton:pressed { background-color: #171b26; }"
+        )
+
+        self._spin = QSpinBox()
+        self._spin.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
+        self._spin.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._spin.setStyleSheet(
+            "QSpinBox { "
+            "border-radius: 0px; border: 1px solid #3c465d; "
+            "background-color: #12141d; color: #e4e9f0; "
+            "min-height: 28px; max-height: 28px; padding: 2px 6px; } "
+            "QSpinBox:focus { border-color: #4a8df5; }"
+        )
+
+        self._btn_plus = QPushButton("+")
+        self._btn_plus.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._btn_plus.setAutoRepeat(True)
+        self._btn_plus.setAutoRepeatDelay(400)
+        self._btn_plus.setAutoRepeatInterval(80)
+        self._btn_plus.setStyleSheet(
+            "QPushButton { "
+            "min-width: 28px; max-width: 28px; min-height: 28px; max-height: 28px; "
+            "font-size: 15px; font-weight: bold; border: 1px solid #3c465d; "
+            "border-top-right-radius: 4px; border-bottom-right-radius: 4px; "
+            "border-top-left-radius: 0px; border-bottom-left-radius: 0px; "
+            "border-left: none; background-color: #212635; color: #c8d2df; padding: 0px; } "
+            "QPushButton:hover { background-color: #313d56; color: #ffffff; border-color: #5a80b8; } "
+            "QPushButton:pressed { background-color: #171b26; }"
+        )
+
+        layout.addWidget(self._btn_minus)
+        layout.addWidget(self._spin, 1)
+        layout.addWidget(self._btn_plus)
+
+        self._btn_minus.clicked.connect(self._spin.stepDown)
+        self._btn_plus.clicked.connect(self._spin.stepUp)
+        self._spin.valueChanged.connect(self.valueChanged.emit)
+
+    def value(self) -> int:
+        return self._spin.value()
+
+    def setValue(self, val: int):
+        self._spin.setValue(val)
+
+    def setRange(self, minimum: int, maximum: int):
+        self._spin.setRange(minimum, maximum)
+
+    def setSingleStep(self, step: int):
+        self._spin.setSingleStep(step)
+
+    def setSuffix(self, suffix: str):
+        self._spin.setSuffix(suffix)
+
+    def setPrefix(self, prefix: str):
+        self._spin.setPrefix(prefix)
+
+    def setSpecialValueText(self, text: str):
+        self._spin.setSpecialValueText(text)
+
+    def setToolTip(self, text: str):
+        super().setToolTip(text)
+        self._spin.setToolTip(text)
+
+    def spinBox(self) -> QSpinBox:
+        return self._spin
+
+
 def classify_guide_category(prog: Dict[str, Any]) -> str:
     """
     Classifies a program into 'sports', 'news', 'movies', or 'tvshows'.
@@ -2199,11 +2293,12 @@ class MainWindow(QMainWindow):
         hist_limit_lbl.setStyleSheet("font-size: 12px; color: #a4b0c2;")
         hist_ctrl_bar.addWidget(hist_limit_lbl)
 
-        self.hist_max_spin = QSpinBox()
+        self.hist_max_spin = NumberStepper()
         self.hist_max_spin.setRange(5, 500)
         self.hist_max_spin.setSingleStep(5)
         self.hist_max_spin.setValue(self.config_mgr.max_history_entries)
         self.hist_max_spin.setToolTip("Maximum number of completed recording history entries to retain")
+        self.hist_max_spin.setFixedWidth(130)
         self.hist_max_spin.valueChanged.connect(self.on_max_history_changed)
         hist_ctrl_bar.addWidget(self.hist_max_spin)
 
@@ -2983,7 +3078,7 @@ class MainWindow(QMainWindow):
         dvr_layout.setContentsMargins(15, 15, 15, 15)
         dvr_layout.setSpacing(12)
 
-        self.lead_time_spin = QSpinBox()
+        self.lead_time_spin = NumberStepper()
         self.lead_time_spin.setRange(1, 60)
         self.lead_time_spin.setValue(self.config_mgr.lead_time_mins)
         self.lead_time_spin.setSuffix(" minutes")
@@ -2997,7 +3092,7 @@ class MainWindow(QMainWindow):
             self.lead_time_spin
         )
 
-        self.end_buffer_spin = QSpinBox()
+        self.end_buffer_spin = NumberStepper()
         self.end_buffer_spin.setRange(0, 180)
         self.end_buffer_spin.setValue(self.config_mgr.end_buffer_mins)
         self.end_buffer_spin.setSuffix(" minutes")
@@ -3010,7 +3105,7 @@ class MainWindow(QMainWindow):
             self.end_buffer_spin
         )
 
-        self.sports_buffer_spin = QSpinBox()
+        self.sports_buffer_spin = NumberStepper()
         self.sports_buffer_spin.setRange(0, 180)
         self.sports_buffer_spin.setValue(self.config_mgr.sports_buffer_mins)
         self.sports_buffer_spin.setSuffix(" minutes")
@@ -3032,7 +3127,7 @@ class MainWindow(QMainWindow):
             sports_row
         )
 
-        self.interval_spin = QSpinBox()
+        self.interval_spin = NumberStepper()
         self.interval_spin.setRange(30, 600)
         self.interval_spin.setSingleStep(30)
         self.interval_spin.setValue(self.config_mgr.watcher_interval_seconds)
@@ -3046,7 +3141,7 @@ class MainWindow(QMainWindow):
             self.interval_spin
         )
 
-        self.days_spin = QSpinBox()
+        self.days_spin = NumberStepper()
         self.days_spin.setRange(1, 14)
         self.days_spin.setValue(self.config_mgr.guide_days_ahead)
         self.days_spin.setSuffix(" days")
@@ -3203,23 +3298,23 @@ class MainWindow(QMainWindow):
             self.cleanup_enable_check
         )
 
-        self.retention_days_spin = QSpinBox()
+        self.retention_days_spin = NumberStepper()
         self.retention_days_spin.setRange(0, 365)
         self.retention_days_spin.setValue(self.config_mgr.retention_days)
         self.retention_days_spin.setSuffix(" days")
-        self.retention_days_spin.setFixedWidth(150)
+        self.retention_days_spin.setFixedWidth(160)
         self.retention_days_spin.valueChanged.connect(self._auto_save_automation_settings)
         storage_form.addRow(
             make_setting_label("Retention Window:", "Delete recordings older than this age. Set to 0 to disable age-based pruning."),
             self.retention_days_spin
         )
 
-        self.min_free_spin = QSpinBox()
+        self.min_free_spin = NumberStepper()
         self.min_free_spin.setRange(0, 1000)
         self.min_free_spin.setSingleStep(5)
         self.min_free_spin.setValue(self.config_mgr.min_free_disk_gb)
         self.min_free_spin.setSuffix(" GB")
-        self.min_free_spin.setFixedWidth(150)
+        self.min_free_spin.setFixedWidth(160)
         self.min_free_spin.valueChanged.connect(self._auto_save_automation_settings)
         storage_form.addRow(
             make_setting_label("Min Free Space:", "If free disk space drops below this limit, oldest unprotected recordings are purged first."),
