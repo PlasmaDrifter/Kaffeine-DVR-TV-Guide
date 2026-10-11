@@ -573,7 +573,7 @@ class HelpPopup(QFrame):
         self.setStyleSheet(
             "HelpPopup {"
             "  background-color: #1e293b;"
-            "  border: 1.5px solid #38bdf8;"
+            "  border: 1.5px solid #4a8df5;"
             "  border-radius: 8px;"
             "}"
         )
