@@ -104,6 +104,16 @@ class QueueManager:
         conn = sqlite3.connect(str(self.db_path))
         cur = conn.cursor()
 
+        # If the show has already started or is currently airing, mark notified = 1
+        # so background watcher service only sends desktop notifications for future scheduled shows.
+        is_already_started = False
+        try:
+            if dt_start <= datetime.now():
+                is_already_started = True
+        except Exception:
+            pass
+        initial_notified = 1 if is_already_started else 0
+
         # Check for duplicates or update if still QUEUED
         cur.execute("""
             SELECT id, status, buffer_mins FROM recording_queue 
@@ -116,9 +126,13 @@ class QueueManager:
                 cur.execute("""
                     UPDATE recording_queue
                     SET title = ?, duration_iso = ?, start_time_local = ?,
-                        end_iso = ?, lead_time_mins = ?, buffer_mins = ?
+                        end_iso = ?, lead_time_mins = ?, buffer_mins = ?,
+                        notified = CASE WHEN ? = 1 THEN 1 ELSE notified END
                     WHERE id = ?
-                """, (title, effective_duration_iso, start_display, end_iso, lead_time_mins, buffer_mins, existing_id))
+                """, (title, effective_duration_iso, start_display, end_iso, lead_time_mins, buffer_mins, initial_notified, existing_id))
+                conn.commit()
+            elif is_already_started:
+                cur.execute("UPDATE recording_queue SET notified = 1 WHERE id = ?", (existing_id,))
                 conn.commit()
             conn.close()
             self.resolve_consecutive_buffer_conflicts()
@@ -128,9 +142,9 @@ class QueueManager:
         cur.execute("""
             INSERT INTO recording_queue (
                 title, channel, start_iso, duration_iso, start_time_local,
-                end_iso, lead_time_mins, status, created_at, buffer_mins
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'QUEUED', ?, ?)
-        """, (title, channel, start_iso, effective_duration_iso, start_display, end_iso, lead_time_mins, now_str, buffer_mins))
+                end_iso, lead_time_mins, status, created_at, buffer_mins, notified
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'QUEUED', ?, ?, ?)
+        """, (title, channel, start_iso, effective_duration_iso, start_display, end_iso, lead_time_mins, now_str, buffer_mins, initial_notified))
         new_id = cur.lastrowid
         conn.commit()
         conn.close()
