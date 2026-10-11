@@ -93,12 +93,13 @@ def get_pip_flags() -> list:
 EMBEDDED_RELEASE_NOTES: Dict[str, str] = {
     "0.8.5": (
         "## What's Changed in v0.8.5\n\n"
+        "• **Recording Cancellation & Duplicate Prevention**: Fixed duplicate concurrent recording timers in Kaffeine by introducing active timer pre-checking and thorough multi-target cancellation across D-Bus and SQLite when recordings are stopped or restarted.\n"
+        "• **Default Update Frequency**: Set the default automatic update check interval to weekly.\n"
         "• **TVPassport Direct Lineup URL**: Updated all TVPassport links in the guide and lineup dialogs to direct to https://www.tvpassport.com/index.php/lineups for immediate postal/zip code entry.\n"
         "• **EPG Grid Recording & Scheduled Indicators**: Differentiated active recording (● REC with solid red dot and red border) from scheduled recordings (○ SCHED with subtle outline only).\n"
         "• **EPG List View Enhancements**: Added subtle #2b3242 grid lines, removed row index headers, and differentiated scheduled vs active recordings.\n"
         "• **Release Notes Modal Viewer**: Added an interactive 'View Release Notes...' modal dialog with formatted changelog viewer in Settings -> Updates tab and status bar.\n"
-        "• **AppImage Checkmark Rendering**: Bundled checkmark assets and fixed indicator icon resolution in read-only SquashFS AppImage environments.\n"
-        "• **Versioned AppImage Naming**: Build script generates versioned test and release artifacts (Kaffeine-DVR-TV-Guide-v0.8.5-x86_64.AppImage) alongside convenience symlinks."
+        "• **AppImage Checkmark Rendering**: Bundled checkmark assets and fixed indicator icon resolution in read-only SquashFS AppImage environments."
     ),
     "0.8.4": (
         "## What's Changed in v0.8.4\n\n"
