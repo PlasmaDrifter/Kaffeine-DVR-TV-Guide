@@ -3006,7 +3006,7 @@ class MainWindow(QMainWindow):
         self.watch_guide_btn.clicked.connect(self.watch_or_tune_selected_guide_item)
         action_bar.addWidget(self.watch_guide_btn)
 
-        self.alt_watch_guide_btn = QPushButton("Tune in Kaffeine")
+        self.alt_watch_guide_btn = QPushButton("Watch in Kaffeine")
         self.alt_watch_guide_btn.setStyleSheet("padding: 4px 12px;")
         self.alt_watch_guide_btn.setVisible(False)
         self.alt_watch_guide_btn.clicked.connect(self.alt_watch_or_tune_selected_guide_item)
@@ -6602,9 +6602,9 @@ class MainWindow(QMainWindow):
             if state == "live":
                 self.alt_watch_guide_btn.setVisible(True)
                 if is_live_rec and rec_file:
-                    self.alt_watch_guide_btn.setText("Tune in Kaffeine")
+                    self.alt_watch_guide_btn.setText("Watch in Kaffeine")
                 elif live_mode == "timeshift":
-                    self.alt_watch_guide_btn.setText("Tune in Kaffeine")
+                    self.alt_watch_guide_btn.setText("Watch in Kaffeine")
                 else:
                     self.alt_watch_guide_btn.setText(f"Timeshift in {player_disp}")
             else:
