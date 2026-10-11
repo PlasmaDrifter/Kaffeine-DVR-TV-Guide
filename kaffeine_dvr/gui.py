@@ -3258,10 +3258,10 @@ class MainWindow(QMainWindow):
         dvr_layout.addRow(
             make_setting_label(
                 "Guide Live TV View Mode:",
-                "Controls window display mode when watching live TV directly from the Guide:\n"
-                "• Minimal Mode: Hides toolbars and menus for clean playback.\n"
-                "• Full Screen: Expands to full screen immediately.\n"
-                "• Normal Window: Standard window with playback bars."
+                "Applies only to Kaffeine when tuning live broadcast TV directly from the Guide (does not affect background recordings or your chosen player for recorded playback):\n"
+                "• Minimal Mode: Hides Kaffeine toolbars and menus for clean live playback.\n"
+                "• Full Screen: Expands Kaffeine to full screen immediately.\n"
+                "• Normal Window: Opens Kaffeine with standard window controls."
             ),
             self.guide_watch_combo
         )
