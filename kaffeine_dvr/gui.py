@@ -3634,18 +3634,21 @@ class MainWindow(QMainWindow):
 
         self.update_notes_lbl = QLabel("What's New in this Release:")
         self.update_notes_lbl.setStyleSheet("font-size: 12px; font-weight: bold; color: #52b774; margin-top: 4px;")
-        self.update_notes_lbl.setVisible(False)
         action_layout.addWidget(self.update_notes_lbl)
 
         self.update_notes_view = QTextEdit()
         self.update_notes_view.setReadOnly(True)
-        self.update_notes_view.setMaximumHeight(160)
+        self.update_notes_view.setMinimumHeight(140)
+        self.update_notes_view.setMaximumHeight(220)
         self.update_notes_view.setStyleSheet(
             "QTextEdit { background-color: #12141d; border: 1px solid #2d3548; "
             "border-radius: 5px; color: #d0d7de; font-size: 12px; padding: 8px; }"
         )
-        self.update_notes_view.setVisible(False)
+        self.update_notes_view.setPlaceholderText("Release notes will appear here once an update is detected or checked.")
         action_layout.addWidget(self.update_notes_view)
+
+        # Pre-populate release notes asynchronously if already checked or cached
+        QTimer.singleShot(500, self._load_initial_release_notes)
 
         self.update_progress_lbl = QLabel("")
         self.update_progress_lbl.setStyleSheet("color: #55a84c; font-size: 12px; font-weight: bold;")
@@ -3705,6 +3708,21 @@ class MainWindow(QMainWindow):
         interval_seconds = 604800 if freq == "weekly" else 2592000
         if now - last_check >= interval_seconds:
             self.start_update_check(silent=True)
+
+    def _load_initial_release_notes(self):
+        """Asynchronously queries the latest release notes to pre-populate the UI."""
+        if hasattr(self, "update_notes_view") and not self.update_notes_view.toPlainText().strip():
+            self._initial_notes_worker = UpdateCheckWorker()
+            self._initial_notes_worker.finished.connect(self._on_initial_notes_loaded)
+            self._initial_notes_worker.start()
+
+    def _on_initial_notes_loaded(self, res: dict):
+        notes = res.get("release_notes", "").strip()
+        if hasattr(self, "update_notes_view") and notes:
+            try:
+                self.update_notes_view.setMarkdown(notes)
+            except Exception:
+                self.update_notes_view.setPlainText(notes)
 
     def start_update_check(self, silent: bool = False):
         if hasattr(self, "check_updates_btn"):
