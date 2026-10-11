@@ -52,9 +52,12 @@ APPRUN
 chmod +x AppDir/AppRun
 
 echo "=== 3. Packaging AppImage ==="
-OUTPUT_APPIMAGE="$SCRIPT_DIR/Kaffeine-DVR-TV-Guide-x86_64.AppImage"
+OUTPUT_APPIMAGE="$SCRIPT_DIR/Kaffeine-DVR-TV-Guide-v${APP_VERSION}-x86_64.AppImage"
 mkdir -p "$SCRIPT_DIR"
 ARCH=x86_64 NO_APPSTREAM=1 appimagetool AppDir "$OUTPUT_APPIMAGE"
+
+# Create/update unversioned symlink for convenient launcher scripts or generic paths
+ln -sf "Kaffeine-DVR-TV-Guide-v${APP_VERSION}-x86_64.AppImage" "$SCRIPT_DIR/Kaffeine-DVR-TV-Guide-x86_64.AppImage"
 
 rm -rf AppDir build dist
 
