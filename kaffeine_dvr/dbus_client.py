@@ -503,22 +503,25 @@ class KaffeineDbusClient:
         except Exception:
             pass
 
-    def play_file(self, file_path: str, player: Optional[str] = None, custom_cmd: Optional[str] = None) -> bool:
+    def play_file(self, file_path: str, player: Optional[str] = None, custom_cmd: Optional[str] = None, standalone: bool = False) -> Any:
         """
         Play a recorded media file in the user's selected media player:
         - 'system': system default handler (xdg-open)
         - 'smplayer', 'mpv', 'vlc', 'mpc-qt', 'celluloid', 'haruna', 'kaffeine':
           launches native binary if available, or Flatpak container if installed.
         - 'custom': user-defined command template or command with file appended
-        Falls back to xdg-open if the selected player is not found or fails.
+        If standalone is True, passes isolation flags (e.g. dedicated config path for SMPlayer,
+        --no-one-instance for VLC) to avoid hijacking or closing other running player windows.
+        Returns the spawned subprocess.Popen instance on success, or None on failure.
         """
         if not file_path or not os.path.exists(file_path):
-            return False
+            return None
         env = self._get_display_env()
         player_mode = (player or "system").lower().strip()
 
         import shutil
         import shlex
+        from pathlib import Path
 
         cmd = []
         if player_mode == "custom" and custom_cmd and custom_cmd.strip():
@@ -538,26 +541,35 @@ class KaffeineDbusClient:
             elif bin_name:
                 bin_path = shutil.which(bin_name)
 
+            extra_args = []
+            if standalone:
+                if player_mode == "smplayer":
+                    sm_profile = Path.home() / ".config" / "kaffeine-dvr" / "smplayer"
+                    sm_profile.mkdir(parents=True, exist_ok=True)
+                    extra_args = ["-config-path", str(sm_profile)]
+                elif player_mode == "vlc":
+                    extra_args = ["--no-one-instance"]
+
             if bin_path:
-                cmd = [bin_path, str(file_path)]
+                cmd = [bin_path] + extra_args + [str(file_path)]
             elif flatpak_id and shutil.which("flatpak") and detect_player_installation(player_mode) == "flatpak":
-                cmd = ["flatpak", "run", "--file-forwarding", flatpak_id, "@@", str(file_path), "@@"]
+                cmd = ["flatpak", "run", "--file-forwarding", flatpak_id] + extra_args + ["@@", str(file_path), "@@"]
 
         if not cmd:
             # Default or fallback to system default / xdg-open
             cmd = ["xdg-open", str(file_path)]
 
         try:
-            subprocess.Popen(cmd, env=env)
-            return True
+            proc = subprocess.Popen(cmd, env=env)
+            return proc
         except Exception as e:
             print(f"Error launching player ({cmd}): {e}")
             try:
-                subprocess.Popen(["xdg-open", str(file_path)], env=env)
-                return True
+                proc = subprocess.Popen(["xdg-open", str(file_path)], env=env)
+                return proc
             except Exception as e2:
                 print(f"Fallback to xdg-open failed for {file_path}: {e2}")
-                return False
+                return None
 
 
     def list_scheduled_recordings(self) -> List[Dict[str, Any]]:

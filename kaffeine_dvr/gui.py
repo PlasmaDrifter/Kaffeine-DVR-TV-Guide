@@ -2432,6 +2432,7 @@ class MainWindow(QMainWindow):
         self.watcher = Watcher(self.dbus_client, self.queue_mgr)
         self.storage_mgr = StorageManager(self.config_mgr, self.queue_mgr)
         self.day_nav_offset = 0
+        self._active_timeshift = None
 
         self.init_ui()
         self.setup_timers()
@@ -2967,6 +2968,12 @@ class MainWindow(QMainWindow):
         self.alt_watch_guide_btn.setVisible(False)
         self.alt_watch_guide_btn.clicked.connect(self.alt_watch_or_tune_selected_guide_item)
         action_bar.addWidget(self.alt_watch_guide_btn)
+
+        self.stop_timeshift_btn = QPushButton("Stop Timeshift (Free Tuner)")
+        self.stop_timeshift_btn.setStyleSheet("font-weight: bold; background-color: #c62828; color: #ffffff; padding: 4px 12px;")
+        self.stop_timeshift_btn.setVisible(False)
+        self.stop_timeshift_btn.clicked.connect(lambda: self.stop_timeshift_session(user_initiated=True))
+        action_bar.addWidget(self.stop_timeshift_btn)
 
         self.adjust_buffer_guide_btn = QPushButton("Adjust Buffer...")
         self.adjust_buffer_guide_btn.setStyleSheet("font-weight: bold;")
@@ -3599,6 +3606,16 @@ class MainWindow(QMainWindow):
             self.timeshift_buffer_spin
         )
 
+        self.delete_timeshift_check = QCheckBox("Delete temporary timeshift buffer files when player closes")
+        self.delete_timeshift_check.setChecked(getattr(self.config_mgr, "delete_timeshift_on_exit", True))
+        dvr_layout.addRow(
+            make_setting_label(
+                "Timeshift File Retention:",
+                "When checked, temporary buffer files created during live TV timeshifting are automatically deleted upon stopping to avoid consuming disk space. Shows specifically scheduled to record are always preserved."
+            ),
+            self.delete_timeshift_check
+        )
+
         self.guide_watch_combo = QComboBox()
         self.guide_watch_combo.addItem("Minimal Mode (-m clean player)", "minimal")
         self.guide_watch_combo.addItem("Full Screen (-f fullscreen)", "fullscreen")
@@ -3897,6 +3914,8 @@ class MainWindow(QMainWindow):
             self.live_tv_mode_combo.currentIndexChanged.connect(self._auto_save_automation_settings)
         if hasattr(self, "timeshift_buffer_spin"):
             self.timeshift_buffer_spin.valueChanged.connect(self._auto_save_automation_settings)
+        if hasattr(self, "delete_timeshift_check"):
+            self.delete_timeshift_check.stateChanged.connect(self._auto_save_automation_settings)
         if hasattr(self, "playback_player_combo"):
             self.playback_player_combo.currentIndexChanged.connect(self._auto_save_automation_settings)
         if hasattr(self, "custom_player_edit"):
@@ -4862,6 +4881,8 @@ class MainWindow(QMainWindow):
             self.config_mgr.live_tv_watch_mode = self.live_tv_mode_combo.currentData()
         if hasattr(self, "timeshift_buffer_spin"):
             self.config_mgr.timeshift_buffer_seconds = self.timeshift_buffer_spin.value()
+        if hasattr(self, "delete_timeshift_check"):
+            self.config_mgr.delete_timeshift_on_exit = self.delete_timeshift_check.isChecked()
         if hasattr(self, "playback_player_combo"):
             self.config_mgr.playback_player = self.playback_player_combo.currentData()
         if hasattr(self, "custom_player_edit"):
@@ -5072,9 +5093,10 @@ class MainWindow(QMainWindow):
 
     # ------------------ LOGIC & REFRESH ------------------
     def setup_timers(self):
-        # Background scheduling and recording dispatch are handled by the systemd service.
-        # GUI refreshes on-demand (when syncing guide, switching tabs, or user actions).
-        pass
+        # Poll active timeshift sessions every 1 second to detect when player exits
+        self._timeshift_poll_timer = QTimer(self)
+        self._timeshift_poll_timer.setInterval(1000)
+        self._timeshift_poll_timer.timeout.connect(self._poll_timeshift_session)
 
     def refresh_date_dropdown(self, reset_to_default: bool = False):
         """Refreshes the Date dropdown when a new calendar day begins or on app startup."""
@@ -6529,6 +6551,17 @@ class MainWindow(QMainWindow):
         if hasattr(self, "cancel_guide_btn"):
             self.cancel_guide_btn.setVisible(rec_info is not None)
 
+        has_active_ts = bool(getattr(self, "_active_timeshift", None))
+        cur_ts_ch = (self._active_timeshift.get("channel") or "").strip().lower() if has_active_ts else ""
+        sel_ch = (channel or "").strip().lower()
+
+        if hasattr(self, "stop_timeshift_btn"):
+            if has_active_ts and (cur_ts_ch == sel_ch or state == "live"):
+                self.stop_timeshift_btn.setVisible(True)
+                self.stop_timeshift_btn.setText(f"Stop Timeshift ({self._active_timeshift.get('channel')})")
+            else:
+                self.stop_timeshift_btn.setVisible(False)
+
     def on_guide_selection_changed(self):
         row = self.guide_table.currentRow()
         if row < 0 or row >= len(getattr(self, "current_guide_items", [])):
@@ -6538,6 +6571,8 @@ class MainWindow(QMainWindow):
                 self.watch_guide_btn.setVisible(False)
             if hasattr(self, "alt_watch_guide_btn"):
                 self.alt_watch_guide_btn.setVisible(False)
+            if hasattr(self, "stop_timeshift_btn"):
+                self.stop_timeshift_btn.setVisible(False)
             if hasattr(self, "record_guide_btn"):
                 self.record_guide_btn.setVisible(True)
                 self.record_guide_btn.setText("Record This Program")
@@ -6816,58 +6851,194 @@ class MainWindow(QMainWindow):
         title = prog.get("show_title") or prog.get("title") or "Live Program"
         ch = prog.get("kaffeine_channel", "")
 
-        # Check if file is already active on disk
-        active_file = self.storage_mgr.find_active_or_recent_recording_file(title, max_age_seconds=7200)
-        if active_file and active_file.exists():
-            self.dbus_client.play_file(
-                str(active_file),
-                player=self.config_mgr.playback_player,
-                custom_cmd=self.config_mgr.custom_playback_player_cmd
-            )
-            pname = self.config_mgr.playback_player.upper()
-            self.status_bar.showMessage(f"Playing active recording '{title}' in {pname}.", 5000)
-            return
+        # If switching from an existing timeshift channel, stop previous session first
+        if getattr(self, "_active_timeshift", None):
+            prev_ch = (self._active_timeshift.get("channel") or "").strip().lower()
+            cur_ch = (ch or "").strip().lower()
+            if prev_ch != cur_ch:
+                self.status_bar.showMessage(f"Switching channels: stopping previous stream on {self._active_timeshift.get('channel')}...", 3000)
+                self.stop_timeshift_session(user_initiated=True)
 
-        # Ensure program is queued and recording is dispatched
         active_map = self.queue_mgr.get_active_scheduled_map()
         ch_key = (ch or "").strip().lower()
         iso_key = (prog.get("start_iso") or "")[:16]
         rec_info = active_map.get((ch_key, iso_key))
+        was_already_scheduled = bool(rec_info)
 
+        # Check if file is already active on disk
+        active_file = self.storage_mgr.find_active_or_recent_recording_file(title, max_age_seconds=7200)
+        if active_file and active_file.exists():
+            proc = self.dbus_client.play_file(
+                str(active_file),
+                player=self.config_mgr.playback_player,
+                custom_cmd=self.config_mgr.custom_playback_player_cmd,
+                standalone=True
+            )
+            pname = self.config_mgr.playback_player.upper()
+            self.status_bar.showMessage(f"Playing active recording '{title}' in {pname}.", 5000)
+            self._active_timeshift = {
+                "title": title,
+                "channel": ch,
+                "queue_id": rec_info.get("id") if rec_info else None,
+                "kaffeine_key": rec_info.get("kaffeine_key") if rec_info else None,
+                "process": proc,
+                "file_path": str(active_file),
+                "is_scheduled_recording": was_already_scheduled
+            }
+            if proc and hasattr(self, "_timeshift_poll_timer"):
+                self._timeshift_poll_timer.start()
+            self._display_program_details(prog)
+            return
+
+        # Ensure program is queued and recording is dispatched
         if not rec_info:
             try:
                 self.record_selected_guide_item()
+                active_map = self.queue_mgr.get_active_scheduled_map()
+                rec_info = active_map.get((ch_key, iso_key))
             except Exception as e:
                 self.status_bar.showMessage(f"Error starting background recording for timeshift: {e}", 4000)
                 return
 
+        qid = rec_info.get("id") if rec_info else None
         buf_secs = getattr(self.config_mgr, "timeshift_buffer_seconds", 4)
         pname = self.config_mgr.playback_player.upper()
         self.status_bar.showMessage(f"Buffering live stream ({buf_secs}s) before opening in {pname}...", (buf_secs + 4) * 1000)
-        QTimer.singleShot(buf_secs * 1000, lambda: self._on_timeshift_buffer_ready(prog, retries_left=4))
+        QTimer.singleShot(
+            buf_secs * 1000,
+            lambda: self._on_timeshift_buffer_ready(
+                prog,
+                retries_left=4,
+                was_already_scheduled=was_already_scheduled,
+                queue_id=qid
+            )
+        )
 
-    def _on_timeshift_buffer_ready(self, prog: Dict[str, Any], retries_left: int = 4):
+    def _on_timeshift_buffer_ready(
+        self,
+        prog: Dict[str, Any],
+        retries_left: int = 4,
+        was_already_scheduled: bool = False,
+        queue_id: Optional[int] = None
+    ):
         title = prog.get("show_title") or prog.get("title") or ""
+        ch = prog.get("kaffeine_channel", "")
         active_file = self.storage_mgr.find_active_or_recent_recording_file(title, max_age_seconds=600)
 
         if active_file and active_file.exists():
-            self.dbus_client.play_file(
+            proc = self.dbus_client.play_file(
                 str(active_file),
                 player=self.config_mgr.playback_player,
-                custom_cmd=self.config_mgr.custom_playback_player_cmd
+                custom_cmd=self.config_mgr.custom_playback_player_cmd,
+                standalone=True
             )
             pname = self.config_mgr.playback_player.upper()
             self.status_bar.showMessage(f"Playing timeshifted broadcast '{title}' in {pname}.", 5000)
+
+            ch_key = (ch or "").strip().lower()
+            iso_key = (prog.get("start_iso") or "")[:16]
+            rec_info = self.queue_mgr.get_active_scheduled_map().get((ch_key, iso_key))
+
+            self._active_timeshift = {
+                "title": title,
+                "channel": ch,
+                "queue_id": queue_id or (rec_info.get("id") if rec_info else None),
+                "kaffeine_key": rec_info.get("kaffeine_key") if rec_info else None,
+                "process": proc,
+                "file_path": str(active_file),
+                "is_scheduled_recording": was_already_scheduled
+            }
+            if proc and hasattr(self, "_timeshift_poll_timer"):
+                self._timeshift_poll_timer.start()
             self._display_program_details(prog)
             return
 
         if retries_left > 0:
             self.status_bar.showMessage(f"Buffering stream data ({retries_left} retries left)...", 2000)
-            QTimer.singleShot(1500, lambda: self._on_timeshift_buffer_ready(prog, retries_left - 1))
+            QTimer.singleShot(
+                1500,
+                lambda: self._on_timeshift_buffer_ready(
+                    prog,
+                    retries_left - 1,
+                    was_already_scheduled=was_already_scheduled,
+                    queue_id=queue_id
+                )
+            )
         else:
             self.status_bar.showMessage(
                 f"Recording started on '{title}', but could not locate playable .m2t file yet. Check recording folder.", 6000
             )
+
+    def _poll_timeshift_session(self):
+        if not getattr(self, "_active_timeshift", None):
+            if hasattr(self, "_timeshift_poll_timer"):
+                self._timeshift_poll_timer.stop()
+            return
+
+        proc = self._active_timeshift.get("process")
+        if proc is not None and proc.poll() is not None:
+            # Process has exited!
+            if hasattr(self, "_timeshift_poll_timer"):
+                self._timeshift_poll_timer.stop()
+            self.stop_timeshift_session(user_initiated=False)
+
+    def stop_timeshift_session(self, user_initiated: bool = False):
+        if not getattr(self, "_active_timeshift", None):
+            return
+
+        session = dict(self._active_timeshift)
+        self._active_timeshift = None
+        if hasattr(self, "_timeshift_poll_timer"):
+            self._timeshift_poll_timer.stop()
+
+        title = session.get("title", "")
+        ch = session.get("channel", "")
+        qid = session.get("queue_id")
+        key = session.get("kaffeine_key")
+        fpath = session.get("file_path")
+        is_scheduled = session.get("is_scheduled_recording", False)
+        proc = session.get("process")
+
+        if user_initiated and proc and proc.poll() is None:
+            try:
+                proc.terminate()
+            except Exception:
+                pass
+
+        if not is_scheduled:
+            # Cancel background recording in Kaffeine to immediately free tuner
+            try:
+                self.dbus_client.cancel_recording(key=key, channel=ch, title=title)
+            except Exception as e:
+                print(f"Error cancelling Kaffeine timeshift recording: {e}")
+
+            # Remove from queue manager
+            if qid:
+                try:
+                    self.queue_mgr.remove_recording(int(qid))
+                except Exception:
+                    pass
+
+            # Clean up temporary buffer file if configured
+            if getattr(self.config_mgr, "delete_timeshift_on_exit", True) and fpath:
+                try:
+                    p = Path(fpath)
+                    if p.exists():
+                        p.unlink()
+                        print(f"Deleted temporary timeshift buffer: {p.name}")
+                except Exception as e:
+                    print(f"Error removing temporary timeshift file {fpath}: {e}")
+
+            msg = f"Timeshift ended on {ch} ('{title}'). Tuner released."
+        else:
+            msg = f"Closed playback for '{title}'. Scheduled recording continues in background."
+
+        self.status_bar.showMessage(msg, 5000)
+        self.refresh_recordings()
+        self._refresh_guide_view(keep_scroll=True)
+        prog = self._get_active_selected_program()
+        if prog:
+            self._display_program_details(prog)
 
     def on_grid_cell_double_clicked(self, row: int, col: int):
         item = self.guide_grid_table.item(row, col)
