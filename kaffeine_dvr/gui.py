@@ -5696,7 +5696,7 @@ class MainWindow(QMainWindow):
             tooltip_out = "Decrease grid font and tile size"
         else:
             list_lvl = getattr(self, "guide_list_zoom_level", 0)
-            can_zoom_in = list_lvl < 14
+            can_zoom_in = list_lvl < 42
             can_zoom_out = list_lvl > -3
             tooltip_in = "Increase list view font size"
             tooltip_out = "Decrease list view font size"
@@ -5721,7 +5721,7 @@ class MainWindow(QMainWindow):
         else:
             if not hasattr(self, "guide_list_zoom_level"):
                 self.guide_list_zoom_level = 0
-            if self.guide_list_zoom_level < 14:
+            if self.guide_list_zoom_level < 42:
                 self.guide_list_zoom_level += 1
                 self.settings.setValue("guide_list_zoom_level", self.guide_list_zoom_level)
                 self._apply_guide_zoom()
