@@ -6232,13 +6232,15 @@ def resolve_systemd_exec_start() -> str:
     import shutil
     from pathlib import Path
 
-    appimage_path = os.environ.get("APPIMAGE")
-    if appimage_path and Path(appimage_path).is_file():
-        return f'"{Path(appimage_path).resolve()}" --watch'
-
+    # 1. Prefer local binary (~/.local/bin/kaffeine-dvr) so development tweaks take effect immediately
     local_bin = Path.home() / ".local" / "bin" / "kaffeine-dvr"
     if local_bin.is_file():
         return "%h/.local/bin/kaffeine-dvr --watch"
+
+    # 2. If running inside an AppImage and no local binary exists, use the AppImage
+    appimage_path = os.environ.get("APPIMAGE")
+    if appimage_path and Path(appimage_path).is_file():
+        return f'"{Path(appimage_path).resolve()}" --watch'
 
     cmd = shutil.which("kaffeine-dvr")
     if cmd:
