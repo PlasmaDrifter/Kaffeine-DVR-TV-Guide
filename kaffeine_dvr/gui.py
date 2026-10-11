@@ -2350,6 +2350,16 @@ QPushButton.category-color-tile:hover {
 QPushButton.category-color-tile:pressed {
     border: 2px solid #ffffff;
 }
+
+/* Tooltip Styling */
+QToolTip {
+    background-color: #1a1e2b;
+    color: #f1f5f9;
+    border: 1px solid #3d465c;
+    border-radius: 4px;
+    padding: 5px 8px;
+    font-size: 12px;
+}
 """
 
 
@@ -3804,7 +3814,7 @@ class MainWindow(QMainWindow):
             swatch_btn.setFixedSize(26, 26)
             swatch_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             swatch_btn.setToolTip(f"Click to change {cat_label} color")
-            swatch_btn.setStyleSheet(f"background-color: {hex_val};")
+            swatch_btn.setStyleSheet(f"QPushButton.category-color-tile {{ background-color: {hex_val}; }}")
             swatch_btn.clicked.connect(lambda checked=False, k=cat_key, l=cat_label: self._choose_category_color(k, l))
             color_grid.addWidget(swatch_btn, r_idx, 0, Qt.AlignmentFlag.AlignVCenter)
             self._cat_swatches[cat_key] = swatch_btn
@@ -4837,7 +4847,7 @@ class MainWindow(QMainWindow):
 
             # Update swatch tile
             if hasattr(self, "_cat_swatches") and category_key in self._cat_swatches:
-                self._cat_swatches[category_key].setStyleSheet(f"background-color: {new_hex};")
+                self._cat_swatches[category_key].setStyleSheet(f"QPushButton.category-color-tile {{ background-color: {new_hex}; }}")
             if hasattr(self, "_cat_hex_labels") and category_key in self._cat_hex_labels:
                 self._cat_hex_labels[category_key].setText(new_hex.upper())
 
@@ -4859,7 +4869,7 @@ class MainWindow(QMainWindow):
         if hasattr(self, "_cat_swatches"):
             for cat_key, swatch in self._cat_swatches.items():
                 def_hex = DEFAULT_CATEGORY_COLORS.get(cat_key, "#ffffff")
-                swatch.setStyleSheet(f"background-color: {def_hex};")
+                swatch.setStyleSheet(f"QPushButton.category-color-tile {{ background-color: {def_hex}; }}")
                 if hasattr(self, "_cat_hex_labels") and cat_key in self._cat_hex_labels:
                     self._cat_hex_labels[cat_key].setText(def_hex.upper())
 
