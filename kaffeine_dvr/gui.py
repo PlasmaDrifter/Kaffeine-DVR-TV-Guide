@@ -2398,12 +2398,13 @@ QPushButton.category-color-tile:pressed {
 
 /* Tooltip Styling */
 QToolTip {
-    background-color: #1a1e2b;
-    color: #f1f5f9;
-    border: 1px solid #3d465c;
-    border-radius: 4px;
-    padding: 5px 8px;
-    font-size: 12px;
+    background-color: #1e293b;
+    color: #ffffff;
+    border: 1.5px solid #4a8df5;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 500;
 }
 """
 
@@ -2431,7 +2432,7 @@ def setup_dark_theme(app: Optional[QApplication]):
     palette.setColor(QPalette.ColorRole.WindowText, QColor("#e0e6ed"))
     palette.setColor(QPalette.ColorRole.Base, QColor("#13151f"))
     palette.setColor(QPalette.ColorRole.AlternateBase, QColor("#191c28"))
-    palette.setColor(QPalette.ColorRole.ToolTipBase, QColor("#222736"))
+    palette.setColor(QPalette.ColorRole.ToolTipBase, QColor("#1e293b"))
     palette.setColor(QPalette.ColorRole.ToolTipText, QColor("#ffffff"))
     palette.setColor(QPalette.ColorRole.Text, QColor("#e0e6ed"))
     palette.setColor(QPalette.ColorRole.Button, QColor("#222634"))
