@@ -3205,7 +3205,7 @@ class MainWindow(QMainWindow):
         self.passport_stations_text.setPlaceholderText("Example:\nNBC = 1812\nABC = 4163\nFox = 1809")
         stations_lines = [f"{k} = {v}" for k, v in self.config_mgr.tvpassport_stations.items()]
         self.passport_stations_text.setPlainText("\n".join(stations_lines))
-        self.passport_stations_text.setMinimumHeight(180)
+        self.passport_stations_text.setMinimumHeight(300)
         right_col_layout.addWidget(self.passport_stations_text)
 
         save_pass_btn = QPushButton("Save Station IDs")
