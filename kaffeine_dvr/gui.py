@@ -3688,7 +3688,7 @@ class MainWindow(QMainWindow):
         self.update_freq_combo = QComboBox()
         self.update_freq_combo.addItems(["Weekly", "Monthly"])
         current_freq = self.config_mgr.update_check_frequency.capitalize()
-        self.update_freq_combo.setCurrentText(current_freq if current_freq in ("Weekly", "Monthly") else "Monthly")
+        self.update_freq_combo.setCurrentText(current_freq if current_freq in ("Weekly", "Monthly") else "Weekly")
         self.update_freq_combo.setEnabled(self.config_mgr.auto_check_updates)
         self.update_freq_combo.currentTextChanged.connect(self._on_update_freq_changed)
         freq_row.addWidget(self.update_freq_combo)
