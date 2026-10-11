@@ -2073,27 +2073,8 @@ class MainWindow(QMainWindow):
         banner.setContentsMargins(0, 0, 0, 0)
         banner.setSpacing(0)
 
-        # Column 0: Far Left Restore Saved Window Size button
+        # Column 0: Far Left empty spacer container to balance grid layout
         left_container = QWidget()
-        left_layout = QHBoxLayout(left_container)
-        left_layout.setContentsMargins(0, 0, 0, 0)
-        left_layout.setSpacing(6)
-
-        self.header_restore_btn = QPushButton()
-        self.header_restore_btn.setIcon(self._create_restore_window_icon())
-        self.header_restore_btn.setIconSize(QSize(16, 16))
-        self.header_restore_btn.setFixedSize(28, 26)
-        self.header_restore_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.header_restore_btn.setToolTip("Restore saved window dimensions (also accessible in Settings)")
-        self.header_restore_btn.setStyleSheet(
-            "QPushButton { border: 1px solid #3d465c; border-radius: 4px; background-color: #212635; color: #c8d2df; }"
-            "QPushButton:hover { background-color: #313d56; border: 1px solid #5a80b8; }"
-            "QPushButton:pressed { background-color: #1a1e2b; }"
-        )
-        self.header_restore_btn.clicked.connect(self.restore_saved_window_size)
-        left_layout.addWidget(self.header_restore_btn)
-        left_layout.addStretch()
-
         banner.addWidget(left_container, 0, 0, Qt.AlignmentFlag.AlignLeft)
 
         # Column 1: Middle auto-save notification indicator (guaranteed true center)
@@ -2373,6 +2354,16 @@ class MainWindow(QMainWindow):
             "QPushButton:hover { background-color: #313d56; border: 1px solid #5a80b8; color: #ffffff; }"
             "QPushButton:pressed { background-color: #1a1e2b; border: 1px solid #353d50; }"
         )
+        # Restore Saved Window Size Button
+        self.header_restore_btn = QPushButton()
+        self.header_restore_btn.setToolTip("Restore saved window dimensions (also accessible in Settings)")
+        self.header_restore_btn.setIcon(self._create_restore_window_icon())
+        self.header_restore_btn.setIconSize(QSize(14, 14))
+        self.header_restore_btn.setStyleSheet(max_btn_style)
+        self.header_restore_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.header_restore_btn.clicked.connect(self.restore_saved_window_size)
+        filter_bar.addWidget(self.header_restore_btn)
+
         self.guide_maximize_btn = QPushButton()
         self.guide_maximize_btn.setToolTip("Maximize guide to fill window")
         self.guide_maximize_btn.setIcon(self._create_guide_maximize_icon())
