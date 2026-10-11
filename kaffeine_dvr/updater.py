@@ -90,6 +90,82 @@ def get_pip_flags() -> list:
     return flags
 
 
+EMBEDDED_RELEASE_NOTES: Dict[str, str] = {
+    "0.8.5": (
+        "## What's Changed in v0.8.5\n\n"
+        "• **TVPassport Direct Lineup URL**: Updated all TVPassport links in the guide and lineup dialogs to direct to https://www.tvpassport.com/index.php/lineups for immediate postal/zip code entry.\n"
+        "• **EPG Grid Recording & Scheduled Indicators**: Differentiated active recording (● REC with solid red dot and red border) from scheduled recordings (○ SCHED with subtle outline only).\n"
+        "• **EPG List View Enhancements**: Added subtle #2b3242 grid lines, removed row index headers, and differentiated scheduled vs active recordings.\n"
+        "• **Release Notes Modal Viewer**: Added an interactive 'View Release Notes...' modal dialog with formatted changelog viewer in Settings -> Updates tab and status bar.\n"
+        "• **AppImage Checkmark Rendering**: Bundled checkmark assets and fixed indicator icon resolution in read-only SquashFS AppImage environments.\n"
+        "• **Versioned AppImage Naming**: Build script generates versioned test and release artifacts (Kaffeine-DVR-TV-Guide-v0.8.5-x86_64.AppImage) alongside convenience symlinks."
+    ),
+    "0.8.4": (
+        "## What's Changed in v0.8.4\n\n"
+        "• **List View Navigation & Performance**: Fixed initial auto-scroll so list view immediately jumps to the first live or upcoming program on its first activation, matching subsequent switches.\n"
+        "• **Direct DBus Channel Tuning**: Implemented direct KDBusService CommandLine parameter passing to tune live TV channels cleanly without requiring synthetic keypresses.\n"
+        "• **Recording Indicator Redesign**: Replaced large rectangular badges with clean red dot indicators on EPG grid tiles for a more polished look.\n"
+        "• **Sports Auto-Extend UI**: Aligned the sports buffer duration spinbox with the rest of the form input fields and repositioned the auto-extend toggle to the right.\n"
+        "• **AppImage Distribution & Metadata**: Built and released a standalone x86_64 AppImage with embedded Python and PyQt6 runtimes, complete desktop metadata, and AppManager package compatibility.\n"
+        "• **Background Watcher CLI Dispatching**: Fixed argument dispatch in entrypoint so CLI daemon modes like --watch execute headlessly as background services rather than opening a second GUI window.\n"
+        "• **Background Service Auto-Provisioning**: Automated systemd user unit provisioning directly from the AppImage/application with dynamic ExecStart path resolution, allowing the background watcher service to enable, start, and run seamlessly without requiring manual install scripts.\n"
+        "• **Documentation & UI Previews**: Refreshed README installation workflows (clarifying standalone AppImage vs. source installation), overview sections, and preview screenshots."
+    ),
+}
+
+
+def _extract_version_section(markdown_text: str, version_str: str) -> str:
+    """Extracts the section for a specific version from markdown release notes."""
+    ver = version_str.lstrip("v").strip()
+    pattern = rf"(?m)^##\s+v?{re.escape(ver)}\b(.*?)(?=^##\s+|\Z)"
+    match = re.search(pattern, markdown_text, flags=re.DOTALL)
+    if match:
+        section = match.group(0).strip()
+        return section
+    return ""
+
+
+def get_local_release_notes(version: Optional[str] = None) -> str:
+    """
+    Returns the release notes / changelog for the specified version (or current version).
+    Searches bundled RELEASE_NOTES.md, repository RELEASE_NOTES.md, and embedded fallback notes.
+    """
+    ver = (version or __version__).lstrip("v").strip()
+
+    # Search file candidates
+    candidates = []
+    if hasattr(sys, "_MEIPASS"):
+        candidates.append(Path(sys._MEIPASS) / "RELEASE_NOTES.md")
+        candidates.append(Path(sys._MEIPASS) / "assets" / "RELEASE_NOTES.md")
+    try:
+        exe_dir = Path(sys.executable).resolve().parent
+        candidates.extend([
+            exe_dir / "RELEASE_NOTES.md",
+            exe_dir / "assets" / "RELEASE_NOTES.md",
+            exe_dir / "_internal" / "RELEASE_NOTES.md",
+            exe_dir.parent / "share" / "kaffeine-dvr" / "RELEASE_NOTES.md",
+        ])
+    except Exception:
+        pass
+    try:
+        base_dir = Path(__file__).resolve().parent.parent
+        candidates.append(base_dir / "RELEASE_NOTES.md")
+    except Exception:
+        pass
+
+    for cand in candidates:
+        if cand.is_file():
+            try:
+                content = cand.read_text(encoding="utf-8")
+                extracted = _extract_version_section(content, ver)
+                if extracted:
+                    return extracted
+            except Exception:
+                pass
+
+    return EMBEDDED_RELEASE_NOTES.get(ver, EMBEDDED_RELEASE_NOTES.get(__version__.lstrip("v"), ""))
+
+
 def is_editable_install() -> bool:
     try:
         res = subprocess.run(
@@ -116,7 +192,7 @@ def check_for_updates() -> Dict[str, Any]:
         "latest_version": __version__,
         "current_version": __version__,
         "details": "Your installation is up to date.",
-        "release_notes": "",
+        "release_notes": get_local_release_notes(__version__),
         "is_git": info["is_git"],
         "repo_path": info["repo_path"],
     }
@@ -169,8 +245,9 @@ def check_for_updates() -> Dict[str, Any]:
                 except Exception:
                     pass
 
-            # Also try to fetch release notes from GitHub API for latest tag if available
-            if not notes:
+            # If behind origin/main or a newer tag is published on GitHub, fetch release notes from API
+            is_newer_remote_tag = bool(latest_tag and is_newer_version(latest_tag, __version__))
+            if (behind > 0 or is_newer_remote_tag) and not notes:
                 try:
                     req = urllib.request.Request(
                         RELEASES_API,
@@ -189,7 +266,7 @@ def check_for_updates() -> Dict[str, Any]:
                 result["details"] = f"{behind} new commit(s) available on origin/main."
                 result["release_notes"] = notes
                 return result
-            elif latest_tag and is_newer_version(latest_tag, __version__):
+            elif is_newer_remote_tag:
                 result["update_available"] = True
                 result["latest_version"] = latest_tag
                 result["details"] = f"New version v{latest_tag} is available."
@@ -197,11 +274,11 @@ def check_for_updates() -> Dict[str, Any]:
                 return result
             else:
                 result["update_available"] = False
-                result["latest_version"] = latest_tag if latest_tag else __version__
+                result["latest_version"] = __version__
                 result["details"] = "Your repository clone is up to date with origin/main."
-                result["release_notes"] = notes
+                result["release_notes"] = get_local_release_notes(__version__)
                 return result
-        except Exception as e:
+        except Exception:
             # If git fetch fails (offline or non-git remote), fall through to HTTP API
             pass
 
@@ -214,18 +291,21 @@ def check_for_updates() -> Dict[str, Any]:
         with urllib.request.urlopen(req, timeout=8) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             tag = data.get("tag_name", "").lstrip("v")
-            notes = data.get("body", "").strip()
-            result["release_notes"] = notes
-            if tag:
+            remote_notes = data.get("body", "").strip()
+            if tag and is_newer_version(tag, __version__):
+                result["update_available"] = True
                 result["latest_version"] = tag
-                if is_newer_version(tag, __version__):
-                    result["update_available"] = True
-                    result["details"] = f"Version v{tag} is available on GitHub."
-                else:
-                    result["update_available"] = False
-                    result["details"] = "You are running the latest released version."
+                result["release_notes"] = remote_notes
+                result["details"] = f"Version v{tag} is available on GitHub."
+            else:
+                result["update_available"] = False
+                result["latest_version"] = __version__
+                result["release_notes"] = get_local_release_notes(__version__) or remote_notes
+                result["details"] = "You are running the latest version."
     except Exception as e:
         result["details"] = f"Unable to check for updates: {e}"
+        if not result["release_notes"]:
+            result["release_notes"] = get_local_release_notes(__version__)
 
     return result
 

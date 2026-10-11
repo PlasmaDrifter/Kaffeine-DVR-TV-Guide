@@ -6,7 +6,7 @@ REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_DIR"
 
 echo "=== 1. Building PyInstaller binary bundle ==="
-pyinstaller --onedir --name kaffeine-dvr --windowed --add-data "assets:assets" kaffeine_dvr/gui.py --noconfirm
+pyinstaller --onedir --name kaffeine-dvr --windowed --add-data "assets:assets" --add-data "RELEASE_NOTES.md:." kaffeine_dvr/gui.py --noconfirm
 
 echo "=== 2. Setting up AppDir ==="
 rm -rf AppDir
@@ -18,9 +18,12 @@ cp -r dist/kaffeine-dvr/* AppDir/usr/bin/
 mkdir -p AppDir/usr/bin/assets AppDir/usr/share/kaffeine-dvr/assets
 cp -r assets/* AppDir/usr/bin/assets/ 2>/dev/null || true
 cp -r assets/* AppDir/usr/share/kaffeine-dvr/assets/ 2>/dev/null || true
+cp RELEASE_NOTES.md AppDir/usr/bin/ 2>/dev/null || true
+cp RELEASE_NOTES.md AppDir/usr/share/kaffeine-dvr/ 2>/dev/null || true
 if [ -d AppDir/usr/bin/_internal ]; then
     mkdir -p AppDir/usr/bin/_internal/assets
     cp -r assets/* AppDir/usr/bin/_internal/assets/ 2>/dev/null || true
+    cp RELEASE_NOTES.md AppDir/usr/bin/_internal/ 2>/dev/null || true
 fi
 
 # Icons

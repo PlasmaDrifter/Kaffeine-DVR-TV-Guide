@@ -3812,13 +3812,18 @@ class MainWindow(QMainWindow):
 
     def open_release_notes_dialog(self):
         """Opens the interactive modal release notes dialog."""
-        notes = getattr(self, "_cached_release_notes", "").strip()
-        version = getattr(self, "_cached_latest_version", "") or getattr(self, "_latest_detected_version", "")
-        if not version:
-            from kaffeine_dvr import __version__
+        from kaffeine_dvr import __version__
+        is_avail = bool(getattr(self, "_cached_update_available", False))
+        if is_avail:
+            version = getattr(self, "_cached_latest_version", "") or getattr(self, "_latest_detected_version", "") or __version__
+        else:
             version = __version__
 
-        is_avail = bool(getattr(self, "_cached_update_available", False))
+        notes = getattr(self, "_cached_release_notes", "").strip()
+        if not notes:
+            from kaffeine_dvr.updater import get_local_release_notes
+            notes = get_local_release_notes(version)
+
         dlg = ReleaseNotesDialog(
             parent=self,
             version=version,
