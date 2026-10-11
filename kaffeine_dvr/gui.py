@@ -919,9 +919,21 @@ class NumberStepper(QWidget):
         layout.addWidget(self._spin, 1)
         layout.addWidget(self._btn_plus)
 
-        self._btn_minus.clicked.connect(self._spin.stepDown)
-        self._btn_plus.clicked.connect(self._spin.stepUp)
+        self._btn_minus.clicked.connect(self._step_down)
+        self._btn_plus.clicked.connect(self._step_up)
         self._spin.valueChanged.connect(self.valueChanged.emit)
+
+    def _step_down(self):
+        self._spin.stepDown()
+        line_edit = self._spin.lineEdit()
+        if line_edit:
+            line_edit.deselect()
+
+    def _step_up(self):
+        self._spin.stepUp()
+        line_edit = self._spin.lineEdit()
+        if line_edit:
+            line_edit.deselect()
 
     def value(self) -> int:
         return self._spin.value()
