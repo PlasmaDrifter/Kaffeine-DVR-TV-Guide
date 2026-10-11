@@ -2689,20 +2689,17 @@ class MainWindow(QMainWindow):
         self.hist_max_spin.setRange(5, 500)
         self.hist_max_spin.setSingleStep(5)
         self.hist_max_spin.setValue(self.config_mgr.max_history_entries)
-        self.hist_max_spin.setToolTip("Maximum number of completed recording history entries to retain")
         self.hist_max_spin.setFixedWidth(130)
         self.hist_max_spin.valueChanged.connect(self.on_max_history_changed)
         hist_ctrl_bar.addWidget(self.hist_max_spin)
 
         hist_ctrl_bar.addSpacing(16)
         self.clear_hist_entry_btn = QPushButton("Clear Entry")
-        self.clear_hist_entry_btn.setToolTip("Remove the selected item from history")
         self.clear_hist_entry_btn.clicked.connect(self.clear_selected_history_entry)
         hist_ctrl_bar.addWidget(self.clear_hist_entry_btn)
 
         self.clear_all_hist_btn = QPushButton("Clear All")
         self.clear_all_hist_btn.setStyleSheet("color: #d9534f;")
-        self.clear_all_hist_btn.setToolTip("Clear all completed recording history")
         self.clear_all_hist_btn.clicked.connect(self.clear_all_history)
         hist_ctrl_bar.addWidget(self.clear_all_hist_btn)
 
@@ -3790,17 +3787,14 @@ class MainWindow(QMainWindow):
 
         self.save_win_size_btn = QPushButton("Save Size")
         self.save_win_size_btn.setObjectName("primaryActionBtn")
-        self.save_win_size_btn.setToolTip("Save current window dimensions to restore automatically on launch")
         self.save_win_size_btn.clicked.connect(self.save_current_window_size)
         win_size_btn_row.addWidget(self.save_win_size_btn)
 
         self.restore_win_size_btn = QPushButton("Restore Size")
-        self.restore_win_size_btn.setToolTip("Resize back to saved dimensions without restarting")
         self.restore_win_size_btn.clicked.connect(self.restore_saved_window_size)
         win_size_btn_row.addWidget(self.restore_win_size_btn)
 
         self.reset_win_size_btn = QPushButton("Reset Default")
-        self.reset_win_size_btn.setToolTip("Reset window dimensions to default (1100 × 750)")
         self.reset_win_size_btn.clicked.connect(self.reset_window_size_to_default)
         win_size_btn_row.addWidget(self.reset_win_size_btn)
         win_size_btn_row.addStretch()
@@ -3965,7 +3959,6 @@ class MainWindow(QMainWindow):
         cat_btn_row = QHBoxLayout()
         cat_btn_row.setSpacing(10)
         self.reset_cat_colors_btn = QPushButton("Reset Defaults")
-        self.reset_cat_colors_btn.setToolTip("Reset all category colors to their default scheme")
         self.reset_cat_colors_btn.clicked.connect(self._reset_category_colors)
         cat_btn_row.addWidget(self.reset_cat_colors_btn)
         cat_btn_row.addStretch()
@@ -5355,7 +5348,6 @@ class MainWindow(QMainWindow):
 
             sched_item = QTableWidgetItem(schedule_text)
             sched_item.setFont(QFont("", -1, QFont.Weight.Bold))
-            sched_item.setToolTip(f"Full broadcast time: {full_date_text}")
 
             self.rec_table.setItem(row, 0, title_item)
             self.rec_table.setItem(row, 1, sched_item)
@@ -5367,8 +5359,6 @@ class MainWindow(QMainWindow):
             else:
                 duration_display = duration
             dur_item = QTableWidgetItem(duration_display)
-            if buf_val > 0:
-                dur_item.setToolTip(f"Includes +{buf_val} minutes post-roll buffer")
             self.rec_table.setItem(row, 3, dur_item)
 
             status_display = status
@@ -5400,10 +5390,8 @@ class MainWindow(QMainWindow):
             if is_prot:
                 prot_item.setForeground(QColor("#28a745"))
                 prot_item.setFont(QFont("", -1, QFont.Weight.Bold))
-                prot_item.setToolTip("Protected: Will never be automatically deleted by retention rules.")
             else:
                 prot_item.setForeground(QColor("#a0aec0"))
-                prot_item.setToolTip("Standard: Subject to auto-cleanup retention rules.")
             self.rec_table.setItem(row, 5, prot_item)
 
         # Also refresh history table
@@ -5438,7 +5426,6 @@ class MainWindow(QMainWindow):
             title_item.setData(Qt.ItemDataRole.UserRole, hid)
 
             dt_item = QTableWidgetItem(date_time_str)
-            dt_item.setToolTip(f"Broadcast start: {start_iso}")
 
             chan_item = QTableWidgetItem(channel)
             dur_item = QTableWidgetItem(duration)
@@ -6592,26 +6579,21 @@ class MainWindow(QMainWindow):
                 self.watch_guide_btn.setVisible(True)
                 if is_live_rec and rec_file:
                     self.watch_guide_btn.setText(f"Watch in {player_disp}")
-                    self.watch_guide_btn.setToolTip(f"Play active live recording in {player_disp} ({os.path.basename(rec_file)})")
                     self.watch_guide_btn.setStyleSheet("font-weight: bold; background-color: #1976d2; color: #ffffff; padding: 4px 12px;")
                 elif live_mode == "timeshift":
                     self.watch_guide_btn.setText(f"Watch Live ({player_disp})")
-                    self.watch_guide_btn.setToolTip(f"Timeshift broadcast in {player_disp} with background recording on {channel}")
                     self.watch_guide_btn.setStyleSheet("font-weight: bold; background-color: #1976d2; color: #ffffff; padding: 4px 12px;")
                 else:
                     self.watch_guide_btn.setText("Watch Live (Kaffeine)")
-                    self.watch_guide_btn.setToolTip(f"Watch live broadcast on {channel} directly in Kaffeine")
                     self.watch_guide_btn.setStyleSheet("font-weight: bold; background-color: #2e7d32; color: #ffffff; padding: 4px 12px;")
             elif state == "upcoming":
                 self.watch_guide_btn.setVisible(True)
                 self.watch_guide_btn.setText("Tune Channel Now")
-                self.watch_guide_btn.setToolTip(f"Tune Kaffeine to {channel} now ({timing_info.get('time_desc')})")
                 self.watch_guide_btn.setStyleSheet("padding: 4px 12px;")
             elif state == "past":
                 if timing_info.get("recorded_file"):
                     self.watch_guide_btn.setVisible(True)
                     self.watch_guide_btn.setText("Play Recording")
-                    self.watch_guide_btn.setToolTip(f"Play recorded file in {player_disp}: {os.path.basename(timing_info['recorded_file'])}")
                     self.watch_guide_btn.setStyleSheet("font-weight: bold; background-color: #1976d2; color: #ffffff; padding: 4px 12px;")
                 else:
                     self.watch_guide_btn.setVisible(False)
@@ -6621,13 +6603,10 @@ class MainWindow(QMainWindow):
                 self.alt_watch_guide_btn.setVisible(True)
                 if is_live_rec and rec_file:
                     self.alt_watch_guide_btn.setText("Tune in Kaffeine")
-                    self.alt_watch_guide_btn.setToolTip(f"Tune directly into Kaffeine live window on {channel}")
                 elif live_mode == "timeshift":
                     self.alt_watch_guide_btn.setText("Tune in Kaffeine")
-                    self.alt_watch_guide_btn.setToolTip(f"Tune directly into Kaffeine live window on {channel}")
                 else:
                     self.alt_watch_guide_btn.setText(f"Timeshift in {player_disp}")
-                    self.alt_watch_guide_btn.setToolTip(f"Timeshift in {player_disp} with background recording on {channel}")
             else:
                 self.alt_watch_guide_btn.setVisible(False)
 
