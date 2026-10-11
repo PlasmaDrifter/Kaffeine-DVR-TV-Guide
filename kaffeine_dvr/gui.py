@@ -792,6 +792,7 @@ class HelpBadge(QLabel):
         super().__init__("?", parent)
         self._tooltip_text = tooltip_text
         self.setCursor(Qt.CursorShape.ArrowCursor)
+        self.setFixedSize(18, 18)
         self.setStyleSheet(
             "QLabel {"
             "  color: #ffffff;"
@@ -800,21 +801,19 @@ class HelpBadge(QLabel):
             "  border-radius: 9px;"
             "  font-weight: bold;"
             "  font-size: 11px;"
-            "  min-width: 18px;"
-            "  max-width: 18px;"
-            "  min-height: 18px;"
-            "  max-height: 18px;"
+            "  padding: 0px;"
+            "  margin: 0px;"
             "  qproperty-alignment: AlignCenter;"
             "}"
             "QLabel:hover {"
             "  color: #ffffff;"
             "  background-color: #2d6cd4;"
-            "  border: 1.5px solid #4a8df5;"
+            "  border: 1px solid #4a8df5;"
             "}"
             "QLabel[active=\"true\"] {"
             "  color: #ffffff;"
             "  background-color: #2d6cd4;"
-            "  border: 1.5px solid #4a8df5;"
+            "  border: 1px solid #4a8df5;"
             "}"
         )
 
@@ -960,7 +959,7 @@ class AdjustBufferDialog(QDialog):
 
 
 class CollapsibleSection(QWidget):
-    def __init__(self, title: str = "", initially_expanded: bool = False, parent=None):
+    def __init__(self, title: str = "", initially_expanded: bool = False, parent=None, subtitle: str = ""):
         super().__init__(parent)
         self.main_layout = QVBoxLayout(self)
         self.main_layout.setContentsMargins(0, 4, 0, 4)
@@ -989,12 +988,32 @@ class CollapsibleSection(QWidget):
             "  color: #ffffff; "
             "}"
         )
-        self.toggle_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.toggle_btn.setArrowType(Qt.ArrowType.DownArrow if initially_expanded else Qt.ArrowType.RightArrow)
-        self.toggle_btn.setText("  " + title)
         self.toggle_btn.setCheckable(True)
         self.toggle_btn.setChecked(initially_expanded)
         self.toggle_btn.clicked.connect(self.on_toggled)
+
+        if subtitle:
+            self.toggle_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+            self.toggle_btn.setArrowType(Qt.ArrowType.DownArrow if initially_expanded else Qt.ArrowType.RightArrow)
+            btn_layout = QHBoxLayout(self.toggle_btn)
+            btn_layout.setContentsMargins(24, 0, 12, 0)
+            btn_layout.setSpacing(8)
+
+            title_lbl = QLabel(f"<b>{title}</b>")
+            title_lbl.setStyleSheet("color: #d3dae3; font-size: 12px; background: transparent;")
+            title_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+            sub_lbl = QLabel(subtitle)
+            sub_lbl.setStyleSheet("color: #788496; font-size: 11px; font-weight: normal; font-style: italic; background: transparent;")
+            sub_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+            btn_layout.addWidget(title_lbl)
+            btn_layout.addWidget(sub_lbl)
+            btn_layout.addStretch()
+        else:
+            self.toggle_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+            self.toggle_btn.setArrowType(Qt.ArrowType.DownArrow if initially_expanded else Qt.ArrowType.RightArrow)
+            self.toggle_btn.setText("  " + title)
         self.header_layout.addWidget(self.toggle_btn)
         self.main_layout.addLayout(self.header_layout)
 
@@ -1480,24 +1499,23 @@ class ProgramTileDelegate(QStyledItemDelegate):
         rec_status = rec_data.get("status") if isinstance(rec_data, dict) else ""
         is_recording = is_scheduled and (rec_status == "RECORDING" or (timing_state == "live" and rec_status in ("ARMED", "RECORDING")))
 
+        # Determine background fill based on program timing state
+        if timing_state == "past":
+            bg_color = self.COLOR_PAST_BG_ALT if is_alt else self.COLOR_PAST_BG
+            default_border = self.COLOR_PAST_BORDER_SCHED if is_scheduled else self.COLOR_PAST_BORDER
+        elif timing_state == "live":
+            bg_color = self.COLOR_LIVE_BG
+            default_border = self.COLOR_DEFAULT_BORDER_SCHED if is_scheduled else self.COLOR_DEFAULT_BORDER
+        else:
+            bg_color = self.COLOR_DEFAULT_BG_ALT if is_alt else self.COLOR_DEFAULT_BG
+            default_border = self.COLOR_DEFAULT_BORDER_SCHED if is_scheduled else self.COLOR_DEFAULT_BORDER
+
         if is_selected:
             border_color = self.get_category_color("highlight")
-            r = int(0.18 * border_color.red() + 0.82 * 20)
-            g = int(0.18 * border_color.green() + 0.82 * 25)
-            b = int(0.18 * border_color.blue() + 0.82 * 35)
-            bg_color = QColor(r, g, b)
             pen_width = 2
         else:
+            border_color = default_border
             pen_width = 2 if is_scheduled else 1
-            if timing_state == "past":
-                bg_color = self.COLOR_PAST_BG_ALT if is_alt else self.COLOR_PAST_BG
-                border_color = self.COLOR_PAST_BORDER_SCHED if is_scheduled else self.COLOR_PAST_BORDER
-            elif timing_state == "live":
-                bg_color = self.COLOR_LIVE_BG
-                border_color = self.COLOR_DEFAULT_BORDER_SCHED if is_scheduled else self.COLOR_DEFAULT_BORDER
-            else:
-                bg_color = self.COLOR_DEFAULT_BG_ALT if is_alt else self.COLOR_DEFAULT_BG
-                border_color = self.COLOR_DEFAULT_BORDER_SCHED if is_scheduled else self.COLOR_DEFAULT_BORDER
 
         painter.fillRect(rect, bg_color)
         painter.setPen(QPen(border_color, pen_width))
@@ -3258,7 +3276,11 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.xml_collapsible)
 
         # Collapsible 3: Schedules Direct
-        self.sd_collapsible = CollapsibleSection("Schedules Direct (Paid Official Gracenote API)", initially_expanded=False)
+        self.sd_collapsible = CollapsibleSection(
+            "Schedules Direct (Paid Official Gracenote API)",
+            initially_expanded=False,
+            subtitle="(untested)"
+        )
         sd_content = QWidget()
         sd_layout = QFormLayout(sd_content)
         sd_desc = QLabel("Official non-profit EPG service (~$35/year) providing direct Gracenote listings with high reliability.")
