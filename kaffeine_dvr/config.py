@@ -47,6 +47,8 @@ class ConfigManager:
                         data["launch_mode"] = "taskbar" if data.get("launch_minimized", True) else "normal"
                     if "enable_desktop_notifications" not in data:
                         data["enable_desktop_notifications"] = True
+                    if "notification_lead_time_mins" not in data:
+                        data["notification_lead_time_mins"] = 0
                     if "first_run_completed" not in data:
                         data["first_run_completed"] = False
                     if "auto_cleanup_enabled" not in data:
@@ -93,6 +95,7 @@ class ConfigManager:
             "launch_minimized": True,
             "launch_mode": "taskbar",
             "enable_desktop_notifications": True,
+            "notification_lead_time_mins": 0,
             "country_code": "US",
             "guide_provider": "hybrid",
             "xmltv_path_or_url": "",
@@ -299,6 +302,15 @@ class ConfigManager:
     @enable_desktop_notifications.setter
     def enable_desktop_notifications(self, val: bool):
         self.data["enable_desktop_notifications"] = val
+        self.save()
+
+    @property
+    def notification_lead_time_mins(self) -> int:
+        return self.data.get("notification_lead_time_mins", 0)
+
+    @notification_lead_time_mins.setter
+    def notification_lead_time_mins(self, val: int):
+        self.data["notification_lead_time_mins"] = max(0, int(val))
         self.save()
 
     @property

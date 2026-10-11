@@ -3325,14 +3325,33 @@ class MainWindow(QMainWindow):
             player_container
         )
 
-        self.notify_check = QCheckBox("Show Persistent Desktop Notification on Record Launch")
+        self.notify_check = QCheckBox("Show Persistent Desktop Notification when Recording Starts")
         self.notify_check.setChecked(self.config_mgr.enable_desktop_notifications)
         dvr_layout.addRow(
             make_setting_label(
                 "Desktop Notifications:",
-                "Sends a persistent desktop notification via notify-send when Kaffeine is launched and armed for a scheduled show."
+                "Sends a persistent desktop notification via notify-send when a scheduled recording is starting."
             ),
             self.notify_check
+        )
+
+        self.notify_lead_spin = NumberStepper()
+        self.notify_lead_spin.setRange(0, 60)
+        self.notify_lead_spin.setValue(self.config_mgr.notification_lead_time_mins)
+        self.notify_lead_spin.setSpecialValueText("0 mins (at recording start)")
+        self.notify_lead_spin.setSuffix(" mins before start")
+        self.notify_lead_spin.setFixedWidth(240)
+        self.notify_lead_spin.setEnabled(self.config_mgr.enable_desktop_notifications)
+        self.notify_check.toggled.connect(self.notify_lead_spin.setEnabled)
+
+        dvr_layout.addRow(
+            make_setting_label(
+                "Notification Lead Time:",
+                "How many minutes before showtime to send the desktop notification:\n"
+                "• 0 mins: Sends notification at the exact moment the recording begins.\n"
+                "• 1–60 mins: Sends notification in advance before the recording starts."
+            ),
+            self.notify_lead_spin
         )
 
         left_col.addWidget(dvr_group)
@@ -3502,6 +3521,8 @@ class MainWindow(QMainWindow):
         if hasattr(self, "custom_player_edit"):
             self.custom_player_edit.textChanged.connect(self._auto_save_automation_settings)
         self.notify_check.stateChanged.connect(self._auto_save_automation_settings)
+        if hasattr(self, "notify_lead_spin"):
+            self.notify_lead_spin.valueChanged.connect(self._auto_save_automation_settings)
 
         scroll.setWidget(container)
         return scroll
@@ -4410,6 +4431,8 @@ class MainWindow(QMainWindow):
         if hasattr(self, "custom_player_edit"):
             self.config_mgr.custom_playback_player_cmd = self.custom_player_edit.text().strip()
         self.config_mgr.enable_desktop_notifications = self.notify_check.isChecked()
+        if hasattr(self, "notify_lead_spin"):
+            self.config_mgr.notification_lead_time_mins = self.notify_lead_spin.value()
 
         # Storage & Retention settings
         self.config_mgr.auto_cleanup_enabled = self.cleanup_enable_check.isChecked()

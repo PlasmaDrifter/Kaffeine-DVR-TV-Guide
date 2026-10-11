@@ -8,14 +8,18 @@ from .queue_manager import QueueManager
 from .config import ConfigManager
 from .storage_manager import StorageManager
 
-def send_desktop_notification(title: str, channel: str, start_display: str):
+def send_desktop_notification(title: str, channel: str, start_display: str, lead_mins: int = 0):
     """
     Send a persistent desktop notification via notify-send.
     -t 0 specifies zero timeout, persisting in the notification center until dismissed.
     """
     try:
-        summary = f"Kaffeine Recording Armed: {title}"
-        body = f"Channel: {channel}\nAirtime: {start_display}\nKaffeine launched and recording timer armed."
+        if lead_mins > 0:
+            summary = f"Recording Starting Soon: {title}"
+            body = f"Channel: {channel}\nAirtime: {start_display}\nScheduled recording starts in {lead_mins} minute(s)."
+        else:
+            summary = f"Recording Starting: {title}"
+            body = f"Channel: {channel}\nAirtime: {start_display}\nScheduled recording is starting."
         cmd = [
             "notify-send",
             "-a", "Kaffeine DVR",
@@ -77,15 +81,24 @@ class Watcher:
                         self.dbus_client.minimize_kaffeine()
                     print(f"[{now_str}] Successfully armed recording in Kaffeine (D-Bus Key: {key}).", flush=True)
                     armed_count += 1
-
-                    # Send persistent desktop notification if enabled and not triggered manually
-                    if notify and cfg.enable_desktop_notifications:
-                        send_desktop_notification(title, channel, start_local)
                 else:
                     print(f"[{now_str}] Warning: schedule_recording returned invalid key {key} for '{title}'.", flush=True)
 
             except Exception as e:
                 print(f"[{now_str}] Error arming recording '{title}': {e}", flush=True)
+
+        # Check and dispatch desktop notifications when recording is due to start
+        if notify and cfg.enable_desktop_notifications:
+            lead_mins = getattr(cfg, "notification_lead_time_mins", 0)
+            notify_due = self.queue_mgr.get_due_for_notification(lead_time_mins=lead_mins)
+            for nrec in notify_due:
+                n_title = nrec["title"]
+                n_channel = nrec["channel"]
+                n_start_local = nrec.get("start_time_local", nrec["start_iso"])
+                send_desktop_notification(n_title, n_channel, n_start_local, lead_mins=lead_mins)
+                self.queue_mgr.mark_notified(nrec["id"])
+                now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                print(f"[{now_str}] Desktop notification sent for '{n_title}' on {n_channel} (lead: {lead_mins}m).", flush=True)
 
         # Update in-progress and completed statuses (archive finished to history)
         self.queue_mgr.update_statuses([], max_history=cfg.max_history_entries)

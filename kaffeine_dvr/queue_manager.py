@@ -28,7 +28,8 @@ class QueueManager:
                 created_at TEXT,
                 protected INTEGER DEFAULT 0,
                 file_path TEXT,
-                buffer_mins INTEGER DEFAULT 0
+                buffer_mins INTEGER DEFAULT 0,
+                notified INTEGER DEFAULT 0
             )
         """)
         # Safe migration for existing databases
@@ -40,6 +41,8 @@ class QueueManager:
             cur.execute("ALTER TABLE recording_queue ADD COLUMN file_path TEXT")
         if "buffer_mins" not in existing_cols:
             cur.execute("ALTER TABLE recording_queue ADD COLUMN buffer_mins INTEGER DEFAULT 0")
+        if "notified" not in existing_cols:
+            cur.execute("ALTER TABLE recording_queue ADD COLUMN notified INTEGER DEFAULT 0")
 
         cur.execute("CREATE INDEX IF NOT EXISTS idx_queue_status ON recording_queue(status)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_queue_start ON recording_queue(start_iso)")
@@ -253,6 +256,44 @@ class QueueManager:
         conn = sqlite3.connect(str(self.db_path))
         cur = conn.cursor()
         cur.execute("UPDATE recording_queue SET status = 'ARMED', kaffeine_key = ? WHERE id = ?", (kaffeine_key, queue_id))
+        conn.commit()
+        conn.close()
+
+    def get_due_for_notification(self, lead_time_mins: int = 0) -> List[Dict[str, Any]]:
+        """
+        Returns active recordings ('QUEUED', 'ARMED', 'RECORDING') where notified == 0,
+        now >= (start_time - lead_time_mins), and now < end_time.
+        """
+        conn = sqlite3.connect(str(self.db_path))
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT * FROM recording_queue
+            WHERE (notified = 0 OR notified IS NULL)
+              AND status IN ('QUEUED', 'ARMED', 'RECORDING')
+            ORDER BY start_iso ASC
+        """)
+        items = [dict(r) for r in cur.fetchall()]
+        conn.close()
+
+        now = datetime.now()
+        due = []
+        for rec in items:
+            try:
+                start_dt = datetime.fromisoformat(rec["start_iso"])
+                end_dt = datetime.fromisoformat(rec["end_iso"])
+                lead = timedelta(minutes=max(0, lead_time_mins))
+                if (now >= start_dt - lead) and (now < end_dt):
+                    due.append(rec)
+            except Exception as e:
+                print(f"Error parsing timestamps for notification: {e}")
+        return due
+
+    def mark_notified(self, queue_id: int):
+        """Marks a recording as notified so desktop notifications are only sent once."""
+        conn = sqlite3.connect(str(self.db_path))
+        cur = conn.cursor()
+        cur.execute("UPDATE recording_queue SET notified = 1 WHERE id = ?", (queue_id,))
         conn.commit()
         conn.close()
 
