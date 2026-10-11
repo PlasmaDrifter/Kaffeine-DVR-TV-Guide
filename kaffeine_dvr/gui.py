@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QTabWidget, QLabel, QPushButton, QTableWidget, QTableWidgetItem,
     QLineEdit, QComboBox, QTextEdit, QHeaderView,
-    QMessageBox, QDialog, QFormLayout, QSpinBox, QCheckBox,
+    QMessageBox, QDialog, QFormLayout, QSpinBox, QCheckBox, QRadioButton,
     QProgressBar, QStatusBar, QFrame, QGroupBox, QFileDialog,
     QScrollArea, QToolButton, QSizePolicy, QAbstractSpinBox, QSlider,
     QStackedWidget, QButtonGroup, QStyledItemDelegate, QStyleOptionViewItem,
@@ -555,6 +555,178 @@ class EditRuleDialog(QDialog):
         btn_box.addWidget(self.ok_btn)
         btn_box.addWidget(self.cancel_btn)
         layout.addRow(btn_box)
+
+
+class RetentionCleanupDialog(QDialog):
+    """
+    Confirmation dialog for manual retention cleanup.
+    Allows running configured retention policies or forgoing retention policy to delete all recordings.
+    """
+    def __init__(
+        self,
+        folder: str,
+        retention_days: int,
+        min_free_gb: int,
+        disk_usage: Optional[dict] = None,
+        parent=None
+    ):
+        super().__init__(parent)
+        self.setWindowTitle("Confirm Retention Cleanup")
+        self.setMinimumWidth(500)
+
+        self.retention_days = retention_days
+        self.min_free_gb = min_free_gb
+        self.policy_active = (retention_days > 0 or min_free_gb > 0)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(16)
+
+        # Header with warning icon and folder details
+        header = QHBoxLayout()
+        header.setSpacing(12)
+        warn_icon = QLabel()
+        std_icon = self.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxWarning)
+        warn_icon.setPixmap(std_icon.pixmap(32, 32))
+        header.addWidget(warn_icon)
+
+        header_text = QVBoxLayout()
+        header_text.setSpacing(3)
+        dlg_title = QLabel("<b style='font-size: 15px; color: #ffffff;'>Retention Cleanup Confirmation</b>")
+        header_text.addWidget(dlg_title)
+
+        usage_str = ""
+        if disk_usage and "free_gb" in disk_usage:
+            free_gb = disk_usage.get("free_gb", 0)
+            tot_gb = disk_usage.get("total_gb", 0)
+            pct = disk_usage.get("free_percent", 0)
+            usage_str = f" &bull; Free: {free_gb} GB / {tot_gb} GB ({pct}% free)"
+
+        dir_lbl = QLabel(f"<span style='color: #8c98aa; font-size: 12px;'>Directory: <b>{folder}</b>{usage_str}</span>")
+        dir_lbl.setWordWrap(True)
+        header_text.addWidget(dir_lbl)
+        header.addLayout(header_text, 1)
+        layout.addLayout(header)
+
+        # Mode Selection Box
+        mode_group_box = QGroupBox("Select Cleanup Action")
+        mode_layout = QVBoxLayout(mode_group_box)
+        mode_layout.setSpacing(12)
+
+        # Option 1: Apply Retention Policy
+        self.policy_radio = QRadioButton("Apply configured retention policy")
+        self.policy_radio.setChecked(self.policy_active)
+        mode_layout.addWidget(self.policy_radio)
+
+        policies = []
+        if retention_days > 0:
+            policies.append(f"Delete unprotected recordings older than {retention_days} days")
+        else:
+            policies.append("Age-based pruning: Disabled (0 days)")
+
+        if min_free_gb > 0:
+            policies.append(f"Purge oldest recordings if free space is below {min_free_gb} GB")
+        else:
+            policies.append("Disk space threshold: Disabled (0 GB)")
+
+        policy_bullets = "<br>".join(f"&bull; {p}" for p in policies)
+        self.policy_desc = QLabel(f"<span style='color: #94a3b8; font-size: 11px;'>{policy_bullets}</span>")
+        self.policy_desc.setContentsMargins(22, 0, 0, 0)
+        mode_layout.addWidget(self.policy_desc)
+
+        # Option 2: Forgo retention policy and delete all
+        self.delete_all_radio = QRadioButton("Forgo retention policy and delete all recordings")
+        self.delete_all_radio.setChecked(not self.policy_active)
+        mode_layout.addWidget(self.delete_all_radio)
+
+        self.delete_all_desc = QLabel(
+            "<span style='color: #f87171; font-size: 11px;'>"
+            "Ignores age and disk space thresholds. Deletes all recorded videos immediately."
+            "</span>"
+        )
+        self.delete_all_desc.setContentsMargins(22, 0, 0, 0)
+        mode_layout.addWidget(self.delete_all_desc)
+
+        # Sub-option: include protected recordings
+        self.include_prot_cb = QCheckBox("Also delete protected recordings (Keep Forever)")
+        self.include_prot_cb.setContentsMargins(22, 0, 0, 0)
+        self.include_prot_cb.setStyleSheet("color: #e2e8f0; font-size: 12px;")
+        mode_layout.addWidget(self.include_prot_cb)
+
+        layout.addWidget(mode_group_box)
+
+        # Active recording safety notice
+        safety_lbl = QLabel(
+            "<span style='color: #64748b; font-size: 11px;'>"
+            "<i>Note: Active in-progress recordings are always protected and will never be deleted.</i>"
+            "</span>"
+        )
+        layout.addWidget(safety_lbl)
+
+        # Footer Buttons
+        btn_box = QHBoxLayout()
+        btn_box.setSpacing(10)
+        btn_box.addStretch()
+
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.clicked.connect(self.reject)
+        btn_box.addWidget(self.cancel_btn)
+
+        self.action_btn = QPushButton("Run Retention Cleanup")
+        self.action_btn.clicked.connect(self._on_action_clicked)
+        btn_box.addWidget(self.action_btn)
+
+        layout.addLayout(btn_box)
+
+        # Wire radio toggles
+        self.policy_radio.toggled.connect(self._update_ui_state)
+        self.delete_all_radio.toggled.connect(self._update_ui_state)
+        self._update_ui_state()
+
+    def _update_ui_state(self):
+        is_delete_all = self.delete_all_radio.isChecked()
+        self.include_prot_cb.setEnabled(is_delete_all)
+        if not is_delete_all:
+            self.include_prot_cb.setChecked(False)
+            self.action_btn.setText("Run Retention Cleanup")
+            self.action_btn.setStyleSheet("")
+            self.action_btn.setObjectName("primaryActionBtn")
+        else:
+            self.action_btn.setText("Delete All Recordings")
+            self.action_btn.setStyleSheet(
+                "QPushButton { background-color: #dc2626; color: #ffffff; font-weight: bold; padding: 6px 14px; border-radius: 4px; }"
+                "QPushButton:hover { background-color: #ef4444; }"
+            )
+
+    def _on_action_clicked(self):
+        if self.policy_radio.isChecked() and not self.policy_active:
+            QMessageBox.information(
+                self,
+                "Retention Policy Disabled",
+                "Both the Retention Window (days) and Minimum Free Disk Space (GB) are set to 0.\n\n"
+                "Please configure at least one retention policy rule or choose 'Forgo retention policy and delete all'."
+            )
+            return
+
+        if self.delete_all_radio.isChecked() and self.include_prot_cb.isChecked():
+            confirm = QMessageBox.warning(
+                self,
+                "Confirm Deleting Protected Recordings",
+                "You have selected to delete ALL recordings INCLUDING protected ones.\n\n"
+                "Are you absolutely sure you want to proceed?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if confirm != QMessageBox.StandardButton.Yes:
+                return
+
+        self.accept()
+
+    def get_cleanup_options(self) -> dict:
+        return {
+            "delete_all": self.delete_all_radio.isChecked(),
+            "include_protected": self.include_prot_cb.isChecked() if self.delete_all_radio.isChecked() else False
+        }
 
 
 class HelpPopup(QFrame):
@@ -4633,67 +4805,57 @@ class MainWindow(QMainWindow):
     def run_manual_cleanup(self):
         retention_days = self.retention_days_spin.value()
         min_free = self.min_free_spin.value()
-        folder = self.custom_folder_input.text().strip() or str(self.storage_mgr.get_recording_folder())
+        folder_str = self.custom_folder_input.text().strip()
+        folder_path = Path(folder_str) if folder_str else self.storage_mgr.get_recording_folder()
+        disk_usage = self.storage_mgr.get_disk_usage(folder_path)
 
-        if retention_days == 0 and min_free == 0:
-            QMessageBox.information(
-                self,
-                "Retention Cleanup Disabled",
-                "Both the Retention Window (days) and Minimum Free Disk Space (GB) are set to 0.\n\n"
-                "Please configure at least one retention policy rule before running cleanup."
-            )
-            return
-
-        policies = []
-        if retention_days > 0:
-            policies.append(f"Delete unprotected recordings older than {retention_days} days")
-        else:
-            policies.append("Age-based pruning: Disabled (0 days)")
-
-        if min_free > 0:
-            policies.append(f"Purge oldest recordings if free space is below {min_free} GB")
-        else:
-            policies.append("Disk space threshold: Disabled (0 GB)")
-
-        policy_text = "\n• ".join(policies)
-
-        confirm = QMessageBox.warning(
-            self,
-            "Confirm Retention Cleanup",
-            f"Are you sure you want to run retention cleanup now?\n\n"
-            f"Target Directory:\n{folder}\n\n"
-            f"Active Policies:\n• {policy_text}\n\n"
-            f"Note: Protected recordings are never deleted.\n"
-            f"Unprotected recordings matching these criteria will be permanently deleted.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
+        dlg = RetentionCleanupDialog(
+            folder=str(folder_path),
+            retention_days=retention_days,
+            min_free_gb=min_free,
+            disk_usage=disk_usage,
+            parent=self
         )
-        if confirm != QMessageBox.StandardButton.Yes:
+        if dlg.exec() != QDialog.DialogCode.Accepted:
             return
+
+        opts = dlg.get_cleanup_options()
+        delete_all = opts.get("delete_all", False)
+        include_protected = opts.get("include_protected", False)
 
         try:
             # Apply current settings to manager first
             self.config_mgr.retention_days = retention_days
             self.config_mgr.min_free_disk_gb = min_free
-            self.config_mgr.custom_recording_folder = self.custom_folder_input.text().strip()
+            self.config_mgr.custom_recording_folder = folder_str
 
-            res = self.storage_mgr.run_cleanup_cycle(force=True)
+            res = self.storage_mgr.run_cleanup_cycle(
+                force=True,
+                delete_all=delete_all,
+                include_protected=include_protected
+            )
             self.update_storage_status_ui()
             self.refresh_recordings()
 
             cnt = res.get("deleted_count", 0)
             freed = res.get("freed_gb", 0.0)
             target = res.get("folder", "")
+            action_name = "Purge All Recordings" if delete_all else "Retention Cleanup"
             if cnt > 0:
                 deleted_list = "\n".join(f"• {f}" for f in res.get("deleted_files", []))
                 QMessageBox.information(
-                    self, "Retention Cleanup Completed",
+                    self, f"{action_name} Completed",
                     f"Successfully deleted {cnt} recording(s), reclaiming {freed} GB in:\n{target}\n\nDeleted files:\n{deleted_list}"
                 )
             else:
+                msg = (
+                    f"No recorded video files found to delete in:\n{target}"
+                    if delete_all
+                    else f"No old recordings met the purge criteria in:\n{target}\n\nFree space remains within configured limits."
+                )
                 QMessageBox.information(
-                    self, "Retention Cleanup",
-                    f"No old recordings met the purge criteria in:\n{target}\n\nFree space remains within configured limits."
+                    self, action_name,
+                    msg
                 )
         except Exception as e:
             QMessageBox.critical(

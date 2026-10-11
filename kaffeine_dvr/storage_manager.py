@@ -199,14 +199,18 @@ class StorageManager:
             print(f"Error deleting recording {file_path}: {e}")
             return False
 
-    def run_cleanup_cycle(self, force: bool = False) -> Dict[str, Any]:
+    def run_cleanup_cycle(self, force: bool = False, delete_all: bool = False, include_protected: bool = False) -> Dict[str, Any]:
         """
         Executes retention policy:
         1. Age-based cleanup (if retention_days > 0).
         2. Disk space threshold cleanup (if min_free_disk_gb > 0 and free space < threshold).
+        If delete_all is True:
+        Forgoes retention policy rules and deletes all recorded video files in the directory.
+        Active in-progress recordings are always protected.
+        Protected recordings are preserved unless include_protected is True.
         Returns a summary report of actions taken.
         """
-        if not force and not self.config_mgr.auto_cleanup_enabled:
+        if not force and not delete_all and not self.config_mgr.auto_cleanup_enabled:
             return {"enabled": False, "deleted_count": 0, "freed_gb": 0.0}
 
         retention_days = self.config_mgr.retention_days
@@ -216,52 +220,65 @@ class StorageManager:
         deleted_files = []
         total_freed_bytes = 0
 
-        protected_paths = self.queue_mgr.get_protected_paths()
+        protected_paths = self.queue_mgr.get_protected_paths() if not include_protected else set()
+        all_files = self.find_recorded_files(folder)
 
-        # Step 1: Age-based retention
-        if retention_days > 0:
-            now_dt = datetime.now()
-            cutoff = now_dt - timedelta(days=retention_days)
-            all_files = self.find_recorded_files(folder)
-
+        if delete_all:
             for item in all_files:
                 fpath = item["path"]
-                if str(fpath) in protected_paths:
+                if not include_protected and str(fpath) in protected_paths:
                     continue
                 if self.is_file_active_recording(fpath):
                     continue
 
-                if item["mtime_dt"] < cutoff:
-                    sz = item["size_bytes"]
-                    if self.delete_recording(fpath):
-                        deleted_files.append(item["name"])
-                        total_freed_bytes += sz
+                sz = item["size_bytes"]
+                if self.delete_recording(fpath):
+                    deleted_files.append(item["name"])
+                    total_freed_bytes += sz
+        else:
+            # Step 1: Age-based retention
+            if retention_days > 0:
+                now_dt = datetime.now()
+                cutoff = now_dt - timedelta(days=retention_days)
 
-        # Step 2: Disk space threshold retention
-        if min_free_gb > 0:
-            usage = self.get_disk_usage(folder)
-            current_free_gb = usage["free_gb"]
-
-            if current_free_gb < min_free_gb:
-                needed_bytes = int((min_free_gb - current_free_gb) * (1024 ** 3))
-                freed_for_threshold = 0
-
-                remaining_files = self.find_recorded_files(folder)
-                for item in remaining_files:
-                    if freed_for_threshold >= needed_bytes:
-                        break
-
+                for item in all_files:
                     fpath = item["path"]
                     if str(fpath) in protected_paths:
                         continue
                     if self.is_file_active_recording(fpath):
                         continue
 
-                    sz = item["size_bytes"]
-                    if self.delete_recording(fpath):
-                        deleted_files.append(item["name"])
-                        total_freed_bytes += sz
-                        freed_for_threshold += sz
+                    if item["mtime_dt"] < cutoff:
+                        sz = item["size_bytes"]
+                        if self.delete_recording(fpath):
+                            deleted_files.append(item["name"])
+                            total_freed_bytes += sz
+
+            # Step 2: Disk space threshold retention
+            if min_free_gb > 0:
+                usage = self.get_disk_usage(folder)
+                current_free_gb = usage["free_gb"]
+
+                if current_free_gb < min_free_gb:
+                    needed_bytes = int((min_free_gb - current_free_gb) * (1024 ** 3))
+                    freed_for_threshold = 0
+
+                    remaining_files = self.find_recorded_files(folder)
+                    for item in remaining_files:
+                        if freed_for_threshold >= needed_bytes:
+                            break
+
+                        fpath = item["path"]
+                        if str(fpath) in protected_paths:
+                            continue
+                        if self.is_file_active_recording(fpath):
+                            continue
+
+                        sz = item["size_bytes"]
+                        if self.delete_recording(fpath):
+                            deleted_files.append(item["name"])
+                            total_freed_bytes += sz
+                            freed_for_threshold += sz
 
         freed_gb = round(total_freed_bytes / (1024 ** 3), 2)
         return {
@@ -269,5 +286,6 @@ class StorageManager:
             "deleted_count": len(deleted_files),
             "deleted_files": deleted_files,
             "freed_gb": freed_gb,
-            "folder": str(folder)
+            "folder": str(folder),
+            "delete_all": delete_all
         }
