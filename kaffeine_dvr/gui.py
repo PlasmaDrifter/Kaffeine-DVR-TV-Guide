@@ -2347,28 +2347,36 @@ class MainWindow(QMainWindow):
         self.guide_search_input.textChanged.connect(self.filter_guide)
         filter_bar.addWidget(self.guide_search_input)
 
-        # Maximize Guide Button (toggles maximized full-window guide view)
-        max_btn_style = (
+        # Button styles with color-coded hover highlights matching their icons
+        restore_btn_style = (
             "QPushButton { min-width: 28px; max-width: 28px; min-height: 24px; max-height: 24px; "
-            "border: 1px solid #3d465c; border-radius: 4px; background-color: #212635; color: #c8d2df; }"
-            "QPushButton:hover { background-color: #313d56; border: 1px solid #5a80b8; color: #ffffff; }"
-            "QPushButton:pressed { background-color: #1a1e2b; border: 1px solid #353d50; }"
+            "border: 1px solid #3d465c; border-radius: 4px; background-color: #212635; color: #4fc3f7; }"
+            "QPushButton:hover { background-color: #1e2c3a; border: 1px solid #4fc3f7; color: #ffffff; }"
+            "QPushButton:pressed { background-color: #15202b; border: 1px solid #3882a5; }"
         )
-        # Restore Saved Window Size Button
+        maximize_btn_style = (
+            "QPushButton { min-width: 28px; max-width: 28px; min-height: 24px; max-height: 24px; "
+            "border: 1px solid #3d465c; border-radius: 4px; background-color: #212635; color: #66bb6a; }"
+            "QPushButton:hover { background-color: #1e2e22; border: 1px solid #66bb6a; color: #ffffff; }"
+            "QPushButton:pressed { background-color: #142217; border: 1px solid #478e4b; }"
+        )
+
+        # Restore Saved Window Size Button (Sky Cyan)
         self.header_restore_btn = QPushButton()
         self.header_restore_btn.setToolTip("Restore saved window dimensions (also accessible in Settings)")
         self.header_restore_btn.setIcon(self._create_restore_window_icon())
-        self.header_restore_btn.setIconSize(QSize(14, 14))
-        self.header_restore_btn.setStyleSheet(max_btn_style)
+        self.header_restore_btn.setIconSize(QSize(15, 15))
+        self.header_restore_btn.setStyleSheet(restore_btn_style)
         self.header_restore_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.header_restore_btn.clicked.connect(self.restore_saved_window_size)
         filter_bar.addWidget(self.header_restore_btn)
 
+        # Maximize / Expand TV Guide Button (Emerald Green)
         self.guide_maximize_btn = QPushButton()
         self.guide_maximize_btn.setToolTip("Maximize guide to fill window")
         self.guide_maximize_btn.setIcon(self._create_guide_maximize_icon())
-        self.guide_maximize_btn.setIconSize(QSize(14, 14))
-        self.guide_maximize_btn.setStyleSheet(max_btn_style)
+        self.guide_maximize_btn.setIconSize(QSize(15, 15))
+        self.guide_maximize_btn.setStyleSheet(maximize_btn_style)
         self.guide_maximize_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.guide_maximize_btn.clicked.connect(self.toggle_guide_maximized)
         filter_bar.addWidget(self.guide_maximize_btn)
@@ -4849,61 +4857,107 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _create_guide_maximize_icon() -> QIcon:
+        """
+        Emerald green 4-corner outward expansion brackets icon (fullscreen metaphor).
+        """
         icon = QIcon()
-        for mode, color in [(QIcon.Mode.Normal, "#c8d2df"), (QIcon.Mode.Disabled, "#414b5d")]:
+        for mode, color in [(QIcon.Mode.Normal, "#66bb6a"), (QIcon.Mode.Disabled, "#3b5c3d")]:
             pix = QPixmap(18, 18)
             pix.fill(Qt.GlobalColor.transparent)
             p = QPainter(pix)
             p.setRenderHint(QPainter.RenderHint.Antialiasing)
-            pen = QPen(QColor(color), 1.8)
+            pen = QPen(QColor(color), 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.MiterJoin)
             p.setPen(pen)
-            # Crisp maximize rectangle
-            p.drawRoundedRect(QRectF(2.5, 2.5, 13, 13), 1.5, 1.5)
-            # Thicker top titlebar line
-            p.fillRect(QRectF(3.5, 3.5, 11, 2.5), QColor(color))
+
+            # Top-Left corner outward bracket
+            p.drawLine(QPointF(2.5, 6.5), QPointF(2.5, 2.5))
+            p.drawLine(QPointF(2.5, 2.5), QPointF(6.5, 2.5))
+
+            # Top-Right corner outward bracket
+            p.drawLine(QPointF(11.5, 2.5), QPointF(15.5, 2.5))
+            p.drawLine(QPointF(15.5, 2.5), QPointF(15.5, 6.5))
+
+            # Bottom-Left corner outward bracket
+            p.drawLine(QPointF(2.5, 11.5), QPointF(2.5, 15.5))
+            p.drawLine(QPointF(2.5, 15.5), QPointF(6.5, 15.5))
+
+            # Bottom-Right corner outward bracket
+            p.drawLine(QPointF(11.5, 15.5), QPointF(15.5, 15.5))
+            p.drawLine(QPointF(15.5, 15.5), QPointF(15.5, 11.5))
+
             p.end()
             icon.addPixmap(pix, mode)
         return icon
 
     @staticmethod
     def _create_guide_restore_icon() -> QIcon:
+        """
+        Emerald green 4-corner inward contraction brackets icon (exit fullscreen metaphor).
+        """
         icon = QIcon()
-        for mode, color in [(QIcon.Mode.Normal, "#c8d2df"), (QIcon.Mode.Disabled, "#414b5d")]:
+        for mode, color in [(QIcon.Mode.Normal, "#66bb6a"), (QIcon.Mode.Disabled, "#3b5c3d")]:
             pix = QPixmap(18, 18)
             pix.fill(Qt.GlobalColor.transparent)
             p = QPainter(pix)
             p.setRenderHint(QPainter.RenderHint.Antialiasing)
-            pen = QPen(QColor(color), 1.8)
+            pen = QPen(QColor(color), 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.MiterJoin)
             p.setPen(pen)
-            # Main foreground window rectangle
-            p.drawRoundedRect(QRectF(2, 5, 10, 10), 1.5, 1.5)
-            p.fillRect(QRectF(3, 6, 8, 2), QColor(color))
-            # Background overlapping window
-            p.drawLine(QPointF(5.5, 4), QPointF(5.5, 2))
-            p.drawLine(QPointF(5.5, 2), QPointF(15, 2))
-            p.drawLine(QPointF(15, 2), QPointF(15, 11.5))
-            p.drawLine(QPointF(15, 11.5), QPointF(13, 11.5))
+
+            # Top-Left corner pointing toward center
+            p.drawLine(QPointF(6.5, 2.5), QPointF(6.5, 6.5))
+            p.drawLine(QPointF(6.5, 6.5), QPointF(2.5, 6.5))
+
+            # Top-Right corner pointing toward center
+            p.drawLine(QPointF(11.5, 2.5), QPointF(11.5, 6.5))
+            p.drawLine(QPointF(11.5, 6.5), QPointF(15.5, 6.5))
+
+            # Bottom-Left corner pointing toward center
+            p.drawLine(QPointF(2.5, 11.5), QPointF(6.5, 11.5))
+            p.drawLine(QPointF(6.5, 11.5), QPointF(6.5, 15.5))
+
+            # Bottom-Right corner pointing toward center
+            p.drawLine(QPointF(15.5, 11.5), QPointF(11.5, 11.5))
+            p.drawLine(QPointF(11.5, 11.5), QPointF(11.5, 15.5))
+
             p.end()
             icon.addPixmap(pix, mode)
         return icon
 
     @staticmethod
     def _create_restore_window_icon() -> QIcon:
+        """
+        Sky cyan window contour with counter-clockwise reset / restore arrow.
+        """
         icon = QIcon()
-        for mode, color in [(QIcon.Mode.Normal, "#c8d2df"), (QIcon.Mode.Disabled, "#414b5d")]:
+        for mode, color in [(QIcon.Mode.Normal, "#4fc3f7"), (QIcon.Mode.Disabled, "#2d4857")]:
             pix = QPixmap(18, 18)
             pix.fill(Qt.GlobalColor.transparent)
             p = QPainter(pix)
             p.setRenderHint(QPainter.RenderHint.Antialiasing)
-            pen = QPen(QColor(color), 1.8)
-            p.setPen(pen)
-            # Main window rectangle
-            p.drawRoundedRect(QRectF(1.5, 4.5, 11, 11), 1.5, 1.5)
-            # Overlapping window top-right
-            p.drawLine(5, 4, 5, 2)
-            p.drawLine(5, 2, 15, 2)
-            p.drawLine(15, 2, 15, 12)
-            p.drawLine(15, 12, 13, 12)
+
+            # Outer subtle window frame in upper portion
+            frame_pen = QPen(QColor(color), 1.4, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
+            p.setPen(frame_pen)
+            # Window top border and top-right corner
+            p.drawLine(QPointF(3, 3), QPointF(14.5, 3))
+            p.drawLine(QPointF(14.5, 3), QPointF(14.5, 12))
+            p.drawLine(QPointF(14.5, 12), QPointF(12, 12))
+            p.drawLine(QPointF(3, 3), QPointF(3, 7))
+
+            # Reset circular arc (counter-clockwise)
+            arc_pen = QPen(QColor(color), 1.7, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
+            p.setPen(arc_pen)
+            # Arc bounding box centered in bottom-left
+            arc_rect = QRectF(2.0, 5.5, 10.5, 10.5)
+            # Start at 40 degrees, span 270 degrees
+            p.drawArc(arc_rect, int(40 * 16), int(270 * 16))
+
+            # Reset Arrow head at start of arc (top-right of the circle)
+            arrow_pen = QPen(QColor(color), 1.6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.MiterJoin)
+            p.setPen(arrow_pen)
+            p.drawLine(QPointF(9.5, 4.0), QPointF(10.5, 7.5))
+            p.drawLine(QPointF(7.0, 7.2), QPointF(10.5, 7.5))
+
             p.end()
             icon.addPixmap(pix, mode)
         return icon
