@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
     QScrollArea, QToolButton, QSizePolicy, QAbstractSpinBox, QSlider,
     QStackedWidget, QButtonGroup, QStyledItemDelegate, QStyleOptionViewItem,
     QStyle, QListWidget, QListWidgetItem, QAbstractItemView, QToolTip,
-    QLayout, QPlainTextEdit
+    QLayout, QPlainTextEdit, QProxyStyle, QStyleFactory
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QSettings, QByteArray, QEvent, QObject, QPoint, QPointF, QRect, QRectF, QSize
 from PyQt6.QtGui import QColor, QFont, QFontMetrics, QIcon, QWheelEvent, QPainter, QPalette, QPixmap, QPen, QPolygon, QBrush
@@ -1924,10 +1924,22 @@ QProgressBar#statusBarProgressBar::chunk {
 """
 
 
+class TooltipDelayStyle(QProxyStyle):
+    """Custom proxy style to add a small delay before hover tooltips appear."""
+    def styleHint(self, hint, option=None, widget=None, returnData=None):
+        if hint == QStyle.StyleHint.SH_ToolTip_WakeUpDelay:
+            return 1200  # 1.2 second delay before showing tooltips on hover
+        return super().styleHint(hint, option, widget, returnData)
+
+
 def setup_dark_theme(app: Optional[QApplication]):
     if not app:
         return
-    app.setStyle("Fusion")
+    base_style = QStyleFactory.create("Fusion")
+    if base_style:
+        app.setStyle(TooltipDelayStyle(base_style))
+    else:
+        app.setStyle("Fusion")
     palette = QPalette()
     palette.setColor(QPalette.ColorRole.Window, QColor("#191c28"))
     palette.setColor(QPalette.ColorRole.WindowText, QColor("#e0e6ed"))
