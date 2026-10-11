@@ -1028,6 +1028,9 @@ class GridPanFilter(QObject):
                 pos = event.position().toPoint()
                 self._drag_start_pos = pos
                 self._last_drag_pos = pos
+                # Consume press on the table viewport so table doesn't highlight/select cell on grab
+                if watched is vp:
+                    return True
                 return False
             elif self._dragging:
                 return True
@@ -1066,13 +1069,39 @@ class GridPanFilter(QObject):
         elif evt_type == QEvent.Type.MouseButtonRelease:
             if event.button() in (Qt.MouseButton.LeftButton, Qt.MouseButton.MiddleButton):
                 was_dragging = self._dragging
+                release_pos = self._drag_start_pos
                 self._dragging = False
                 self._drag_start_pos = None
                 self._last_drag_pos = None
                 self._set_cursor(Qt.CursorShape.OpenHandCursor)
                 if was_dragging:
                     return True
+                # Clean click without dragging: select cell on release
+                if watched is vp and event.button() == Qt.MouseButton.LeftButton and release_pos is not None:
+                    row = self.table.rowAt(release_pos.y())
+                    col = self.table.columnAt(release_pos.x())
+                    if row >= 0 and col >= 0:
+                        target_col = col
+                        item = self.table.item(row, col)
+                        if not item:
+                            for c in range(col - 1, -1, -1):
+                                it = self.table.item(row, c)
+                                if it:
+                                    target_col = c
+                                    break
+                        self.table.setCurrentCell(row, target_col)
+                        self.table.cellClicked.emit(row, col)
+                    return True
                 return False
+
+        elif evt_type == QEvent.Type.MouseButtonDblClick:
+            if watched is vp and event.button() == Qt.MouseButton.LeftButton:
+                pos = event.position().toPoint()
+                row = self.table.rowAt(pos.y())
+                col = self.table.columnAt(pos.x())
+                if row >= 0 and col >= 0:
+                    self.table.cellDoubleClicked.emit(row, col)
+                return True
 
         elif evt_type in (QEvent.Type.FocusOut, QEvent.Type.WindowDeactivate):
             self._dragging = False
