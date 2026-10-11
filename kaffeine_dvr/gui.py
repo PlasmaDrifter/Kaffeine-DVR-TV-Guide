@@ -345,6 +345,93 @@ class ServiceLogsDialog(QDialog):
                 self.copy_btn.setText("Copied!")
                 QTimer.singleShot(1500, lambda: self.copy_btn.setText("Copy to Clipboard"))
 
+class ReleaseNotesDialog(QDialog):
+    """
+    Modal dialog providing an interactive 'What's New' release notes reader.
+    Displays formatted changelog, version badge, and direct action buttons.
+    """
+    def __init__(self, parent=None, version: str = "", notes: str = "", update_available: bool = False, on_install_callback=None):
+        super().__init__(parent)
+        self.setWindowTitle(f"What's New - Kaffeine DVR v{version}" if version else "What's New in Kaffeine DVR")
+        self.resize(720, 520)
+        self.on_install_callback = on_install_callback
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(14)
+
+        # Header bar
+        header_row = QHBoxLayout()
+        header_row.setSpacing(12)
+
+        icon_lbl = QLabel()
+        app_icon = get_app_icon()
+        if not app_icon.isNull():
+            icon_lbl.setPixmap(app_icon.pixmap(32, 32))
+        header_row.addWidget(icon_lbl)
+
+        title_col = QVBoxLayout()
+        title_col.setSpacing(2)
+        title_text = f"Kaffeine DVR & TV Guide &nbsp;<span style='color: #52b774; font-size: 14px;'>v{version}</span>" if version else "Kaffeine DVR & TV Guide"
+        dlg_title = QLabel(f"<b style='font-size: 16px; color: #ffffff;'>{title_text}</b>")
+        title_col.addWidget(dlg_title)
+
+        subtitle_text = "Release Notes and Changelog" if not update_available else "A newer update is available with the changes below:"
+        dlg_sub = QLabel(f"<span style='color: #8c98aa; font-size: 12px;'>{subtitle_text}</span>")
+        title_col.addWidget(dlg_sub)
+        header_row.addLayout(title_col, 1)
+
+        layout.addLayout(header_row)
+
+        # Markdown notes reader
+        self.notes_view = QTextEdit()
+        self.notes_view.setReadOnly(True)
+        self.notes_view.setStyleSheet(
+            "QTextEdit { background-color: #12141d; border: 1px solid #2d3548; "
+            "border-radius: 6px; color: #d0d7de; font-size: 13px; line-height: 1.4; padding: 12px; }"
+        )
+        if notes:
+            try:
+                self.notes_view.setMarkdown(notes)
+            except Exception:
+                self.notes_view.setPlainText(notes)
+        else:
+            self.notes_view.setPlainText("No release notes found.")
+        layout.addWidget(self.notes_view, 1)
+
+        # Footer actions
+        footer_row = QHBoxLayout()
+        footer_row.setSpacing(10)
+
+        github_btn = QPushButton("View on GitHub")
+        github_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        github_btn.clicked.connect(self._open_github)
+        footer_row.addWidget(github_btn)
+
+        footer_row.addStretch()
+
+        if update_available and on_install_callback:
+            install_btn = QPushButton("Install Update Now")
+            install_btn.setObjectName("primaryActionBtn")
+            install_btn.clicked.connect(self._install_and_close)
+            footer_row.addWidget(install_btn)
+
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(self.accept)
+        footer_row.addWidget(close_btn)
+
+        layout.addLayout(footer_row)
+
+    def _open_github(self):
+        from PyQt6.QtCore import QUrl
+        from PyQt6.QtGui import QDesktopServices
+        QDesktopServices.openUrl(QUrl("https://github.com/PlasmaDrifter/Kaffeine-DVR-TV-Guide/releases/latest"))
+
+    def _install_and_close(self):
+        self.accept()
+        if callable(self.on_install_callback):
+            self.on_install_callback()
+
 
 
 class ManualRecordDialog(QDialog):
@@ -3656,10 +3743,18 @@ class MainWindow(QMainWindow):
         action_layout.addWidget(self.update_progress_lbl)
 
         install_btn_row = QHBoxLayout()
+        install_btn_row.setSpacing(10)
+
         self.apply_update_btn = QPushButton("Install Update Now")
         self.apply_update_btn.setEnabled(False)
         self.apply_update_btn.clicked.connect(self.start_apply_update)
         install_btn_row.addWidget(self.apply_update_btn)
+
+        self.view_notes_dialog_btn = QPushButton("Open Release Notes Dialog...")
+        self.view_notes_dialog_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.view_notes_dialog_btn.clicked.connect(self.open_release_notes_dialog)
+        install_btn_row.addWidget(self.view_notes_dialog_btn)
+
         install_btn_row.addStretch()
         action_layout.addLayout(install_btn_row)
 
@@ -3718,11 +3813,35 @@ class MainWindow(QMainWindow):
 
     def _on_initial_notes_loaded(self, res: dict):
         notes = res.get("release_notes", "").strip()
+        self._cached_release_notes = notes
+        self._cached_latest_version = res.get("latest_version", "")
+        self._cached_update_available = res.get("update_available", False)
         if hasattr(self, "update_notes_view") and notes:
             try:
                 self.update_notes_view.setMarkdown(notes)
             except Exception:
                 self.update_notes_view.setPlainText(notes)
+
+    def open_release_notes_dialog(self):
+        """Opens the interactive modal release notes dialog."""
+        notes = getattr(self, "_cached_release_notes", "")
+        if not notes and hasattr(self, "update_notes_view"):
+            notes = self.update_notes_view.toPlainText()
+
+        version = getattr(self, "_cached_latest_version", "") or getattr(self, "_latest_detected_version", "")
+        if not version:
+            from kaffeine_dvr import __version__
+            version = __version__
+
+        is_avail = bool(getattr(self, "_cached_update_available", False))
+        dlg = ReleaseNotesDialog(
+            parent=self,
+            version=version,
+            notes=notes,
+            update_available=is_avail,
+            on_install_callback=self.start_apply_update if is_avail else None
+        )
+        dlg.exec()
 
     def start_update_check(self, silent: bool = False):
         if hasattr(self, "check_updates_btn"):
@@ -3756,6 +3875,9 @@ class MainWindow(QMainWindow):
             self.apply_update_btn.setEnabled(update_available)
 
         notes = res.get("release_notes", "").strip()
+        self._cached_release_notes = notes
+        self._cached_latest_version = latest_ver
+        self._cached_update_available = update_available
         if hasattr(self, "update_notes_view") and hasattr(self, "update_notes_lbl"):
             if notes and (update_available or notes):
                 # Try formatting markdown if available, else plain text
