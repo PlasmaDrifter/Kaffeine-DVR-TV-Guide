@@ -602,6 +602,8 @@ class HelpPopup(QFrame):
         popup = cls(text, win)
         popup._origin_widget = widget
         cls._active_popup = popup
+        if hasattr(widget, "set_active"):
+            widget.set_active(True)
 
         app = QApplication.instance()
         if app:
@@ -616,6 +618,9 @@ class HelpPopup(QFrame):
     def hide_active(cls):
         if cls._active_popup:
             try:
+                origin = getattr(cls._active_popup, "_origin_widget", None)
+                if origin and hasattr(origin, "set_active"):
+                    origin.set_active(False)
                 app = QApplication.instance()
                 if app:
                     app.removeEventFilter(cls._active_popup)
@@ -656,7 +661,7 @@ class HelpPopup(QFrame):
 
 
 class HelpBadge(QLabel):
-    """White circular '?' badge that displays help info popover on click."""
+    """Circular '?' badge that displays help info popover on click."""
     def __init__(self, tooltip_text: str, parent=None):
         super().__init__("?", parent)
         self._tooltip_text = tooltip_text
@@ -665,22 +670,32 @@ class HelpBadge(QLabel):
             "QLabel {"
             "  color: #ffffff;"
             "  background-color: #1e293b;"
-            "  border: 1px solid #64748b;"
-            "  border-radius: 8px;"
+            "  border: 1px solid #4a5568;"
+            "  border-radius: 9px;"
             "  font-weight: bold;"
             "  font-size: 11px;"
-            "  min-width: 16px;"
-            "  max-width: 16px;"
-            "  min-height: 16px;"
-            "  max-height: 16px;"
+            "  min-width: 18px;"
+            "  max-width: 18px;"
+            "  min-height: 18px;"
+            "  max-height: 18px;"
             "  qproperty-alignment: AlignCenter;"
             "}"
             "QLabel:hover {"
             "  color: #ffffff;"
-            "  background-color: #334155;"
-            "  border-color: #94a3b8;"
+            "  background-color: #2d6cd4;"
+            "  border: 1.5px solid #4a8df5;"
+            "}"
+            "QLabel[active=\"true\"] {"
+            "  color: #ffffff;"
+            "  background-color: #2d6cd4;"
+            "  border: 1.5px solid #4a8df5;"
             "}"
         )
+
+    def set_active(self, active: bool):
+        self.setProperty("active", active)
+        self.style().unpolish(self)
+        self.style().polish(self)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -689,7 +704,7 @@ class HelpBadge(QLabel):
             super().mousePressEvent(event)
 
     def mouseReleaseEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton and self.rect().contains(event.pos()):
+        if event.button() == Qt.MouseButton.LeftButton and self.rect().adjusted(-2, -2, 2, 2).contains(event.pos()):
             # If this click just dismissed this badge's popup via eventFilter, do not immediately reopen
             now = time.monotonic()
             if HelpPopup._last_dismiss_widget == self and (now - HelpPopup._last_dismiss_time) < 0.4:
