@@ -1,7 +1,7 @@
 import os
 import time
 import subprocess
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 from .dbus_client import KaffeineDbusClient
 from .queue_manager import QueueManager
@@ -51,10 +51,59 @@ class Watcher:
             except (ChildProcessError, OSError):
                 break
 
+    def stop_lingering_buffers_for_upcoming_shows(self):
+        """
+        If an active recording is past its scheduled base end time (currently recording post-roll buffer)
+        and another show on a different channel is due to record, stop the buffer recording immediately
+        to release the hardware tuner.
+        """
+        active_recordings = self.queue_mgr.list_queue(include_completed=False)
+        now = datetime.now()
+
+        currently_recording = [r for r in active_recordings if r.get("status") == "RECORDING"]
+        if not currently_recording:
+            return
+
+        upcoming = [
+            r for r in active_recordings
+            if r.get("status") in ("QUEUED", "ARMED")
+            and (datetime.fromisoformat(r["start_iso"]) <= now + timedelta(minutes=2))
+        ]
+        if not upcoming:
+            return
+
+        for rec_a in currently_recording:
+            try:
+                start_dt = datetime.fromisoformat(rec_a["start_iso"])
+                h, m, s = map(int, rec_a["duration_iso"].split(":"))
+                total_secs = h * 3600 + m * 60 + s
+                buf_mins = int(rec_a.get("buffer_mins") or 0)
+                base_secs = max(0, total_secs - (buf_mins * 60))
+                base_end_dt = start_dt + timedelta(seconds=base_secs)
+
+                if now >= base_end_dt:
+                    for rec_b in upcoming:
+                        if rec_a.get("channel", "").strip().lower() != rec_b.get("channel", "").strip().lower():
+                            k_key = rec_a.get("kaffeine_key")
+                            if k_key:
+                                now_str = now.strftime('%Y-%m-%d %H:%M:%S')
+                                print(
+                                    f"[{now_str}] Releasing tuner: Stopping buffer on '{rec_a.get('title')}' "
+                                    f"({rec_a.get('channel')}) so '{rec_b.get('title')}' ({rec_b.get('channel')}) can record.",
+                                    flush=True
+                                )
+                                self.dbus_client.remove_recording(k_key)
+                                self.queue_mgr.archive_to_history(rec_a["id"])
+                            break
+            except Exception as e:
+                print(f"Error checking lingering buffers: {e}", flush=True)
+
     def check_and_dispatch(self, notify: bool = True) -> int:
         self.reap_children()
         # Resolve any back-to-back buffer conflicts across different channels before arming
         self.queue_mgr.resolve_consecutive_buffer_conflicts(dbus_client=self.dbus_client)
+        # Release tuner if any active recording has reached base end time and is lingering in buffer
+        self.stop_lingering_buffers_for_upcoming_shows()
         due = self.queue_mgr.get_due_to_arm()
         armed_count = 0
         cfg = ConfigManager()

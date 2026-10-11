@@ -152,7 +152,7 @@ class QueueManager:
         cur.execute("""
             SELECT id, title, channel, start_iso, duration_iso, end_iso, buffer_mins, status, kaffeine_key
             FROM recording_queue
-            WHERE status IN ('QUEUED', 'ARMED')
+            WHERE status IN ('QUEUED', 'ARMED', 'RECORDING')
             ORDER BY start_iso ASC, id ASC
         """)
         rows = [dict(r) for r in cur.fetchall()]
@@ -248,6 +248,19 @@ class QueueManager:
                                         rec_a["kaffeine_key"] = new_key
                                 except Exception as e:
                                     print(f"Error updating Kaffeine timer for '{rec_a['title']}': {e}")
+
+                            # If already in Kaffeine schedule, also sync new duration to Kaffeine's sqlite.db
+                            if rec_a["kaffeine_key"]:
+                                try:
+                                    k_db = Path.home() / ".local" / "share" / "kaffeine" / "sqlite.db"
+                                    if k_db.exists():
+                                        k_conn = sqlite3.connect(str(k_db))
+                                        k_cur = k_conn.cursor()
+                                        k_cur.execute("UPDATE RecordingSchedule SET Duration = ? WHERE Id = ?", (new_dur_iso, rec_a["kaffeine_key"]))
+                                        k_conn.commit()
+                                        k_conn.close()
+                                except Exception as e:
+                                    print(f"Error syncing Duration to Kaffeine sqlite.db: {e}")
 
                             now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                             print(
@@ -429,6 +442,26 @@ class QueueManager:
         cur = conn.cursor()
         cur.execute("UPDATE recording_queue SET notified = 1 WHERE id = ?", (queue_id,))
         conn.commit()
+        conn.close()
+
+    def archive_to_history(self, queue_id: int):
+        """Immediately moves a completed or stopped recording into history."""
+        conn = sqlite3.connect(str(self.db_path))
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM recording_queue WHERE id = ?", (queue_id,))
+        rec = cur.fetchone()
+        if rec:
+            now_iso = datetime.now().isoformat()
+            cur.execute("""
+                INSERT INTO recording_history (title, channel, start_iso, duration_iso, start_time_local, completed_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (
+                rec["title"], rec["channel"], rec["start_iso"],
+                rec["duration_iso"], rec["start_time_local"], now_iso
+            ))
+            cur.execute("DELETE FROM recording_queue WHERE id = ?", (queue_id,))
+            conn.commit()
         conn.close()
 
     def update_statuses(self, active_kaffeine_keys: List[int], max_history: int = 50):
