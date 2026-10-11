@@ -691,27 +691,27 @@ class HelpPopup(QFrame):
         super().__init__(parent, Qt.WindowType.ToolTip | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(14, 11, 14, 11)
+        lay.setContentsMargins(10, 8, 10, 8)
         lbl = QLabel(text)
         lbl.setWordWrap(True)
-        lbl.setStyleSheet("color: #ffffff; font-size: 14px; font-weight: 500; line-height: 1.4; background: transparent;")
+        lbl.setStyleSheet("color: #ffffff; font-size: 13px; font-weight: 500; line-height: 1.35; background: transparent;")
         lay.addWidget(lbl)
         self.setStyleSheet(
             "HelpPopup {"
             "  background-color: #1e293b;"
             "  border: 1.5px solid #4a8df5;"
-            "  border-radius: 8px;"
+            "  border-radius: 6px;"
             "}"
         )
         # Accurately compute needed width and height so box fits the text
         font = QFont(lbl.font())
-        font.setPixelSize(14)
+        font.setPixelSize(13)
         font.setWeight(QFont.Weight.Medium)
         fm = QFontMetrics(font)
         max_line_width = max((fm.horizontalAdvance(line) for line in text.splitlines()), default=200)
-        content_width = min(420, max(240, max_line_width))
+        content_width = min(400, max(220, max_line_width))
         text_rect = fm.boundingRect(QRect(0, 0, content_width, 10000), Qt.TextFlag.TextWordWrap, text)
-        self.setFixedSize(content_width + 28, text_rect.height() + 24)
+        self.setFixedSize(content_width + 20, text_rect.height() + 16)
 
     _last_dismiss_widget = None
     _last_dismiss_time = 0.0
@@ -2401,9 +2401,9 @@ QToolTip {
     background-color: #1e293b;
     color: #ffffff;
     border: 1.5px solid #4a8df5;
-    border-radius: 8px;
-    padding: 8px 12px;
-    font-size: 13px;
+    border-radius: 4px;
+    padding: 3px 7px;
+    font-size: 12px;
     font-weight: 500;
 }
 """
