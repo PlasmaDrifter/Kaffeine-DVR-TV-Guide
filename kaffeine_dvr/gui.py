@@ -2892,13 +2892,17 @@ class MainWindow(QMainWindow):
         self.guide_table.itemDoubleClicked.connect(self.on_guide_table_double_clicked)
         self.guide_stack.addWidget(self.guide_table)
 
-        # Initialize guide zoom level from settings (-3 to +5, default 0)
-        self.guide_zoom_level = self.settings.value("guide_zoom_level", 0, type=int)
+        # Initialize guide zoom levels from settings (-3 to +5, default 0)
+        legacy_zoom = self.settings.value("guide_zoom_level", 0, type=int)
+        self.guide_grid_zoom_level = self.settings.value("guide_grid_zoom_level", legacy_zoom, type=int)
+        self.guide_list_zoom_level = self.settings.value("guide_list_zoom_level", legacy_zoom, type=int)
+        self.guide_zoom_level = self.guide_grid_zoom_level
         self._apply_guide_zoom()
 
         # Set initial stack page
         self.guide_stack.setCurrentIndex(1 if saved_view == "list" else 0)
         self._update_time_jump_buttons_visibility()
+        self._update_zoom_buttons_state()
 
         guide_container = QWidget()
         guide_container_layout = QVBoxLayout(guide_container)
@@ -5459,6 +5463,7 @@ class MainWindow(QMainWindow):
             self.guide_stack.setCurrentIndex(1)
             self.settings.setValue("guide_view_mode", "list")
         self._update_time_jump_buttons_visibility()
+        self._update_zoom_buttons_state()
         self.filter_guide()
         if not self.grid_view_btn.isChecked():
             QTimer.singleShot(0, self._scroll_list_to_first_active)
@@ -5502,29 +5507,75 @@ class MainWindow(QMainWindow):
         # 7:00 PM (19:00) is hour 19 -> slot 38
         self._scroll_grid_to_slot(38, center=False)
 
+    def _is_grid_view_active(self) -> bool:
+        return hasattr(self, "guide_stack") and self.guide_stack.currentIndex() == 0
+
+    def _update_zoom_buttons_state(self):
+        """Update zoom button tooltips and enabled states according to active view (grid vs list)."""
+        is_grid = self._is_grid_view_active()
+        if is_grid:
+            grid_lvl = getattr(self, "guide_grid_zoom_level", 0)
+            target_rows = max(3, min(16, 8 - grid_lvl))
+            can_zoom_in = target_rows > 3
+            can_zoom_out = target_rows < 16
+            tooltip_in = "Increase grid font and tile size"
+            tooltip_out = "Decrease grid font and tile size"
+        else:
+            list_lvl = getattr(self, "guide_list_zoom_level", 0)
+            can_zoom_in = list_lvl < 6
+            can_zoom_out = list_lvl > -3
+            tooltip_in = "Increase list view font size"
+            tooltip_out = "Decrease list view font size"
+
+        if hasattr(self, "zoom_in_btn"):
+            self.zoom_in_btn.setEnabled(can_zoom_in)
+            self.zoom_in_btn.setToolTip(tooltip_in)
+        if hasattr(self, "zoom_out_btn"):
+            self.zoom_out_btn.setEnabled(can_zoom_out)
+            self.zoom_out_btn.setToolTip(tooltip_out)
+
     def zoom_in_guide(self):
-        """Increase font and box size for both grid and list views (fewer rows visible)."""
-        if not hasattr(self, "guide_zoom_level"):
-            self.guide_zoom_level = 0
-        target_rows = max(3, min(16, 8 - self.guide_zoom_level))
-        if target_rows > 3:
-            self.guide_zoom_level += 1
-            self.settings.setValue("guide_zoom_level", self.guide_zoom_level)
-            self._apply_guide_zoom()
+        """Increase font and box size independently for the currently active view."""
+        if self._is_grid_view_active():
+            if not hasattr(self, "guide_grid_zoom_level"):
+                self.guide_grid_zoom_level = 0
+            target_rows = max(3, min(16, 8 - self.guide_grid_zoom_level))
+            if target_rows > 3:
+                self.guide_grid_zoom_level += 1
+                self.settings.setValue("guide_grid_zoom_level", self.guide_grid_zoom_level)
+                self._apply_guide_zoom()
+        else:
+            if not hasattr(self, "guide_list_zoom_level"):
+                self.guide_list_zoom_level = 0
+            if self.guide_list_zoom_level < 6:
+                self.guide_list_zoom_level += 1
+                self.settings.setValue("guide_list_zoom_level", self.guide_list_zoom_level)
+                self._apply_guide_zoom()
+        self._update_zoom_buttons_state()
 
     def zoom_out_guide(self):
-        """Decrease font and box size for both grid and list views (more rows visible)."""
-        if not hasattr(self, "guide_zoom_level"):
-            self.guide_zoom_level = 0
-        target_rows = max(3, min(16, 8 - self.guide_zoom_level))
-        if target_rows < 16:
-            self.guide_zoom_level -= 1
-            self.settings.setValue("guide_zoom_level", self.guide_zoom_level)
-            self._apply_guide_zoom()
+        """Decrease font and box size independently for the currently active view."""
+        if self._is_grid_view_active():
+            if not hasattr(self, "guide_grid_zoom_level"):
+                self.guide_grid_zoom_level = 0
+            target_rows = max(3, min(16, 8 - self.guide_grid_zoom_level))
+            if target_rows < 16:
+                self.guide_grid_zoom_level -= 1
+                self.settings.setValue("guide_grid_zoom_level", self.guide_grid_zoom_level)
+                self._apply_guide_zoom()
+        else:
+            if not hasattr(self, "guide_list_zoom_level"):
+                self.guide_list_zoom_level = 0
+            if self.guide_list_zoom_level > -3:
+                self.guide_list_zoom_level -= 1
+                self.settings.setValue("guide_list_zoom_level", self.guide_list_zoom_level)
+                self._apply_guide_zoom()
+        self._update_zoom_buttons_state()
 
     def _apply_guide_zoom(self):
         """Apply the current guide zoom level to Grid and List views with intelligent bottom alignment."""
-        lvl = getattr(self, "guide_zoom_level", 0)
+        grid_lvl = getattr(self, "guide_grid_zoom_level", getattr(self, "guide_zoom_level", 0))
+        list_lvl = getattr(self, "guide_list_zoom_level", getattr(self, "guide_zoom_level", 0))
 
         # 1. Grid View intelligent sizing
         if hasattr(self, "guide_grid_table"):
@@ -5532,19 +5583,13 @@ class MainWindow(QMainWindow):
             # Baseline is 8 rows at lvl = 0.
             # Zoom in (lvl > 0) shows fewer rows (e.g. 7, 6, 5, 4, 3) with taller tiles.
             # Zoom out (lvl < 0) shows more rows (e.g. 9, 10, 11... up to 16) with compact tiles.
-            target_rows = max(3, min(16, 8 - lvl))
-
-            # Update enable state of buttons
-            if hasattr(self, "zoom_in_btn"):
-                self.zoom_in_btn.setEnabled(target_rows > 3)
-            if hasattr(self, "zoom_out_btn"):
-                self.zoom_out_btn.setEnabled(target_rows < 16)
+            target_rows = max(3, min(16, 8 - grid_lvl))
 
             vp = self.guide_grid_table.viewport()
             vh = vp.height() if vp else 0
 
             if vh < 100:
-                base_row_h = max(44, 62 + (lvl * 10))
+                base_row_h = max(44, 62 + (grid_lvl * 10))
                 rem = 0
             else:
                 base_row_h = max(16, vh // target_rows)
@@ -5575,13 +5620,15 @@ class MainWindow(QMainWindow):
 
         # 2. List View sizing
         if hasattr(self, "guide_table"):
-            list_font_sz = max(9, 12 + lvl)
-            list_row_h = max(22, 28 + (lvl * 5))
+            list_font_sz = max(9, 12 + list_lvl)
+            list_row_h = max(22, 28 + (list_lvl * 5))
             self.guide_table.verticalHeader().setDefaultSectionSize(list_row_h)
             self.guide_table.setStyleSheet(
                 f"QTableWidget#guideListTable {{ font-size: {list_font_sz}px; gridline-color: #2b3242; }}"
             )
             self.guide_table.viewport().update()
+
+        self._update_zoom_buttons_state()
 
     def toggle_guide_maximized(self):
         self._guide_maximized = not getattr(self, "_guide_maximized", False)
