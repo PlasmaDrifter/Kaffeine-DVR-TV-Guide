@@ -964,6 +964,56 @@ class NumberStepper(QWidget):
         return self._spin
 
 
+def format_american_datetime(val: Any) -> str:
+    """Format an ISO date string or datetime into friendly American format: Sat, Oct 10, 2026 at 7:30 PM."""
+    if not val:
+        return ""
+    if isinstance(val, (int, float)):
+        try:
+            val = datetime.fromtimestamp(val)
+        except Exception:
+            return str(val)
+    if isinstance(val, datetime):
+        dt = val
+    else:
+        s = str(val).strip()
+        for fmt in ("%Y-%m-%d %I:%M:%S %p", "%Y-%m-%d %I:%M %p", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+            try:
+                dt = datetime.strptime(s, fmt)
+                break
+            except Exception:
+                continue
+        else:
+            return s
+    time_part = dt.strftime("%I:%M %p").lstrip("0") or "12:00 AM"
+    return f"{dt.strftime('%a, %b %-d, %Y')} at {time_part}"
+
+
+def format_american_datetime_short(val: Any) -> str:
+    """Format date/time into standard American short notation: 10/10/2026 7:30 PM."""
+    if not val:
+        return ""
+    if isinstance(val, (int, float)):
+        try:
+            val = datetime.fromtimestamp(val)
+        except Exception:
+            return str(val)
+    if isinstance(val, datetime):
+        dt = val
+    else:
+        s = str(val).strip()
+        for fmt in ("%Y-%m-%d %I:%M:%S %p", "%Y-%m-%d %I:%M %p", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+            try:
+                dt = datetime.strptime(s, fmt)
+                break
+            except Exception:
+                continue
+        else:
+            return s
+    time_part = dt.strftime("%I:%M %p").lstrip("0") or "12:00 AM"
+    return f"{dt.strftime('%m/%d/%Y')} {time_part}"
+
+
 def classify_guide_category(prog: Dict[str, Any]) -> str:
     """
     Classifies a program into 'sports', 'news', 'movies', or 'tvshows'.
@@ -3467,7 +3517,7 @@ class MainWindow(QMainWindow):
 
 
         last_check_ts = self.config_mgr.last_update_check_timestamp
-        last_str = datetime.fromtimestamp(last_check_ts).strftime("%Y-%m-%d %H:%M") if last_check_ts > 0 else "Never"
+        last_str = format_american_datetime_short(last_check_ts) if last_check_ts > 0 else "Never"
         self.last_check_lbl = QLabel(f"Last checked: {last_str}")
         self.last_check_lbl.setStyleSheet("color: #8c98aa; font-size: 11px;")
         btn_row.addWidget(self.last_check_lbl)
@@ -3564,7 +3614,7 @@ class MainWindow(QMainWindow):
 
         now = time.time()
         self.config_mgr.last_update_check_timestamp = now
-        last_str = datetime.fromtimestamp(now).strftime("%Y-%m-%d %H:%M")
+        last_str = format_american_datetime_short(now)
         if hasattr(self, "last_check_lbl"):
             self.last_check_lbl.setText(f"Last checked: {last_str}")
 
@@ -4511,7 +4561,8 @@ class MainWindow(QMainWindow):
                 relative_str = last_updated
 
             self.guide_status_lbl.setText(f"TV Guide Updated: {relative_str}")
-            self.guide_status_lbl.setToolTip(f"Last sync completed: {last_updated}")
+            friendly_updated = format_american_datetime(last_updated) or last_updated
+            self.guide_status_lbl.setToolTip(f"Last sync completed: {friendly_updated}")
         else:
             self.guide_status_lbl.setText("TV Guide: Not Synced")
 
@@ -5372,7 +5423,9 @@ class MainWindow(QMainWindow):
                     rec_item.setToolTip(f"Recording Scheduled (Queue #{rec_info.get('id')} - {rec_info.get('status')}{buf_tip})")
                 self.guide_table.setItem(row, 0, rec_item)
 
-                time_item = QTableWidgetItem(p.get("start_time_local", ""))
+                raw_start = p.get("start_time_local", "")
+                friendly_time = format_american_datetime_short(raw_start) or raw_start
+                time_item = QTableWidgetItem(friendly_time)
                 chan_item = QTableWidgetItem(p.get("kaffeine_channel", ""))
 
                 disp_title, disp_sub = get_program_display_titles(p)
@@ -5687,7 +5740,8 @@ class MainWindow(QMainWindow):
 
         if season and number:
             details_parts.append(f" (S{season:02d}E{number:02d})")
-        details_parts.append(f" on {html.escape(str(channel))} at {html.escape(str(start))}")
+        friendly_start = format_american_datetime(start) or str(start)
+        details_parts.append(f" on {html.escape(str(channel))} at {html.escape(friendly_start)}")
         rest_of_header = "".join(details_parts)
 
         self.guide_detail_title.setText(header_prefix + colored_title + rest_of_header)
