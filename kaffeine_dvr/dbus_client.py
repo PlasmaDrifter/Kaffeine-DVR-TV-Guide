@@ -210,7 +210,10 @@ class KaffeineDbusClient:
         try:
             env = self._get_display_env()
             k_bin = self.get_kaffeine_bin()
-            cmd = [k_bin, "-m"] if mode == "tray" else [k_bin]
+            if mode in ("taskbar", "tray"):
+                cmd = [k_bin, "--qwindowgeometry", "1x1+-3000+-3000"]
+            else:
+                cmd = [k_bin]
             subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             if mode in ("taskbar", "tray"):
                 import threading
@@ -280,7 +283,10 @@ class KaffeineDbusClient:
                     if "dvr" in w_title:
                         continue
                     kaffeine_wids.append(wid)
-                    subprocess.run([xdotool_bin, "windowminimize", wid], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
+                    if mode == "tray":
+                        subprocess.run([xdotool_bin, "windowunmap", wid], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
+                    else:
+                        subprocess.run([xdotool_bin, "windowminimize", wid], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
                 return bool(kaffeine_wids)
         except Exception:
             pass
@@ -366,13 +372,22 @@ class KaffeineDbusClient:
                         if first_match_time is None:
                             first_match_time = time.time()
                         for wid in kaffeine_wids:
-                            subprocess.run(
-                                [xdotool_bin, "windowminimize", wid],
-                                env=env,
-                                stdout=subprocess.DEVNULL,
-                                stderr=subprocess.DEVNULL,
-                                timeout=1.0
-                            )
+                            if mode == "tray":
+                                subprocess.run(
+                                    [xdotool_bin, "windowunmap", wid],
+                                    env=env,
+                                    stdout=subprocess.DEVNULL,
+                                    stderr=subprocess.DEVNULL,
+                                    timeout=1.0
+                                )
+                            else:
+                                subprocess.run(
+                                    [xdotool_bin, "windowminimize", wid],
+                                    env=env,
+                                    stdout=subprocess.DEVNULL,
+                                    stderr=subprocess.DEVNULL,
+                                    timeout=1.0
+                                )
                         if time.time() - first_match_time >= post_match_duration:
                             break
             except Exception:
