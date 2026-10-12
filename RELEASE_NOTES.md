@@ -1,5 +1,12 @@
 # Release Notes
 
+## v0.8.8
+
+- **Grid Options Three-Column Layout**: Reorganized the Grid Guide Options settings card into three balanced columns for cleaner visual hierarchy.
+- **Frameless Embedded Steppers**: Modernized numeric stepper controls with a sleek inset container and borderless inline increment/decrement buttons.
+- **Setting Label Streamlining**: Refined setting labels to "Grid Rows" and "Grid Box" for concise, uncluttered presentation.
+- **Updated Documentation & Previews**: Refreshed README preview screenshots showcasing the three-line EPG grid views and updated settings panel.
+
 ## v0.8.7
 
 - **Three-Line Grid Program Tiles**: Redesigned EPG grid program tiles into three dedicated lines for Primary Show Title, Broadcast Time Range, and Episode Title/Subtitle for superior clarity and reduced truncation.

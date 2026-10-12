@@ -92,6 +92,13 @@ def get_pip_flags() -> list:
 
 
 EMBEDDED_RELEASE_NOTES: Dict[str, str] = {
+    "0.8.8": (
+        "## What's Changed in v0.8.8\n\n"
+        "• **Grid Options Three-Column Layout**: Reorganized the Grid Guide Options settings card into three balanced columns for cleaner visual hierarchy.\n"
+        "• **Frameless Embedded Steppers**: Modernized numeric stepper controls with a sleek inset container and borderless inline increment/decrement buttons.\n"
+        "• **Setting Label Streamlining**: Refined setting labels to 'Grid Rows' and 'Grid Box' for concise, uncluttered presentation.\n"
+        "• **Updated Documentation & Previews**: Refreshed README preview screenshots showcasing the three-line EPG grid views and updated settings panel."
+    ),
     "0.8.7": (
         "## What's Changed in v0.8.7\n\n"
         "• **Three-Line Grid Program Tiles**: Redesigned EPG grid program tiles into three dedicated lines for Primary Show Title, Broadcast Time Range, and Episode Title/Subtitle for superior clarity and reduced truncation.\n"
