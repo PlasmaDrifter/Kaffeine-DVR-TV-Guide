@@ -3025,10 +3025,10 @@ class MainWindow(QMainWindow):
         font.setPixelSize(16)
         self.guide_detail_text.setFont(font)
         self.guide_detail_text.setStyleSheet("font-size: 16px; line-height: 1.35; padding: 6px 10px;")
-        # Size description box to fit approximately 3 lines of text
+        # Size description box to fit approximately 2 lines of text
         line_height = self.guide_detail_text.fontMetrics().lineSpacing()
         doc_margin = int(self.guide_detail_text.document().documentMargin())
-        desc_height = line_height * 3 + doc_margin * 2 + 16
+        desc_height = line_height * 2 + doc_margin * 2 + 16
         self.guide_detail_text.setFixedHeight(desc_height)
         detail_layout.addWidget(self.guide_detail_text)
 
