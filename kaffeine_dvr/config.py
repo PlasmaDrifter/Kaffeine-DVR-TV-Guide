@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 from typing import Dict, Any, List
 
-DEFAULT_CHANNEL_MAP = {}
+DEFAULT_CHANNEL_MAP: Dict[str, str] = {}
 
 DEFAULT_CATEGORY_COLORS = {
     "sports": "#ffa028",
@@ -509,7 +509,7 @@ class ConfigManager:
 
         # Build reverse lookup of channel aliases from channel_map
         # e.g., if "KPHO" is mapped to "CBS" or vice-versa
-        alias_map = {}
+        alias_map: Dict[str, set[str]] = {}
         for guide_net, kaff_ch in self.channel_map.items():
             g_up = guide_net.strip().upper()
             k_up = kaff_ch.strip().upper()

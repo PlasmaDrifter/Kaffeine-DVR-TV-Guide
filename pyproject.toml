@@ -23,3 +23,7 @@ kaffeine-dvr-gui = "kaffeine_dvr.gui:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["kaffeine_dvr*"]
+
+[tool.pytest.ini_options]
+qt_api = "pyqt6"
+addopts = "-ra"

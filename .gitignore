@@ -9,3 +9,5 @@ build/
 AppDir/
 *.AppImage
 *.spec
+.coverage
+.pytest_cache/

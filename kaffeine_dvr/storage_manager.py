@@ -120,7 +120,7 @@ class StorageManager:
         if not target.exists():
             return []
 
-        files = []
+        files: List[Dict[str, Any]] = []
         try:
             for entry in target.iterdir():
                 if entry.is_file() and entry.suffix.lower() in self.VIDEO_EXTENSIONS:
@@ -136,7 +136,7 @@ class StorageManager:
         except Exception as e:
             print(f"Error scanning recording folder {target}: {e}")
 
-        files.sort(key=lambda x: x["mtime"])
+        files.sort(key=lambda x: float(x["mtime"]))
         return files
 
     def is_file_active_recording(self, file_path: Path) -> bool:

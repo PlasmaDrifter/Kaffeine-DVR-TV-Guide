@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
-SUPPORTED_PLAYERS = {
+SUPPORTED_PLAYERS: Dict[str, Dict[str, Any]] = {
     "system": {
         "name": "System Default (xdg-open)",
         "binary": None,
@@ -932,22 +932,22 @@ class KaffeineDbusClient:
         # Step 3: SQLite cleanup with strict channel guard
         if self.kaffeine_db_path.exists():
             try:
-                conn = sqlite3.connect(str(self.kaffeine_db_path))
+                conn = sqlite3.connect(str(self.kaffeine_db_path), timeout=10.0)
                 cur = conn.cursor()
                 if ch_target and t_target:
                     cur.execute(
                         "DELETE FROM RecordingSchedule WHERE LOWER(Channel) = LOWER(?) AND (LOWER(Name) = LOWER(?) OR Name LIKE ?)",
-                        (channel.strip(), title.strip(), f"%{title.strip()}%")
+                        (ch_target, t_target, f"%{t_target}%")
                     )
                 elif ch_target and key is not None:
                     cur.execute(
                         "DELETE FROM RecordingSchedule WHERE Id = ? AND LOWER(Channel) = LOWER(?)",
-                        (int(key), channel.strip())
+                        (int(key), ch_target)
                     )
                 elif ch_target:
                     cur.execute(
                         "DELETE FROM RecordingSchedule WHERE LOWER(Channel) = LOWER(?)",
-                        (channel.strip(),)
+                        (ch_target,)
                     )
                 elif key is not None:
                     cur.execute("DELETE FROM RecordingSchedule WHERE Id = ?", (int(key),))

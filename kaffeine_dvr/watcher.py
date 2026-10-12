@@ -146,8 +146,6 @@ class Watcher:
             title = rec["title"]
             channel = rec["channel"]
             start_iso = rec["start_iso"]
-            duration_iso = rec["duration_iso"]
-            start_local = rec.get("start_time_local", start_iso)
             rec_id = rec["id"]
 
             # Compute effective dispatch parameters (2s delayed start cheat for consecutive recordings on different channels)

@@ -6,7 +6,7 @@ import html
 import subprocess
 from datetime import datetime, date, timedelta
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
@@ -93,13 +93,14 @@ def _get_checkmark_icon_path() -> str:
     return ""
 
 
+_CACHED_CHECKMARK_PATH: Optional[str] = None
+
+
 def get_checkmark_icon_path() -> str:
     global _CACHED_CHECKMARK_PATH
     if _CACHED_CHECKMARK_PATH is None:
         _CACHED_CHECKMARK_PATH = _get_checkmark_icon_path()
-    return _CACHED_CHECKMARK_PATH
-
-_CACHED_CHECKMARK_PATH = None
+    return _CACHED_CHECKMARK_PATH or ""
 
 
 class SyncWorker(QThread):
@@ -689,6 +690,7 @@ class HelpPopup(QFrame):
 
     def __init__(self, text: str, parent=None):
         super().__init__(parent, Qt.WindowType.ToolTip | Qt.WindowType.FramelessWindowHint)
+        self._origin_widget: Optional[QWidget] = None
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(10, 8, 10, 8)
@@ -1223,9 +1225,9 @@ class NumberStepper(QWidget):
     def setSpecialValueText(self, text: str):
         self._spin.setSpecialValueText(text)
 
-    def setToolTip(self, text: str):
-        super().setToolTip(text)
-        self._spin.setToolTip(text)
+    def setToolTip(self, text: Optional[str]):
+        super().setToolTip(text or "")
+        self._spin.setToolTip(text or "")
 
     def spinBox(self) -> QSpinBox:
         return self._spin
@@ -1461,7 +1463,9 @@ class ProgramTileDelegate(QStyledItemDelegate):
                 return c
         return self.CATEGORY_COLORS.get(cat, self.COLOR_UPCOMING_TITLE)
 
-    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index):
+    def paint(self, painter: Optional[QPainter], option: QStyleOptionViewItem, index):
+        if not painter:
+            return
         prog = index.data(Qt.ItemDataRole.UserRole)
         if not prog:
             super().paint(painter, option, index)
@@ -2475,7 +2479,7 @@ def setup_dark_theme(app: Optional[QApplication]):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, config_mgr: Optional[ConfigManager] = None):
         super().__init__()
         self.setWindowTitle("Kaffeine DVR & TV Guide")
         self.setWindowIcon(get_app_icon())
@@ -2495,10 +2499,10 @@ class MainWindow(QMainWindow):
             else:
                 self.resize(1100, 750)
 
-        self.config_mgr = ConfigManager()
+        self.config_mgr = config_mgr or ConfigManager()
         self.dbus_client = KaffeineDbusClient()
-        self.queue_mgr = QueueManager()
-        self.guide_service = GuideService(channel_map=self.config_mgr.channel_map, config_mgr=self.config_mgr)
+        self.queue_mgr = QueueManager(data_dir=self.config_mgr.data_dir)
+        self.guide_service = GuideService(data_dir=self.config_mgr.data_dir, channel_map=self.config_mgr.channel_map, config_mgr=self.config_mgr)
         self.rules_engine = RulesEngine(self.config_mgr, self.dbus_client, self.guide_service)
         self.watcher = Watcher(self.dbus_client, self.queue_mgr)
         self.storage_mgr = StorageManager(self.config_mgr, self.queue_mgr)

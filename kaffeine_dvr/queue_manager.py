@@ -10,8 +10,14 @@ class QueueManager:
         self.db_path = self.data_dir / "recordings_queue.sqlite"
         self._init_db()
 
+    def _get_connection(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(str(self.db_path), timeout=15.0)
+        conn.execute("PRAGMA journal_mode = WAL;")
+        conn.execute("PRAGMA busy_timeout = 15000;")
+        return conn
+
     def _init_db(self):
-        conn = sqlite3.connect(str(self.db_path))
+        conn = self._get_connection()
         cur = conn.cursor()
         cur.execute("""
             CREATE TABLE IF NOT EXISTS recording_queue (
@@ -101,7 +107,7 @@ class QueueManager:
             end_iso = start_iso
             start_display = start_iso
 
-        conn = sqlite3.connect(str(self.db_path))
+        conn = self._get_connection()
         cur = conn.cursor()
 
         # If the show has already started or is currently airing, mark notified = 1
@@ -149,7 +155,7 @@ class QueueManager:
         conn.commit()
         conn.close()
         self.resolve_consecutive_buffer_conflicts()
-        return new_id
+        return int(new_id) if new_id is not None else 0
 
     def resolve_consecutive_buffer_conflicts(self, dbus_client=None) -> List[Dict[str, Any]]:
         """
@@ -160,7 +166,7 @@ class QueueManager:
         Automatically clamps the earlier show's end buffer to prevent tuner lock
         contentions on single-tuner systems, ensuring the subsequent show starts on time.
         """
-        conn = sqlite3.connect(str(self.db_path))
+        conn = self._get_connection()
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         cur.execute("""
@@ -239,7 +245,7 @@ class QueueManager:
                             rec_a["duration_iso"] = new_dur_iso
                             rec_a["end_iso"] = new_end_iso
 
-                            conn = sqlite3.connect(str(self.db_path))
+                            conn = self._get_connection()
                             c = conn.cursor()
                             c.execute("""
                                 UPDATE recording_queue
@@ -258,7 +264,7 @@ class QueueManager:
                                         rec_a["start_iso"], new_dur_iso, 0
                                     )
                                     if new_key and new_key > 0:
-                                        conn = sqlite3.connect(str(self.db_path))
+                                        conn = self._get_connection()
                                         c = conn.cursor()
                                         c.execute("UPDATE recording_queue SET kaffeine_key = ? WHERE id = ?", (new_key, rec_a["id"]))
                                         conn.commit()
@@ -315,7 +321,7 @@ class QueueManager:
                             new_end_iso = rec_a["buffered_end_dt"].strftime("%Y-%m-%dT%H:%M:%S")
 
                             # Persist to database
-                            conn = sqlite3.connect(str(self.db_path))
+                            conn = self._get_connection()
                             c = conn.cursor()
                             c.execute("""
                                 UPDATE recording_queue
@@ -334,7 +340,7 @@ class QueueManager:
                                         rec_a["start_iso"], new_dur_iso, 0
                                     )
                                     if new_key and new_key > 0:
-                                        conn = sqlite3.connect(str(self.db_path))
+                                        conn = self._get_connection()
                                         c = conn.cursor()
                                         c.execute("UPDATE recording_queue SET kaffeine_key = ? WHERE id = ?", (new_key, rec_a["id"]))
                                         conn.commit()
@@ -389,7 +395,7 @@ class QueueManager:
             total_secs = h * 3600 + m * 60 + s
             ch = (rec.get("channel") or "").strip().lower()
 
-            conn = sqlite3.connect(str(self.db_path))
+            conn = self._get_connection()
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
             cur.execute("""
@@ -428,7 +434,7 @@ class QueueManager:
         Updates the buffer_mins of an existing QUEUED recording and recalculates
         its duration_iso and end_iso.
         """
-        conn = sqlite3.connect(str(self.db_path))
+        conn = self._get_connection()
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         cur.execute("SELECT * FROM recording_queue WHERE id = ?", (queue_id,))
@@ -473,7 +479,7 @@ class QueueManager:
             return False
 
     def list_queue(self, include_completed: bool = False) -> List[Dict[str, Any]]:
-        conn = sqlite3.connect(str(self.db_path))
+        conn = self._get_connection()
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         if include_completed:
@@ -503,7 +509,7 @@ class QueueManager:
         Removes/cancels a recording from queue. Returns the recording's details dictionary
         (including kaffeine_key, channel, title, start_iso) so Kaffeine timers can be purged.
         """
-        conn = sqlite3.connect(str(self.db_path))
+        conn = self._get_connection()
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         cur.execute("SELECT * FROM recording_queue WHERE id = ?", (queue_id,))
@@ -522,7 +528,7 @@ class QueueManager:
         Returns recordings in 'QUEUED' status where current_time >= (start_time - lead_time_mins)
         and current_time < end_time.
         """
-        conn = sqlite3.connect(str(self.db_path))
+        conn = self._get_connection()
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         cur.execute("SELECT * FROM recording_queue WHERE status = 'QUEUED' ORDER BY start_iso ASC")
@@ -544,7 +550,7 @@ class QueueManager:
         return due
 
     def mark_armed(self, queue_id: int, kaffeine_key: int):
-        conn = sqlite3.connect(str(self.db_path))
+        conn = self._get_connection()
         cur = conn.cursor()
         cur.execute("UPDATE recording_queue SET status = 'ARMED', kaffeine_key = ? WHERE id = ?", (kaffeine_key, queue_id))
         conn.commit()
@@ -555,7 +561,7 @@ class QueueManager:
         Returns active recordings ('QUEUED', 'ARMED', 'RECORDING') where notified == 0,
         now >= (start_time - lead_time_mins), and now < end_time.
         """
-        conn = sqlite3.connect(str(self.db_path))
+        conn = self._get_connection()
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         cur.execute("""
@@ -582,7 +588,7 @@ class QueueManager:
 
     def mark_notified(self, queue_id: int):
         """Marks a recording as notified so desktop notifications are only sent once."""
-        conn = sqlite3.connect(str(self.db_path))
+        conn = self._get_connection()
         cur = conn.cursor()
         cur.execute("UPDATE recording_queue SET notified = 1 WHERE id = ?", (queue_id,))
         conn.commit()
@@ -590,7 +596,7 @@ class QueueManager:
 
     def archive_to_history(self, queue_id: int):
         """Immediately moves a completed or stopped recording into history."""
-        conn = sqlite3.connect(str(self.db_path))
+        conn = self._get_connection()
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         cur.execute("SELECT * FROM recording_queue WHERE id = ?", (queue_id,))
@@ -613,7 +619,7 @@ class QueueManager:
         Transitions ARMED -> RECORDING, and when finished (now >= end_dt),
         archives recording to recording_history and removes from active recording_queue.
         """
-        conn = sqlite3.connect(str(self.db_path))
+        conn = self._get_connection()
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         cur.execute("SELECT * FROM recording_queue WHERE status IN ('ARMED', 'RECORDING')")
@@ -654,7 +660,7 @@ class QueueManager:
 
     def toggle_protected(self, queue_id: int) -> bool:
         """Toggles the protected status of a recording."""
-        conn = sqlite3.connect(str(self.db_path))
+        conn = self._get_connection()
         cur = conn.cursor()
         cur.execute("SELECT protected FROM recording_queue WHERE id = ?", (queue_id,))
         row = cur.fetchone()
@@ -669,7 +675,7 @@ class QueueManager:
 
     def get_protected_paths(self) -> set:
         """Returns set of file_path strings that are protected."""
-        conn = sqlite3.connect(str(self.db_path))
+        conn = self._get_connection()
         cur = conn.cursor()
         cur.execute("SELECT file_path FROM recording_queue WHERE protected = 1 AND file_path IS NOT NULL")
         paths = {row[0] for row in cur.fetchall() if row[0]}
@@ -680,7 +686,7 @@ class QueueManager:
         """
         When a recording file is deleted/purged, removes its listing from the schedule.
         """
-        conn = sqlite3.connect(str(self.db_path))
+        conn = self._get_connection()
         cur = conn.cursor()
         cur.execute("DELETE FROM recording_queue WHERE file_path = ?", (file_path_str,))
         conn.commit()
@@ -688,7 +694,7 @@ class QueueManager:
 
     def set_recording_file(self, queue_id: int, file_path_str: str):
         """Links recorded file path to queue item."""
-        conn = sqlite3.connect(str(self.db_path))
+        conn = self._get_connection()
         cur = conn.cursor()
         cur.execute("UPDATE recording_queue SET file_path = ? WHERE id = ?", (file_path_str, queue_id))
         conn.commit()
@@ -708,7 +714,7 @@ class QueueManager:
     ) -> int:
         """Directly adds an entry into the recording history table."""
         comp = completed_at or datetime.now().isoformat()
-        conn = sqlite3.connect(str(self.db_path))
+        conn = self._get_connection()
         cur = conn.cursor()
         cur.execute("""
             INSERT INTO recording_history (title, channel, start_iso, duration_iso, start_time_local, completed_at)
@@ -719,11 +725,11 @@ class QueueManager:
         conn.close()
 
         self.prune_history(max_entries)
-        return new_id
+        return int(new_id) if new_id is not None else 0
 
     def list_history(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
         """Returns recorded history sorted newest first."""
-        conn = sqlite3.connect(str(self.db_path))
+        conn = self._get_connection()
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         if limit and limit > 0:
@@ -736,7 +742,7 @@ class QueueManager:
 
     def delete_history_entry(self, history_id: int) -> bool:
         """Deletes a single history entry by ID."""
-        conn = sqlite3.connect(str(self.db_path))
+        conn = self._get_connection()
         cur = conn.cursor()
         cur.execute("DELETE FROM recording_history WHERE id = ?", (history_id,))
         deleted = cur.rowcount > 0
@@ -746,7 +752,7 @@ class QueueManager:
 
     def clear_all_history(self) -> bool:
         """Clears all records in recording history."""
-        conn = sqlite3.connect(str(self.db_path))
+        conn = self._get_connection()
         cur = conn.cursor()
         cur.execute("DELETE FROM recording_history")
         conn.commit()
@@ -760,7 +766,7 @@ class QueueManager:
         """
         if max_entries <= 0:
             return
-        conn = sqlite3.connect(str(self.db_path))
+        conn = self._get_connection()
         cur = conn.cursor()
         # Delete entries where ID is not among the top max_entries
         cur.execute("""

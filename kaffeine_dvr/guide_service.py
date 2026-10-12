@@ -469,14 +469,14 @@ class XMLTVProvider:
 
             ch_name = ch_display_map.get(ch_id, ch_id)
             kaffeine_ch = match_channel_alias(ch_name, channel_map) or match_channel_alias(ch_id, channel_map)
-            if not kaffeine_ch:
+            if not kaffeine_ch or not start_raw:
                 continue
 
             dt_start = parse_xmltv_datetime(start_raw)
             if not dt_start:
                 continue
 
-            dt_stop = parse_xmltv_datetime(stop_raw)
+            dt_stop = parse_xmltv_datetime(stop_raw) if stop_raw else None
             if dt_stop:
                 duration_secs = max(60, int((dt_stop - dt_start).total_seconds()))
             else:
@@ -611,8 +611,14 @@ class GuideService:
     def set_channel_map(self, channel_map: Dict[str, str]):
         self.channel_map = channel_map
 
+    def _get_connection(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(str(self.db_path), timeout=15.0)
+        conn.execute("PRAGMA journal_mode = WAL;")
+        conn.execute("PRAGMA busy_timeout = 15000;")
+        return conn
+
     def _init_db(self):
-        conn = sqlite3.connect(str(self.db_path))
+        conn = self._get_connection()
         cur = conn.cursor()
         cur.execute("""
             CREATE TABLE IF NOT EXISTS guide_meta (
@@ -656,7 +662,7 @@ class GuideService:
 
     def get_guide_status(self) -> Dict[str, Any]:
         """Returns the current status of the cached TV guide."""
-        conn = sqlite3.connect(str(self.db_path))
+        conn = self._get_connection()
         cur = conn.cursor()
 
         cur.execute("SELECT value FROM guide_meta WHERE key = 'last_updated'")
@@ -728,7 +734,7 @@ class GuideService:
         return results
 
     def _count_programs_for_source(self, source_hint: str) -> int:
-        conn = sqlite3.connect(str(self.db_path))
+        conn = self._get_connection()
         cur = conn.cursor()
         count = 0
         try:
@@ -780,16 +786,16 @@ class GuideService:
 
         elif provider == "schedules_direct":
             sd_cfg = self.config_mgr.schedules_direct
-            u = sd_cfg.get("username", "")
-            p = sd_cfg.get("password", "")
-            if not u or not p:
+            sd_user = sd_cfg.get("username", "")
+            sd_pass = sd_cfg.get("password", "")
+            if not sd_user or not sd_pass:
                 error_msg = "Schedules Direct is selected but username and password are not configured."
                 if progress_callback:
                     progress_callback(error_msg)
             else:
                 if progress_callback:
                     progress_callback("Authenticating with Schedules Direct...")
-                sd_health = SchedulesDirectProvider.check_health(u, p)
+                sd_health = SchedulesDirectProvider.check_health(sd_user, sd_pass)
                 if sd_health["status"] != "Online":
                     error_msg = f"Schedules Direct Auth Error: {sd_health['details']}"
                 else:
@@ -853,7 +859,7 @@ class GuideService:
                         print(f"Error fetching TVPassport station {st_id} for {target_date}: {e}")
 
         # Store into SQLite
-        conn = sqlite3.connect(str(self.db_path))
+        conn = self._get_connection()
         cur = conn.cursor()
 
         # Prune older guide dates earlier than today
@@ -899,7 +905,7 @@ class GuideService:
         return len(all_programs)
 
     def search_programs(self, query: str = "", channel: Optional[str] = None, airdate: Optional[str] = None, trim_ended: bool = True) -> List[Dict[str, Any]]:
-        conn = sqlite3.connect(str(self.db_path))
+        conn = self._get_connection()
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
 
@@ -962,7 +968,7 @@ class GuideService:
         Deletes past guide entries from previous calendar days.
         Returns the count of purged records.
         """
-        conn = sqlite3.connect(str(self.db_path))
+        conn = self._get_connection()
         cur = conn.cursor()
 
         now_dt = datetime.now()
