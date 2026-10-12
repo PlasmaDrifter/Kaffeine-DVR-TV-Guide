@@ -3687,10 +3687,10 @@ class MainWindow(QMainWindow):
             self.live_tv_mode_combo
         )
 
-        self.timeshift_buffer_spin = QSpinBox()
+        self.timeshift_buffer_spin = NumberStepper()
         self.timeshift_buffer_spin.setRange(1, 15)
         self.timeshift_buffer_spin.setSuffix(" sec")
-        self.timeshift_buffer_spin.setFixedWidth(100)
+        self.timeshift_buffer_spin.setFixedWidth(160)
         self.timeshift_buffer_spin.setValue(getattr(self.config_mgr, "timeshift_buffer_seconds", 2))
 
         dvr_layout.addRow(
