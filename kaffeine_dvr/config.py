@@ -99,6 +99,10 @@ class ConfigManager:
                         data["delete_timeshift_on_exit"] = True
                     if "grid_visible_rows" not in data:
                         data["grid_visible_rows"] = 9
+                    if "live_same_bg_as_others" not in data:
+                        data["live_same_bg_as_others"] = False
+                    if "hide_live_badge" not in data:
+                        data["hide_live_badge"] = False
                     if "category_colors" not in data or not isinstance(data.get("category_colors"), dict):
                         data["category_colors"] = dict(DEFAULT_CATEGORY_COLORS)
                     else:
@@ -149,6 +153,8 @@ class ConfigManager:
             "timeshift_buffer_seconds": 2,
             "delete_timeshift_on_exit": True,
             "grid_visible_rows": 9,
+            "live_same_bg_as_others": False,
+            "hide_live_badge": False,
             "category_colors": dict(DEFAULT_CATEGORY_COLORS)
         }
         self._save(default_data)
@@ -583,5 +589,23 @@ class ConfigManager:
             self.data["grid_visible_rows"] = max(4, min(16, int(val)))
         except (ValueError, TypeError):
             self.data["grid_visible_rows"] = 9
+        self.save()
+
+    @property
+    def live_same_bg_as_others(self) -> bool:
+        return bool(self.data.get("live_same_bg_as_others", False))
+
+    @live_same_bg_as_others.setter
+    def live_same_bg_as_others(self, val: bool):
+        self.data["live_same_bg_as_others"] = bool(val)
+        self.save()
+
+    @property
+    def hide_live_badge(self) -> bool:
+        return bool(self.data.get("hide_live_badge", False))
+
+    @hide_live_badge.setter
+    def hide_live_badge(self, val: bool):
+        self.data["hide_live_badge"] = bool(val)
         self.save()
 

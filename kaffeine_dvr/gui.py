@@ -1513,10 +1513,11 @@ class ProgramTileDelegate(QStyledItemDelegate):
         is_recording = is_scheduled and (rec_status == "RECORDING" or (timing_state == "live" and rec_status in ("ARMED", "RECORDING")))
 
         # Determine background fill based on program timing state
+        same_bg = bool(getattr(self.config_mgr, "live_same_bg_as_others", False)) if self.config_mgr else False
         if timing_state == "past":
             bg_color = self.COLOR_PAST_BG_ALT if is_alt else self.COLOR_PAST_BG
             default_border = self.COLOR_PAST_BORDER_SCHED if is_scheduled else self.COLOR_PAST_BORDER
-        elif timing_state == "live":
+        elif timing_state == "live" and not same_bg:
             bg_color = self.get_category_color("live_bg")
             default_border = self.COLOR_DEFAULT_BORDER_SCHED if is_scheduled else self.COLOR_DEFAULT_BORDER
         else:
@@ -1591,7 +1592,8 @@ class ProgramTileDelegate(QStyledItemDelegate):
 
         # Lower-right live badge (Concept 3: compact micro solid pill)
         live_badge_w = 0
-        if timing_state == "live":
+        hide_badge = bool(getattr(self.config_mgr, "hide_live_badge", False)) if self.config_mgr else False
+        if timing_state == "live" and not hide_badge:
             badge_font = QFont(option.font)
             badge_font.setBold(True)
             badge_font.setPointSize(max(5, 6 + int(self.zoom_delta * 0.4)))
@@ -3621,21 +3623,6 @@ class MainWindow(QMainWindow):
             self.days_spin
         )
 
-        self.grid_rows_spin = NumberStepper()
-        self.grid_rows_spin.setRange(4, 16)
-        self.grid_rows_spin.setValue(self.config_mgr.grid_visible_rows)
-        self.grid_rows_spin.setSuffix(" rows")
-        self.grid_rows_spin.setFixedWidth(160)
-        self.grid_rows_spin.valueChanged.connect(self._on_grid_rows_changed)
-        dvr_layout.addRow(
-            make_setting_label(
-                "Visible Grid Rows:",
-                "Number of channel rows displayed in the guide grid at standard view (4–16, default 9).\n"
-                "Row heights automatically scale to evenly fill the available screen area."
-            ),
-            self.grid_rows_spin
-        )
-
         self.notify_lead_spin = NumberStepper()
         self.notify_lead_spin.setRange(0, 999)
         self.notify_lead_spin.setValue(self.config_mgr.notification_lead_time_mins)
@@ -3952,14 +3939,30 @@ class MainWindow(QMainWindow):
 
         right_col.addWidget(storage_box)
 
-        # Guide Colors Card
-        color_box = QGroupBox("Guide Colors")
+        # Grid Guide Options Card
+        color_box = QGroupBox("Grid Guide Options")
         color_layout = QVBoxLayout(color_box)
         color_layout.setContentsMargins(15, 15, 15, 15)
         color_layout.setSpacing(12)
 
+        grid_rows_row = QHBoxLayout()
+        grid_rows_row.setSpacing(10)
+        grid_rows_lbl = QLabel("Visible Grid Rows:")
+        grid_rows_lbl.setStyleSheet("font-size: 13px; font-weight: bold; color: #e2e8f0;")
+        grid_rows_row.addWidget(grid_rows_lbl)
+
+        self.grid_rows_spin = NumberStepper()
+        self.grid_rows_spin.setRange(4, 16)
+        self.grid_rows_spin.setValue(self.config_mgr.grid_visible_rows)
+        self.grid_rows_spin.setSuffix(" rows")
+        self.grid_rows_spin.setFixedWidth(140)
+        self.grid_rows_spin.valueChanged.connect(self._on_grid_rows_changed)
+        grid_rows_row.addWidget(self.grid_rows_spin)
+        grid_rows_row.addStretch()
+        color_layout.addLayout(grid_rows_row)
+
         color_grid = QGridLayout()
-        color_grid.setHorizontalSpacing(12)
+        color_grid.setHorizontalSpacing(14)
         color_grid.setVerticalSpacing(8)
 
         self._cat_swatches: Dict[str, QPushButton] = {}
@@ -3969,12 +3972,6 @@ class MainWindow(QMainWindow):
             ("news", "News"),
             ("movies", "Movies"),
             ("tvshows", "TV Shows / Series"),
-        ]
-
-        others_specs = [
-            ("highlight", "Selection Highlighter"),
-            ("live_badge", "Live Badge"),
-            ("live_bg", "Live Tile Tint"),
         ]
 
         cur_colors = self.config_mgr.category_colors
@@ -3996,25 +3993,65 @@ class MainWindow(QMainWindow):
             lbl_name.setStyleSheet("font-size: 13px; color: #e2e8f0;")
             color_grid.addWidget(lbl_name, r_idx, 1, Qt.AlignmentFlag.AlignVCenter)
 
-        # Column 2: Other Guide Elements
-        for r_idx, (cat_key, cat_label) in enumerate(others_specs):
-            hex_val = cur_colors.get(cat_key, DEFAULT_CATEGORY_COLORS.get(cat_key, "#ffffff"))
+        # Column 2: Other Guide Elements & Live Options
+        # Row 0: Selection Highlighter
+        hl_hex = cur_colors.get("highlight", DEFAULT_CATEGORY_COLORS.get("highlight", "#ffffff"))
+        swatch_hl = QPushButton()
+        swatch_hl.setProperty("class", "category-color-tile")
+        swatch_hl.setFixedSize(26, 26)
+        swatch_hl.setCursor(Qt.CursorShape.PointingHandCursor)
+        swatch_hl.setStyleSheet(f"QPushButton.category-color-tile {{ background-color: {hl_hex}; }}")
+        swatch_hl.clicked.connect(lambda checked=False: self._choose_category_color("highlight", "Selection Highlighter"))
+        color_grid.addWidget(swatch_hl, 0, 2, Qt.AlignmentFlag.AlignVCenter)
+        self._cat_swatches["highlight"] = swatch_hl
 
-            swatch_btn = QPushButton()
-            swatch_btn.setProperty("class", "category-color-tile")
-            swatch_btn.setFixedSize(26, 26)
-            swatch_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            swatch_btn.setStyleSheet(f"QPushButton.category-color-tile {{ background-color: {hex_val}; }}")
-            swatch_btn.clicked.connect(lambda checked=False, k=cat_key, l=cat_label: self._choose_category_color(k, l))
-            color_grid.addWidget(swatch_btn, r_idx, 2, Qt.AlignmentFlag.AlignVCenter)
-            self._cat_swatches[cat_key] = swatch_btn
+        lbl_hl = QLabel("<b>Selection Highlighter</b>")
+        lbl_hl.setStyleSheet("font-size: 13px; color: #e2e8f0;")
+        color_grid.addWidget(lbl_hl, 0, 3, 1, 2, Qt.AlignmentFlag.AlignVCenter)
 
-            lbl_name = QLabel(f"<b>{cat_label}</b>")
-            lbl_name.setStyleSheet("font-size: 13px; color: #e2e8f0;")
-            color_grid.addWidget(lbl_name, r_idx, 3, Qt.AlignmentFlag.AlignVCenter)
+        # Row 1: Live Badge & Hide Toggle
+        badge_hex = cur_colors.get("live_badge", DEFAULT_CATEGORY_COLORS.get("live_badge", "#059669"))
+        swatch_badge = QPushButton()
+        swatch_badge.setProperty("class", "category-color-tile")
+        swatch_badge.setFixedSize(26, 26)
+        swatch_badge.setCursor(Qt.CursorShape.PointingHandCursor)
+        swatch_badge.setStyleSheet(f"QPushButton.category-color-tile {{ background-color: {badge_hex}; }}")
+        swatch_badge.clicked.connect(lambda checked=False: self._choose_category_color("live_badge", "Live Badge"))
+        color_grid.addWidget(swatch_badge, 1, 2, Qt.AlignmentFlag.AlignVCenter)
+        self._cat_swatches["live_badge"] = swatch_badge
+
+        lbl_badge = QLabel("<b>Live Badge</b>")
+        lbl_badge.setStyleSheet("font-size: 13px; color: #e2e8f0;")
+        color_grid.addWidget(lbl_badge, 1, 3, Qt.AlignmentFlag.AlignVCenter)
+
+        self.hide_live_badge_check = QCheckBox("Hide Badge")
+        self.hide_live_badge_check.setChecked(self.config_mgr.hide_live_badge)
+        self.hide_live_badge_check.toggled.connect(self._on_hide_live_badge_toggled)
+        color_grid.addWidget(self.hide_live_badge_check, 1, 4, Qt.AlignmentFlag.AlignVCenter)
+
+        # Row 2: Live Tile Tint & Same Background Toggle
+        bg_hex = cur_colors.get("live_bg", DEFAULT_CATEGORY_COLORS.get("live_bg", "#132400"))
+        swatch_bg = QPushButton()
+        swatch_bg.setProperty("class", "category-color-tile")
+        swatch_bg.setFixedSize(26, 26)
+        swatch_bg.setCursor(Qt.CursorShape.PointingHandCursor)
+        swatch_bg.setStyleSheet(f"QPushButton.category-color-tile {{ background-color: {bg_hex}; }}")
+        swatch_bg.clicked.connect(lambda checked=False: self._choose_category_color("live_bg", "Live Tile Tint"))
+        color_grid.addWidget(swatch_bg, 2, 2, Qt.AlignmentFlag.AlignVCenter)
+        self._cat_swatches["live_bg"] = swatch_bg
+
+        lbl_bg = QLabel("<b>Live Tile Tint</b>")
+        lbl_bg.setStyleSheet("font-size: 13px; color: #e2e8f0;")
+        color_grid.addWidget(lbl_bg, 2, 3, Qt.AlignmentFlag.AlignVCenter)
+
+        self.live_same_bg_check = QCheckBox("Same as others")
+        self.live_same_bg_check.setChecked(self.config_mgr.live_same_bg_as_others)
+        self.live_same_bg_check.toggled.connect(self._on_live_same_bg_toggled)
+        color_grid.addWidget(self.live_same_bg_check, 2, 4, Qt.AlignmentFlag.AlignVCenter)
 
         color_grid.setColumnStretch(1, 1)
-        color_grid.setColumnStretch(3, 1)
+        color_grid.setColumnStretch(3, 0)
+        color_grid.setColumnStretch(4, 1)
         color_layout.addLayout(color_grid)
 
         cat_btn_row = QHBoxLayout()
@@ -5024,14 +5061,10 @@ class MainWindow(QMainWindow):
             self.config_mgr.notification_lead_time_mins = self.notify_lead_spin.value()
         if hasattr(self, "grid_rows_spin"):
             self.config_mgr.grid_visible_rows = self.grid_rows_spin.value()
-
-    def _on_grid_rows_changed(self, val: int):
-        self.config_mgr.grid_visible_rows = val
-        self.guide_grid_zoom_level = 0
-        self.settings.setValue("guide_grid_zoom_level", 0)
-        self._apply_guide_zoom()
-        if hasattr(self, "_update_zoom_buttons_state"):
-            self._update_zoom_buttons_state()
+        if hasattr(self, "hide_live_badge_check"):
+            self.config_mgr.hide_live_badge = self.hide_live_badge_check.isChecked()
+        if hasattr(self, "live_same_bg_check"):
+            self.config_mgr.live_same_bg_as_others = self.live_same_bg_check.isChecked()
 
         # Storage & Retention settings
         self.config_mgr.auto_cleanup_enabled = self.cleanup_enable_check.isChecked()
@@ -5041,6 +5074,24 @@ class MainWindow(QMainWindow):
 
         self.update_storage_status_ui()
         self.flash_save_indicator("Settings Saved")
+
+    def _on_grid_rows_changed(self, val: int):
+        self.config_mgr.grid_visible_rows = val
+        self.guide_grid_zoom_level = 0
+        self.settings.setValue("guide_grid_zoom_level", 0)
+        self._apply_guide_zoom()
+        if hasattr(self, "_update_zoom_buttons_state"):
+            self._update_zoom_buttons_state()
+
+    def _on_hide_live_badge_toggled(self, checked: bool):
+        self.config_mgr.hide_live_badge = checked
+        if hasattr(self, "guide_grid_table"):
+            self.guide_grid_table.viewport().update()
+
+    def _on_live_same_bg_toggled(self, checked: bool):
+        self.config_mgr.live_same_bg_as_others = checked
+        if hasattr(self, "guide_grid_table"):
+            self.guide_grid_table.viewport().update()
 
     def _choose_category_color(self, category_key: str, category_label: str):
         """Open dark-themed QColorDialog to select a custom color for a guide category."""
