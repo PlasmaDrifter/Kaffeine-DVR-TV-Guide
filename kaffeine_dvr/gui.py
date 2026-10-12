@@ -4922,6 +4922,8 @@ class MainWindow(QMainWindow):
         if hasattr(self, "win_size_lbl"):
             self.win_size_lbl.setText(self._get_window_size_label_text())
         self._adjust_table_columns()
+        if hasattr(self, "_apply_guide_zoom"):
+            self._apply_guide_zoom()
 
     def _adjust_table_columns(self):
         """Dynamically distributes column widths proportionally based on available table viewport width."""
@@ -5787,14 +5789,19 @@ class MainWindow(QMainWindow):
             vp = self.guide_grid_table.viewport()
             vh = vp.height() if vp else 0
 
+            total_rows = self.guide_grid_table.rowCount()
+            # If all channels fit within target_rows, reserve a 4px safety margin so rounding
+            # or header border differences never trigger a ghost 2-4px scrollbar.
+            safety_margin = 4 if (total_rows > 0 and total_rows <= target_rows) else 0
+
             if vh < 100:
                 base_row_h = max(44, 62 + (grid_lvl * 12))
                 rem = 0
             else:
-                base_row_h = max(16, vh // target_rows)
-                rem = vh % target_rows
+                eff_vh = max(16, vh - safety_margin)
+                base_row_h = max(16, eff_vh // target_rows)
+                rem = eff_vh % target_rows
 
-            total_rows = self.guide_grid_table.rowCount()
             for r in range(total_rows):
                 extra = 1 if (r % target_rows) < rem else 0
                 self.guide_grid_table.setRowHeight(r, base_row_h + extra)
@@ -5811,10 +5818,13 @@ class MainWindow(QMainWindow):
 
             hdr_font_sz = max(9, min(36, 11 + zoom_delta))
             v_hdr_font_sz = max(10, min(36, 12 + zoom_delta))
-            self.guide_grid_table.setStyleSheet(
-                f"QTableWidget#guideGridTable QHeaderView::section:horizontal {{ font-size: {hdr_font_sz}px; }} "
-                f"QTableWidget#guideGridTable QHeaderView::section:vertical {{ font-size: {v_hdr_font_sz}px; }}"
-            )
+            cur_hdr_sizes = getattr(self, "_cur_hdr_sizes", None)
+            if cur_hdr_sizes != (hdr_font_sz, v_hdr_font_sz):
+                self._cur_hdr_sizes = (hdr_font_sz, v_hdr_font_sz)
+                self.guide_grid_table.setStyleSheet(
+                    f"QTableWidget#guideGridTable QHeaderView::section:horizontal {{ font-size: {hdr_font_sz}px; }} "
+                    f"QTableWidget#guideGridTable QHeaderView::section:vertical {{ font-size: {v_hdr_font_sz}px; }}"
+                )
             self.guide_grid_table.viewport().update()
 
         # 2. List View sizing
