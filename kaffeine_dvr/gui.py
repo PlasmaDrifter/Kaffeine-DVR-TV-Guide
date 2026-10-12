@@ -5809,8 +5809,19 @@ class MainWindow(QMainWindow):
             self.guide_grid_table.verticalHeader().setDefaultSectionSize(base_row_h)
             self.guide_grid_table.verticalScrollBar().setSingleStep(base_row_h)
 
-            col_w = max(180, int(base_row_h * 3.15))
+            # Preserve current visible time slot across column width recalculations
+            h_bar = self.guide_grid_table.horizontalScrollBar()
+            old_col_w = self.guide_grid_table.horizontalHeader().defaultSectionSize() or 205
+            saved_slot = (h_bar.value() / old_col_w) if (h_bar and old_col_w > 0) else 0
+
+            # 30-minute block width: comfortable baseline (205px) scaled by grid zoom level
+            col_w = max(180, min(320, 205 + (grid_lvl * 15)))
             self.guide_grid_table.horizontalHeader().setDefaultSectionSize(col_w)
+
+            # Restore exact time slot so window resize or maximize never jumps to start of day
+            if saved_slot > 0 and h_bar:
+                new_h_val = int(saved_slot * col_w)
+                h_bar.setValue(max(0, min(h_bar.maximum(), new_h_val)))
 
             zoom_delta = int((base_row_h - 62) / 8)
             if hasattr(self, "grid_tile_delegate"):
