@@ -755,7 +755,7 @@ class GuideService:
         health = XMLTVProvider.check_health(path_or_url)
         return (health["status"] == "Online", health["details"])
 
-    def sync_guide(self, days: int = 7, country: str = "US", progress_callback: Optional[Callable[[str], None]] = None) -> int:
+    def sync_guide(self, days: int = 14, country: str = "US", progress_callback: Optional[Callable[[str], None]] = None) -> int:
         """
         Sync guide listings for the next `days` based on the configured guide_provider.
         """

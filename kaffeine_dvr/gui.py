@@ -3610,18 +3610,6 @@ class MainWindow(QMainWindow):
             self.interval_spin
         )
 
-        self.days_spin = NumberStepper()
-        self.days_spin.setRange(1, 14)
-        self.days_spin.setValue(self.config_mgr.guide_days_ahead)
-        self.days_spin.setSuffix(" days")
-        self.days_spin.setFixedWidth(160)
-        dvr_layout.addRow(
-            make_setting_label(
-                "Guide Cache Horizon:",
-                "How many future days to query and cache in the local SQLite guide database."
-            ),
-            self.days_spin
-        )
 
         self.notify_lead_spin = NumberStepper()
         self.notify_lead_spin.setRange(0, 999)
@@ -4074,7 +4062,6 @@ class MainWindow(QMainWindow):
         self.auto_buffer_sports_check.stateChanged.connect(self._auto_save_automation_settings)
         self.sports_buffer_spin.valueChanged.connect(self._auto_save_automation_settings)
         self.interval_spin.valueChanged.connect(self._auto_save_automation_settings)
-        self.days_spin.valueChanged.connect(self._auto_save_automation_settings)
         self.launch_mode_combo.currentIndexChanged.connect(self._auto_save_automation_settings)
         self.guide_watch_combo.currentIndexChanged.connect(self._auto_save_automation_settings)
         if hasattr(self, "live_tv_mode_combo"):
@@ -5042,7 +5029,6 @@ class MainWindow(QMainWindow):
         if hasattr(self, "sports_buffer_spin"):
             self.config_mgr.sports_buffer_mins = self.sports_buffer_spin.value()
         self.config_mgr.watcher_interval_seconds = self.interval_spin.value()
-        self.config_mgr.guide_days_ahead = self.days_spin.value()
         self.config_mgr.launch_mode = self.launch_mode_combo.currentData()
         if hasattr(self, "guide_watch_combo"):
             self.config_mgr.guide_watch_mode = self.guide_watch_combo.currentData()

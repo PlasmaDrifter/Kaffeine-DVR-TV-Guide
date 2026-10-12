@@ -36,7 +36,7 @@ class ConfigManager:
                     if "rules" not in data:
                         data["rules"] = []
                     if "guide_days_ahead" not in data:
-                        data["guide_days_ahead"] = 7
+                        data["guide_days_ahead"] = 14
                     if "auto_sync_interval_hours" not in data:
                         data["auto_sync_interval_hours"] = 6
                     if "watcher_interval_seconds" not in data:
@@ -116,7 +116,7 @@ class ConfigManager:
         default_data = {
             "channel_map": DEFAULT_CHANNEL_MAP.copy(),
             "rules": [],
-            "guide_days_ahead": 7,
+            "guide_days_ahead": 14,
             "auto_sync_interval_hours": 6,
             "watcher_interval_seconds": 120,
             "lead_time_mins": 5,
@@ -219,7 +219,7 @@ class ConfigManager:
 
     @property
     def guide_days_ahead(self) -> int:
-        return self.data.get("guide_days_ahead", 7)
+        return self.data.get("guide_days_ahead", 14)
 
     @guide_days_ahead.setter
     def guide_days_ahead(self, val: int):
