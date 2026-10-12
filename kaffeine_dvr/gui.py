@@ -3997,7 +3997,7 @@ class MainWindow(QMainWindow):
         color_layout.setSpacing(12)
 
         color_grid = QGridLayout()
-        color_grid.setHorizontalSpacing(14)
+        color_grid.setHorizontalSpacing(10)
         color_grid.setVerticalSpacing(8)
 
         self._cat_swatches: Dict[str, QPushButton] = {}
@@ -4037,12 +4037,12 @@ class MainWindow(QMainWindow):
         swatch_hl.setCursor(Qt.CursorShape.PointingHandCursor)
         swatch_hl.setStyleSheet(f"QPushButton.category-color-tile {{ background-color: {hl_hex}; }}")
         swatch_hl.clicked.connect(lambda checked=False: self._choose_category_color("highlight", "Selection Highlighter"))
-        color_grid.addWidget(swatch_hl, 0, 2, Qt.AlignmentFlag.AlignVCenter)
+        color_grid.addWidget(swatch_hl, 0, 3, Qt.AlignmentFlag.AlignVCenter)
         self._cat_swatches["highlight"] = swatch_hl
 
         lbl_hl = QLabel("<b>Selection Highlighter</b>")
         lbl_hl.setStyleSheet("font-size: 13px; color: #e2e8f0;")
-        color_grid.addWidget(lbl_hl, 0, 3, 1, 2, Qt.AlignmentFlag.AlignVCenter)
+        color_grid.addWidget(lbl_hl, 0, 4, 1, 2, Qt.AlignmentFlag.AlignVCenter)
 
         # Row 1: Live Badge & Hide Toggle
         badge_hex = cur_colors.get("live_badge", DEFAULT_CATEGORY_COLORS.get("live_badge", "#059669"))
@@ -4052,19 +4052,19 @@ class MainWindow(QMainWindow):
         swatch_badge.setCursor(Qt.CursorShape.PointingHandCursor)
         swatch_badge.setStyleSheet(f"QPushButton.category-color-tile {{ background-color: {badge_hex}; }}")
         swatch_badge.clicked.connect(lambda checked=False: self._choose_category_color("live_badge", "Live Badge"))
-        color_grid.addWidget(swatch_badge, 1, 2, Qt.AlignmentFlag.AlignVCenter)
+        color_grid.addWidget(swatch_badge, 1, 3, Qt.AlignmentFlag.AlignVCenter)
         self._cat_swatches["live_badge"] = swatch_badge
 
         lbl_badge = QLabel("<b>Live Badge</b>")
         lbl_badge.setStyleSheet("font-size: 13px; color: #e2e8f0;")
-        color_grid.addWidget(lbl_badge, 1, 3, Qt.AlignmentFlag.AlignVCenter)
+        color_grid.addWidget(lbl_badge, 1, 4, Qt.AlignmentFlag.AlignVCenter)
 
         self.hide_live_badge_check = QCheckBox("Hide Badge")
         self.hide_live_badge_check.setChecked(self.config_mgr.hide_live_badge)
         self.hide_live_badge_check.toggled.connect(self._on_hide_live_badge_toggled)
-        color_grid.addWidget(self.hide_live_badge_check, 1, 4, Qt.AlignmentFlag.AlignVCenter)
+        color_grid.addWidget(self.hide_live_badge_check, 1, 5, Qt.AlignmentFlag.AlignVCenter)
 
-        # Row 2: Live Tile Tint & Same Background Toggle
+        # Row 2: Live Tile Tint & Disable Toggle
         bg_hex = cur_colors.get("live_bg", DEFAULT_CATEGORY_COLORS.get("live_bg", "#132400"))
         swatch_bg = QPushButton()
         swatch_bg.setProperty("class", "category-color-tile")
@@ -4072,22 +4072,22 @@ class MainWindow(QMainWindow):
         swatch_bg.setCursor(Qt.CursorShape.PointingHandCursor)
         swatch_bg.setStyleSheet(f"QPushButton.category-color-tile {{ background-color: {bg_hex}; }}")
         swatch_bg.clicked.connect(lambda checked=False: self._choose_category_color("live_bg", "Live Tile Tint"))
-        color_grid.addWidget(swatch_bg, 2, 2, Qt.AlignmentFlag.AlignVCenter)
+        color_grid.addWidget(swatch_bg, 2, 3, Qt.AlignmentFlag.AlignVCenter)
         self._cat_swatches["live_bg"] = swatch_bg
 
         lbl_bg = QLabel("<b>Live Tile Tint</b>")
         lbl_bg.setStyleSheet("font-size: 13px; color: #e2e8f0;")
-        color_grid.addWidget(lbl_bg, 2, 3, Qt.AlignmentFlag.AlignVCenter)
+        color_grid.addWidget(lbl_bg, 2, 4, Qt.AlignmentFlag.AlignVCenter)
 
-        self.live_same_bg_check = QCheckBox("Same as others")
+        self.live_same_bg_check = QCheckBox("Disable")
         self.live_same_bg_check.setChecked(self.config_mgr.live_same_bg_as_others)
         self.live_same_bg_check.toggled.connect(self._on_live_same_bg_toggled)
-        color_grid.addWidget(self.live_same_bg_check, 2, 4, Qt.AlignmentFlag.AlignVCenter)
+        color_grid.addWidget(self.live_same_bg_check, 2, 5, Qt.AlignmentFlag.AlignVCenter)
 
         # Row 3: Visible Grid Rows right under Live Tile Tint
         lbl_rows = QLabel("<b>Visible Grid Rows:</b>")
         lbl_rows.setStyleSheet("font-size: 13px; color: #e2e8f0;")
-        color_grid.addWidget(lbl_rows, 3, 2, 1, 2, Qt.AlignmentFlag.AlignVCenter)
+        color_grid.addWidget(lbl_rows, 3, 3, 1, 2, Qt.AlignmentFlag.AlignVCenter)
 
         self.grid_rows_spin = NumberStepper()
         self.grid_rows_spin.setRange(4, 16)
@@ -4095,11 +4095,10 @@ class MainWindow(QMainWindow):
         self.grid_rows_spin.setSuffix(" rows")
         self.grid_rows_spin.setFixedWidth(130)
         self.grid_rows_spin.valueChanged.connect(self._on_grid_rows_changed)
-        color_grid.addWidget(self.grid_rows_spin, 3, 4, Qt.AlignmentFlag.AlignVCenter)
+        color_grid.addWidget(self.grid_rows_spin, 3, 5, Qt.AlignmentFlag.AlignVCenter)
 
-        color_grid.setColumnStretch(1, 1)
-        color_grid.setColumnStretch(3, 0)
-        color_grid.setColumnStretch(4, 1)
+        color_grid.setColumnMinimumWidth(2, 28)
+        color_grid.setColumnStretch(6, 1)
         color_layout.addLayout(color_grid)
 
         cat_btn_row = QHBoxLayout()

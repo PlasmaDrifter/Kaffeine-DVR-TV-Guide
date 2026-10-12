@@ -92,6 +92,12 @@ def get_pip_flags() -> list:
 
 
 EMBEDDED_RELEASE_NOTES: Dict[str, str] = {
+    "0.8.6": (
+        "## What's Changed in v0.8.6\n\n"
+        "• **Grid Guide Live Tile Tint Controls**: Renamed the background tint toggle to 'Disable' for clear, intuitive toggle state semantics.\n"
+        "• **Settings Layout Optimization**: Repositioned the broadcast category color swatches and secondary guide option controls into adjacent columns, removing excessive whitespace separation.\n"
+        "• **Desktop & Dock Clapperboard Icon Refinement**: Bundled multi-resolution icon assets across XDG and Breeze icon specifications for consistent panel dock, titlebar, and launcher presentation."
+    ),
     "0.8.5": (
         "## What's Changed in v0.8.5\n\n"
         "• **Recording Cancellation & Duplicate Prevention**: Fixed duplicate concurrent recording timers in Kaffeine by introducing active timer pre-checking and thorough multi-target cancellation across D-Bus and SQLite when recordings are stopped or restarted.\n"
