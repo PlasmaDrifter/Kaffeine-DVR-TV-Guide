@@ -2370,9 +2370,9 @@ QTableWidget#guideGridTable, QTableWidget#guideListTable {
 }
 QTableWidget#guideGridTable QHeaderView::section:horizontal {
     background-color: #1e2330;
-    color: #9cb0c6;
+    color: #e2e8f0;
     font-weight: bold;
-    font-size: 11px;
+    font-size: 14px;
     padding: 6px;
     border: 1px solid #2b3242;
     border-top: none;
@@ -2785,7 +2785,6 @@ class MainWindow(QMainWindow):
         self.grid_view_btn.clicked.connect(self._on_guide_view_toggled)
         self.list_view_btn.clicked.connect(self._on_guide_view_toggled)
 
-        filter_bar.addWidget(QLabel("View:"))
         filter_bar.addWidget(self.grid_view_btn)
         filter_bar.addWidget(self.list_view_btn)
         filter_bar.addSpacing(14)
@@ -3950,11 +3949,14 @@ class MainWindow(QMainWindow):
 
         self._cat_swatches: Dict[str, QPushButton] = {}
 
-        cat_specs = [
+        categories_specs = [
             ("sports", "Sports"),
             ("news", "News"),
             ("movies", "Movies"),
             ("tvshows", "TV Shows / Series"),
+        ]
+
+        others_specs = [
             ("highlight", "Selection Highlighter"),
             ("live_badge", "Live Badge"),
             ("live_bg", "Live Tile Tint"),
@@ -3962,7 +3964,8 @@ class MainWindow(QMainWindow):
 
         cur_colors = self.config_mgr.category_colors
 
-        for r_idx, (cat_key, cat_label) in enumerate(cat_specs):
+        # Column 1: Broadcast Categories
+        for r_idx, (cat_key, cat_label) in enumerate(categories_specs):
             hex_val = cur_colors.get(cat_key, DEFAULT_CATEGORY_COLORS.get(cat_key, "#ffffff"))
 
             swatch_btn = QPushButton()
@@ -3978,7 +3981,25 @@ class MainWindow(QMainWindow):
             lbl_name.setStyleSheet("font-size: 13px; color: #e2e8f0;")
             color_grid.addWidget(lbl_name, r_idx, 1, Qt.AlignmentFlag.AlignVCenter)
 
+        # Column 2: Other Guide Elements
+        for r_idx, (cat_key, cat_label) in enumerate(others_specs):
+            hex_val = cur_colors.get(cat_key, DEFAULT_CATEGORY_COLORS.get(cat_key, "#ffffff"))
+
+            swatch_btn = QPushButton()
+            swatch_btn.setProperty("class", "category-color-tile")
+            swatch_btn.setFixedSize(26, 26)
+            swatch_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            swatch_btn.setStyleSheet(f"QPushButton.category-color-tile {{ background-color: {hex_val}; }}")
+            swatch_btn.clicked.connect(lambda checked=False, k=cat_key, l=cat_label: self._choose_category_color(k, l))
+            color_grid.addWidget(swatch_btn, r_idx, 2, Qt.AlignmentFlag.AlignVCenter)
+            self._cat_swatches[cat_key] = swatch_btn
+
+            lbl_name = QLabel(f"<b>{cat_label}</b>")
+            lbl_name.setStyleSheet("font-size: 13px; color: #e2e8f0;")
+            color_grid.addWidget(lbl_name, r_idx, 3, Qt.AlignmentFlag.AlignVCenter)
+
         color_grid.setColumnStretch(1, 1)
+        color_grid.setColumnStretch(3, 1)
         color_layout.addLayout(color_grid)
 
         cat_btn_row = QHBoxLayout()
@@ -5827,13 +5848,13 @@ class MainWindow(QMainWindow):
             if hasattr(self, "grid_tile_delegate"):
                 self.grid_tile_delegate.set_zoom_delta(zoom_delta)
 
-            hdr_font_sz = max(9, min(36, 11 + zoom_delta))
+            hdr_font_sz = max(11, min(38, 14 + zoom_delta))
             v_hdr_font_sz = max(10, min(36, 12 + zoom_delta))
             cur_hdr_sizes = getattr(self, "_cur_hdr_sizes", None)
             if cur_hdr_sizes != (hdr_font_sz, v_hdr_font_sz):
                 self._cur_hdr_sizes = (hdr_font_sz, v_hdr_font_sz)
                 self.guide_grid_table.setStyleSheet(
-                    f"QTableWidget#guideGridTable QHeaderView::section:horizontal {{ font-size: {hdr_font_sz}px; }} "
+                    f"QTableWidget#guideGridTable QHeaderView::section:horizontal {{ font-size: {hdr_font_sz}px; color: #e2e8f0; }} "
                     f"QTableWidget#guideGridTable QHeaderView::section:vertical {{ font-size: {v_hdr_font_sz}px; }}"
                 )
             self.guide_grid_table.viewport().update()
