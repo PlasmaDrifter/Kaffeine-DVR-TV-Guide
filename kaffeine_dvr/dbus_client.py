@@ -874,29 +874,18 @@ class KaffeineDbusClient:
     ) -> bool:
         """
         Thoroughly cancels and halts a recording in Kaffeine:
-        1. If key is provided, stops and deletes it by key.
-        2. Queries active and scheduled timers in Kaffeine via D-Bus; stops and deletes
-           any matching timers for the same channel/title to prevent lingering streams.
-        3. Cleans matching records from Kaffeine's sqlite.db.
+        1. Queries active and scheduled timers in Kaffeine via D-Bus; matches by channel
+           and title (or verified key) before deleting to prevent canceling unrelated shows.
+        2. Cleans matching records from Kaffeine's sqlite.db with strict channel guards.
         """
         removed_any = False
+        ch_target = (channel or "").strip().lower()
+        t_target = (title or "").strip().lower()
 
-        # Step 1: Remove by primary key if provided
-        if key is not None:
-            try:
-                k_int = int(key)
-                if k_int > 0:
-                    if self.remove_recording(k_int):
-                        removed_any = True
-            except (ValueError, TypeError):
-                pass
-
-        # Step 2: Query active/scheduled timers in Kaffeine and purge matching duplicates/orphans
+        # Step 1: Query active/scheduled timers in Kaffeine via D-Bus
         if self.is_running():
             try:
                 active_entries = self._list_via_dbus()
-                ch_target = (channel or "").strip().lower()
-                t_target = (title or "").strip().lower()
 
                 for entry in active_entries:
                     e_id = entry.get("id")
@@ -906,34 +895,62 @@ class KaffeineDbusClient:
                     e_ch = (entry.get("channel") or "").strip().lower()
                     e_name = (entry.get("name") or "").strip().lower()
 
-                    match_key = (key is not None and int(key) == int(e_id))
+                    # Safety Guard: If a target channel is specified, NEVER remove an entry on a different channel!
+                    # Kaffeine recycles small numeric IDs (1, 2, ...), so key collision across different channels occurs.
+                    if ch_target and e_ch != ch_target:
+                        continue
+
                     match_show = False
                     if ch_target and t_target:
-                        ch_matches = (e_ch == ch_target)
-                        name_matches = (e_name == t_target) or (t_target in e_name) or (e_name in t_target)
-                        match_show = ch_matches and name_matches
+                        match_show = (e_ch == ch_target) and ((e_name == t_target) or (t_target in e_name) or (e_name in t_target))
+                    elif ch_target:
+                        match_show = (e_ch == ch_target)
+                    elif t_target:
+                        match_show = (e_name == t_target) or (t_target in e_name) or (e_name in t_target)
+                    elif key is not None and int(key) == int(e_id):
+                        match_show = True
 
-                    if match_key or match_show:
+                    if key is not None and int(key) == int(e_id):
+                        match_show = True
+
+                    if match_show:
                         if self.remove_recording(int(e_id)):
                             removed_any = True
             except Exception as e:
                 print(f"Error checking Kaffeine schedule during cancellation: {e}", flush=True)
 
-        # Step 3: SQLite cleanup
+        # Step 2: Fallback to removing by key ONLY if no channel or title was specified
+        if not removed_any and key is not None and not ch_target and not t_target:
+            try:
+                k_int = int(key)
+                if k_int > 0:
+                    if self.remove_recording(k_int):
+                        removed_any = True
+            except (ValueError, TypeError):
+                pass
+
+        # Step 3: SQLite cleanup with strict channel guard
         if self.kaffeine_db_path.exists():
             try:
                 conn = sqlite3.connect(str(self.kaffeine_db_path))
                 cur = conn.cursor()
-                if key is not None:
-                    try:
-                        cur.execute("DELETE FROM RecordingSchedule WHERE Id = ?", (int(key),))
-                    except (ValueError, TypeError):
-                        pass
-                if channel and title:
+                if ch_target and t_target:
                     cur.execute(
                         "DELETE FROM RecordingSchedule WHERE LOWER(Channel) = LOWER(?) AND (LOWER(Name) = LOWER(?) OR Name LIKE ?)",
                         (channel.strip(), title.strip(), f"%{title.strip()}%")
                     )
+                elif ch_target and key is not None:
+                    cur.execute(
+                        "DELETE FROM RecordingSchedule WHERE Id = ? AND LOWER(Channel) = LOWER(?)",
+                        (int(key), channel.strip())
+                    )
+                elif ch_target:
+                    cur.execute(
+                        "DELETE FROM RecordingSchedule WHERE LOWER(Channel) = LOWER(?)",
+                        (channel.strip(),)
+                    )
+                elif key is not None:
+                    cur.execute("DELETE FROM RecordingSchedule WHERE Id = ?", (int(key),))
                 conn.commit()
                 conn.close()
             except Exception as e:
