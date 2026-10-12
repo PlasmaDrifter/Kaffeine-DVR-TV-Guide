@@ -103,6 +103,38 @@ def get_checkmark_icon_path() -> str:
     return _CACHED_CHECKMARK_PATH or ""
 
 
+def _get_app_icon_asset_path() -> str:
+    # 1. Check PyInstaller bundle directory (sys._MEIPASS)
+    if hasattr(sys, "_MEIPASS"):
+        for name in ["kaffeine-dvr.svg", "kaffeine-dvr.png", "kaffeine-dvr-512.png"]:
+            cand = Path(sys._MEIPASS) / "assets" / name
+            if cand.is_file():
+                return str(cand)
+
+    # 2. Check relative to executable
+    try:
+        exe_dir = Path(sys.executable).resolve().parent
+        for root in [exe_dir / "assets", exe_dir / "_internal" / "assets", exe_dir.parent / "share" / "kaffeine-dvr" / "assets"]:
+            for name in ["kaffeine-dvr.svg", "kaffeine-dvr.png", "kaffeine-dvr-512.png"]:
+                cand = root / name
+                if cand.is_file():
+                    return str(cand)
+    except Exception:
+        pass
+
+    # 3. Check relative to source tree
+    try:
+        base_dir = Path(__file__).resolve().parent.parent
+        for name in ["kaffeine-dvr.svg", "kaffeine-dvr.png", "kaffeine-dvr-512.png"]:
+            cand = base_dir / "assets" / name
+            if cand.is_file():
+                return str(cand)
+    except Exception:
+        pass
+
+    return ""
+
+
 class SyncWorker(QThread):
     progress = pyqtSignal(str)
     progress_val = pyqtSignal(int)
@@ -2059,7 +2091,33 @@ class FirstRunWelcomeDialog(QDialog):
 
 
 def get_app_icon() -> QIcon:
-    for name in ["kaffeine", "org.kde.kaffeine", "video-television", "media-playback-start"]:
+    # 1. Bundled application icon asset
+    asset_path = _get_app_icon_asset_path()
+    if asset_path and Path(asset_path).is_file():
+        base_icon = QIcon(asset_path)
+        if not base_icon.isNull():
+            # Populate explicit standard pixmap sizes for X11 _NET_WM_ICON compatibility
+            multi_icon = QIcon()
+            for sz in [16, 22, 24, 32, 48, 64, 128, 256]:
+                pix = base_icon.pixmap(sz, sz)
+                if not pix.isNull():
+                    multi_icon.addPixmap(pix)
+            if not multi_icon.isNull():
+                return multi_icon
+            return base_icon
+
+    # Ensure standard icon search paths are populated on systems where Qt misses user paths
+    try:
+        user_icons = str(Path.home() / ".local" / "share" / "icons")
+        paths = QIcon.themeSearchPaths()
+        if user_icons not in paths:
+            paths.append(user_icons)
+            QIcon.setThemeSearchPaths(paths)
+    except Exception:
+        pass
+
+    # 2. Installed system / desktop theme lookups
+    for name in ["kaffeine-dvr", "kaffeine", "org.kde.kaffeine", "video-television", "media-playback-start"]:
         icon = QIcon.fromTheme(name)
         if not icon.isNull():
             return icon
@@ -7699,22 +7757,31 @@ def ensure_desktop_launcher():
         apps_dir = (Path(xdg_data) if xdg_data else Path.home() / ".local" / "share") / "applications"
         desktop_file = apps_dir / "kaffeine-dvr.desktop"
 
-        if not desktop_file.exists():
+        content = (
+            "[Desktop Entry]\n"
+            "Categories=AudioVideo;TV;Recorder;\n"
+            "Comment=Modern TV Guide & DVR Recording Manager for Kaffeine\n"
+            "Exec=sh -c 'PATH=\"$HOME/.local/bin:$PATH\" exec kaffeine-dvr'\n"
+            "GenericName=TV Guide & Recording Manager\n"
+            "Icon=kaffeine-dvr\n"
+            "Keywords=tv;dvr;kaffeine;record;guide;epg;\n"
+            "Name=Kaffeine DVR & TV Guide\n"
+            "StartupNotify=true\n"
+            "StartupWMClass=kaffeine-dvr\n"
+            "Terminal=false\n"
+            "Type=Application\n"
+        )
+        needs_write = not desktop_file.exists()
+        if not needs_write:
+            try:
+                curr = desktop_file.read_text(encoding="utf-8")
+                if "Icon=kaffeine\n" in curr or "Icon=kaffeine" == curr.strip():
+                    needs_write = True
+            except Exception:
+                needs_write = True
+
+        if needs_write:
             apps_dir.mkdir(parents=True, exist_ok=True)
-            content = (
-                "[Desktop Entry]\n"
-                "Categories=AudioVideo;TV;Recorder;\n"
-                "Comment=Modern TV Guide & DVR Recording Manager for Kaffeine\n"
-                "Exec=sh -c 'PATH=\"$HOME/.local/bin:$PATH\" exec kaffeine-dvr'\n"
-                "GenericName=TV Guide & Recording Manager\n"
-                "Icon=kaffeine\n"
-                "Keywords=tv;dvr;kaffeine;record;guide;epg;\n"
-                "Name=Kaffeine DVR & TV Guide\n"
-                "StartupNotify=true\n"
-                "StartupWMClass=kaffeine-dvr\n"
-                "Terminal=false\n"
-                "Type=Application\n"
-            )
             desktop_file.write_text(content, encoding="utf-8")
             if shutil.which("update-desktop-database"):
                 subprocess.run(

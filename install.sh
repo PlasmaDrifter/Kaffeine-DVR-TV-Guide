@@ -77,15 +77,43 @@ mkdir -p "$USER_BIN_DIR"
 mkdir -p "$USER_APPS_DIR"
 mkdir -p "$USER_SYSTEMD_DIR"
 
-# 5. Install Desktop Launcher
-echo "Installing desktop launcher..."
+# 5. Install Desktop Launcher & Icons
+echo "Installing desktop launcher and icons..."
+USER_ICONS_DIR="$HOME/.local/share/icons/hicolor"
+mkdir -p "$USER_ICONS_DIR/scalable/apps"
+if [ -f "$SCRIPT_DIR/assets/kaffeine-dvr.svg" ]; then
+    cp "$SCRIPT_DIR/assets/kaffeine-dvr.svg" "$USER_ICONS_DIR/scalable/apps/kaffeine-dvr.svg"
+fi
+for sz in 16 24 32 48 64 128 256 512; do
+    if [ -f "$SCRIPT_DIR/assets/icons/kaffeine-dvr-${sz}.png" ]; then
+        mkdir -p "$USER_ICONS_DIR/${sz}x${sz}/apps"
+        cp "$SCRIPT_DIR/assets/icons/kaffeine-dvr-${sz}.png" "$USER_ICONS_DIR/${sz}x${sz}/apps/kaffeine-dvr.png"
+    fi
+done
+
+# Also install into any active user custom icon themes in ~/.local/share/icons/
+for theme_dir in "$HOME/.local/share/icons"/*; do
+    if [ -d "$theme_dir" ] && [ "$theme_dir" != "$USER_ICONS_DIR" ]; then
+        for sz in 16 24 32 48 64; do
+            if [ -d "$theme_dir/${sz}x${sz}/apps" ]; then
+                cp "$SCRIPT_DIR/assets/icons/kaffeine-dvr-${sz}.png" "$theme_dir/${sz}x${sz}/apps/kaffeine-dvr.png" 2>/dev/null || true
+            fi
+        done
+        gtk-update-icon-cache -f -q "$theme_dir" 2>/dev/null || true
+    fi
+done
+
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    gtk-update-icon-cache -f -q "$USER_ICONS_DIR" 2>/dev/null || true
+fi
+
 DESKTOP_SRC="$SCRIPT_DIR/desktop/kaffeine-dvr.desktop"
 if [ -f "$DESKTOP_SRC" ]; then
     cp "$DESKTOP_SRC" "$USER_APPS_DIR/kaffeine-dvr.desktop"
     if command -v update-desktop-database >/dev/null 2>&1; then
         update-desktop-database "$USER_APPS_DIR" >/dev/null 2>&1 || true
     fi
-    echo "Desktop launcher installed to $USER_APPS_DIR/kaffeine-dvr.desktop"
+    echo "Desktop launcher and icons installed."
 else
     echo "Warning: desktop/kaffeine-dvr.desktop not found, skipping desktop entry."
 fi

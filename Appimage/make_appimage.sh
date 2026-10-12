@@ -30,8 +30,15 @@ fi
 rm -f AppDir/usr/bin/libfontconfig.so*
 
 # Icons
-cp /usr/share/icons/Papirus/48x48/apps/kaffeine.svg AppDir/kaffeine.svg
-cp /usr/share/icons/Papirus/48x48/apps/kaffeine.svg AppDir/usr/share/icons/hicolor/scalable/apps/kaffeine.svg
+cp assets/kaffeine-dvr.svg AppDir/kaffeine-dvr.svg
+cp assets/kaffeine-dvr.svg AppDir/.DirIcon
+cp assets/kaffeine-dvr.svg AppDir/usr/share/icons/hicolor/scalable/apps/kaffeine-dvr.svg
+for sz in 16 24 32 48 64 128 256 512; do
+    if [ -f "assets/icons/kaffeine-dvr-${sz}.png" ]; then
+        mkdir -p AppDir/usr/share/icons/hicolor/${sz}x${sz}/apps
+        cp "assets/icons/kaffeine-dvr-${sz}.png" "AppDir/usr/share/icons/hicolor/${sz}x${sz}/apps/kaffeine-dvr.png"
+    fi
+done
 
 # Detect version dynamically from kaffeine_dvr/__init__.py
 APP_VERSION=$(python3 -c "import kaffeine_dvr; print(kaffeine_dvr.__version__)")
@@ -43,7 +50,7 @@ Name=Kaffeine DVR and TV Guide
 GenericName=TV Guide and Recording Manager
 Comment=Modern TV Guide browser & Just-In-Time DVR daemon for Kaffeine
 Exec=kaffeine-dvr %U
-Icon=kaffeine
+Icon=kaffeine-dvr
 Terminal=false
 Type=Application
 Categories=AudioVideo;Video;TV;Recorder;

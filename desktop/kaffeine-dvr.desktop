@@ -3,7 +3,7 @@ Categories=AudioVideo;TV;Recorder;
 Comment=Modern TV Guide & DVR Recording Manager for Kaffeine
 Exec=sh -c 'PATH="$HOME/.local/bin:$PATH" exec kaffeine-dvr'
 GenericName=TV Guide & Recording Manager
-Icon=kaffeine
+Icon=kaffeine-dvr
 Keywords=tv;dvr;kaffeine;record;guide;epg;
 Name=Kaffeine DVR & TV Guide
 StartupNotify=true
