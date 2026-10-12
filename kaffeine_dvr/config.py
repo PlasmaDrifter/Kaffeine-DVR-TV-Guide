@@ -9,7 +9,9 @@ DEFAULT_CATEGORY_COLORS = {
     "news": "#4fc3f7",
     "movies": "#c084fc",
     "tvshows": "#b9feff",
-    "highlight": "#38bdf8"
+    "highlight": "#38bdf8",
+    "live_progress": "#38bdf8",
+    "live_bg": "#232b3e",
 }
 
 class ConfigManager:

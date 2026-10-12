@@ -1411,7 +1411,7 @@ class ProgramTileDelegate(QStyledItemDelegate):
     COLOR_DEFAULT_BG_ALT = QColor("#1e2332")
     COLOR_PAST_BG = QColor("#161922")
     COLOR_PAST_BG_ALT = QColor("#14171f")
-    COLOR_LIVE_BG = QColor("#17261c")
+    COLOR_LIVE_BG = QColor("#232b3e")
     COLOR_DEFAULT_BORDER_SCHED = QColor("#e53935")
     COLOR_DEFAULT_BORDER = QColor("#333c4e")
     COLOR_PAST_BORDER = QColor("#262c3a")
@@ -1432,6 +1432,8 @@ class ProgramTileDelegate(QStyledItemDelegate):
         "movies": QColor("#c084fc"),
         "tvshows": QColor("#b9feff"),
         "highlight": QColor("#38bdf8"),
+        "live_progress": QColor("#38bdf8"),
+        "live_bg": QColor("#232b3e"),
     }
 
     def __init__(self, parent=None, config_mgr=None):
@@ -1515,7 +1517,7 @@ class ProgramTileDelegate(QStyledItemDelegate):
             bg_color = self.COLOR_PAST_BG_ALT if is_alt else self.COLOR_PAST_BG
             default_border = self.COLOR_PAST_BORDER_SCHED if is_scheduled else self.COLOR_PAST_BORDER
         elif timing_state == "live":
-            bg_color = self.COLOR_LIVE_BG
+            bg_color = self.get_category_color("live_bg")
             default_border = self.COLOR_DEFAULT_BORDER_SCHED if is_scheduled else self.COLOR_DEFAULT_BORDER
         else:
             bg_color = self.COLOR_DEFAULT_BG_ALT if is_alt else self.COLOR_DEFAULT_BG
@@ -1529,6 +1531,29 @@ class ProgramTileDelegate(QStyledItemDelegate):
             pen_width = 2 if is_scheduled else 1
 
         painter.fillRect(rect, bg_color)
+
+        # Draw live broadcast progress bar at bottom of tile if currently airing
+        if timing_state == "live":
+            start_iso = prog.get("start_iso")
+            dur_iso = prog.get("duration_iso") or "00:30:00"
+            if start_iso:
+                try:
+                    dt = datetime.fromisoformat(start_iso)
+                    parts = [int(x) for x in dur_iso.split(":")]
+                    dur = timedelta(hours=parts[0], minutes=parts[1], seconds=parts[2] if len(parts) > 2 else 0)
+                    now = datetime.now()
+                    tot_sec = dur.total_seconds()
+                    if tot_sec > 0:
+                        prog_ratio = max(0.0, min(1.0, (now - dt).total_seconds() / tot_sec))
+                        if prog_ratio > 0.0:
+                            prog_bar_h = 3
+                            pw = max(2, int((rect.width() - 2) * prog_ratio))
+                            painter.fillRect(QRect(rect.left() + 1, rect.bottom() - prog_bar_h, rect.width() - 2, prog_bar_h), QColor("#181f2a"))
+                            prog_bar_color = self.get_category_color("live_progress")
+                            painter.fillRect(QRect(rect.left() + 1, rect.bottom() - prog_bar_h, pw, prog_bar_h), prog_bar_color)
+                except Exception:
+                    pass
+
         painter.setPen(QPen(border_color, pen_width))
         painter.drawRect(rect.adjusted(0, 0, -1, -1))
 
@@ -1559,17 +1584,11 @@ class ProgramTileDelegate(QStyledItemDelegate):
             cur_right -= (dot_diameter + 6)
             badge_reserved_w += (dot_diameter + 6)
 
-        # Title & Subtext color logic (Option 1)
+        # Title & Subtext color logic
         cat = prog.get("_category") or classify_guide_category(prog)
         if timing_state == "past":
             title_color = self.COLOR_PAST_TITLE
             subtext_color = self.COLOR_PAST_SUBTEXT
-        elif timing_state == "live":
-            if cat in ("sports", "news", "movies"):
-                title_color = self.get_category_color(cat)
-            else:
-                title_color = self.COLOR_LIVE_TITLE
-            subtext_color = self.COLOR_SUBTEXT
         else:
             title_color = self.get_category_color(cat)
             subtext_color = self.COLOR_SUBTEXT
@@ -3933,6 +3952,8 @@ class MainWindow(QMainWindow):
             ("movies", "Movies"),
             ("tvshows", "TV Shows / Series"),
             ("highlight", "Selection Highlighter"),
+            ("live_progress", "Live Progress Bar"),
+            ("live_bg", "Live Tile Tint"),
         ]
 
         cur_colors = self.config_mgr.category_colors
@@ -6269,16 +6290,13 @@ class MainWindow(QMainWindow):
                     sub_item.setForeground(gray_color)
                     dur_item.setForeground(gray_color)
                 elif timing_state == "live":
-                    if cat in ("sports", "news", "movies"):
-                        t_color = QColor(cat_colors.get(cat, DEFAULT_CATEGORY_COLORS.get(cat, "#ffffff")))
-                    else:
-                        t_color = QColor("#66bb6a")
+                    t_color = QColor(cat_colors.get(cat, DEFAULT_CATEGORY_COLORS.get(cat, "#b9feff")))
                     title_item.setForeground(t_color)
                     title_font = QFont()
                     title_font.setBold(True)
                     title_item.setFont(title_font)
                 else:
-                    t_color = QColor(cat_colors.get(cat, cat_colors.get("tvshows", "#b9feff")))
+                    t_color = QColor(cat_colors.get(cat, DEFAULT_CATEGORY_COLORS.get(cat, "#b9feff")))
                     title_item.setForeground(t_color)
 
                 self.guide_table.setItem(row, 1, time_item)
