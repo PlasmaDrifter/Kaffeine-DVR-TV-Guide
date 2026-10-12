@@ -1432,7 +1432,7 @@ class ProgramTileDelegate(QStyledItemDelegate):
         "movies": QColor("#c084fc"),
         "tvshows": QColor("#b9feff"),
         "highlight": QColor("#38bdf8"),
-        "live_badge": QColor("#d97706"),
+        "live_badge": QColor("#059669"),
         "live_bg": QColor("#132400"),
     }
 
