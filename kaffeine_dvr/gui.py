@@ -1432,7 +1432,7 @@ class ProgramTileDelegate(QStyledItemDelegate):
         "movies": QColor("#c084fc"),
         "tvshows": QColor("#b9feff"),
         "highlight": QColor("#38bdf8"),
-        "live_badge": QColor("#10b981"),
+        "live_badge": QColor("#d97706"),
         "live_bg": QColor("#132400"),
     }
 
@@ -1589,40 +1589,31 @@ class ProgramTileDelegate(QStyledItemDelegate):
         line1_rect = QRect(rect.left() + pad_left, rect.top() + pad_top, inner_width_title, fm_title.height())
         painter.drawText(line1_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, elided_title)
 
-        # Lower-right live badge
+        # Lower-right live badge (Concept 3: compact micro solid pill)
         live_badge_w = 0
         if timing_state == "live":
             badge_font = QFont(option.font)
             badge_font.setBold(True)
-            badge_font.setPointSize(max(6, 7 + int(self.zoom_delta * 0.4)))
+            badge_font.setPointSize(max(5, 6 + int(self.zoom_delta * 0.4)))
             fm_badge = QFontMetrics(badge_font)
             text_w = fm_badge.horizontalAdvance("LIVE")
 
-            dot_dia = max(4, 5 + int(self.zoom_delta * 0.3))
-            live_badge_w = max(32, text_w + dot_dia + 11)
-            live_badge_h = max(13, fm_badge.height() + 3)
+            live_badge_w = max(24, text_w + 7)
+            live_badge_h = max(11, fm_badge.height() + 1)
 
             pad_b = 6
             badge_x = rect.right() - pad_right - live_badge_w
             badge_y = rect.bottom() - pad_b - live_badge_h
             badge_rect = QRect(badge_x, badge_y, live_badge_w, live_badge_h)
 
-            painter.setPen(QPen(QColor("#2b3d22"), 1))
-            painter.setBrush(QColor("#0f1b07"))
-            painter.drawRoundedRect(badge_rect, 3, 3)
-
             badge_color = self.get_category_color("live_badge")
-            dot_x = badge_x + 4
-            dot_y = badge_y + int((live_badge_h - dot_dia) / 2)
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(badge_color)
-            painter.drawEllipse(dot_x, dot_y, dot_dia, dot_dia)
+            painter.drawRoundedRect(badge_rect, 2, 2)
 
-            painter.setPen(QColor("#cbd5e1"))
+            painter.setPen(QColor("#ffffff"))
             painter.setFont(badge_font)
-            text_rect = QRect(dot_x + dot_dia + 3, badge_y, live_badge_w - dot_dia - 7, live_badge_h)
-            painter.drawText(text_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "LIVE")
+            painter.drawText(badge_rect, Qt.AlignmentFlag.AlignCenter, "LIVE")
 
         # Line 2: Time Range & Subtitle
         font_sub = QFont(option.font)
