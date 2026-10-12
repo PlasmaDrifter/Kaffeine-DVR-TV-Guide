@@ -94,6 +94,9 @@ def get_pip_flags() -> list:
 EMBEDDED_RELEASE_NOTES: Dict[str, str] = {
     "0.8.6": (
         "## What's Changed in v0.8.6\n\n"
+        "• **Past Recording History Indicators**: Added past recording cross-referencing so programs completed in history show a distinct badge and completion tooltip in both Grid and List guide views.\n"
+        "• **Guide Toolbar Refresh Button**: Added a dedicated quick-refresh button next to Prime Time to instantly reload guide listings and active recording statuses.\n"
+        "• **Refined Time Jump Alignment**: Aligned grid view hour-slot jumps with the current hour mark until 50 minutes past the hour.\n"
         "• **Grid Guide Live Tile Tint Controls**: Renamed the background tint toggle to 'Disable' for clear, intuitive toggle state semantics.\n"
         "• **Settings Layout Optimization**: Repositioned the broadcast category color swatches and secondary guide option controls into adjacent columns, removing excessive whitespace separation.\n"
         "• **Desktop & Dock Clapperboard Icon Refinement**: Bundled multi-resolution icon assets across XDG and Breeze icon specifications for consistent panel dock, titlebar, and launcher presentation."
