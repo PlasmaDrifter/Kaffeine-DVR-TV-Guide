@@ -10,7 +10,7 @@ DEFAULT_CATEGORY_COLORS = {
     "movies": "#c084fc",
     "tvshows": "#b9feff",
     "highlight": "#38bdf8",
-    "live_badge": "#ef4444",
+    "live_badge": "#10b981",
     "live_bg": "#132400",
 }
 
