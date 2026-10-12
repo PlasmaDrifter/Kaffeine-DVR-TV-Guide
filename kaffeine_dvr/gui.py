@@ -3621,6 +3621,21 @@ class MainWindow(QMainWindow):
             self.days_spin
         )
 
+        self.grid_rows_spin = NumberStepper()
+        self.grid_rows_spin.setRange(4, 16)
+        self.grid_rows_spin.setValue(self.config_mgr.grid_visible_rows)
+        self.grid_rows_spin.setSuffix(" rows")
+        self.grid_rows_spin.setFixedWidth(160)
+        self.grid_rows_spin.valueChanged.connect(self._on_grid_rows_changed)
+        dvr_layout.addRow(
+            make_setting_label(
+                "Visible Grid Rows:",
+                "Number of channel rows displayed in the guide grid at standard view (4–16, default 9).\n"
+                "Row heights automatically scale to evenly fill the available screen area."
+            ),
+            self.grid_rows_spin
+        )
+
         self.notify_lead_spin = NumberStepper()
         self.notify_lead_spin.setRange(0, 999)
         self.notify_lead_spin.setValue(self.config_mgr.notification_lead_time_mins)
@@ -5007,6 +5022,16 @@ class MainWindow(QMainWindow):
         self.config_mgr.enable_desktop_notifications = self.notify_check.isChecked()
         if hasattr(self, "notify_lead_spin"):
             self.config_mgr.notification_lead_time_mins = self.notify_lead_spin.value()
+        if hasattr(self, "grid_rows_spin"):
+            self.config_mgr.grid_visible_rows = self.grid_rows_spin.value()
+
+    def _on_grid_rows_changed(self, val: int):
+        self.config_mgr.grid_visible_rows = val
+        self.guide_grid_zoom_level = 0
+        self.settings.setValue("guide_grid_zoom_level", 0)
+        self._apply_guide_zoom()
+        if hasattr(self, "_update_zoom_buttons_state"):
+            self._update_zoom_buttons_state()
 
         # Storage & Retention settings
         self.config_mgr.auto_cleanup_enabled = self.cleanup_enable_check.isChecked()
@@ -5802,10 +5827,11 @@ class MainWindow(QMainWindow):
         # 1. Grid View intelligent sizing
         if hasattr(self, "guide_grid_table"):
             # Target number of rows visible in the viewport:
-            # Baseline is 8 rows at lvl = 0.
+            # Baseline is user-configured grid_visible_rows (range: 4–16, default: 9).
             # Zoom in (lvl > 0) shows fewer rows (down to 1 row) with large tiles and text.
-            # Zoom out (lvl < 0) shows more rows (up to 16) with compact tiles.
-            target_rows = max(1, min(16, 8 - grid_lvl))
+            # Zoom out (lvl < 0) shows more rows (up to 20) with compact tiles.
+            base_rows = getattr(self.config_mgr, "grid_visible_rows", 9)
+            target_rows = max(1, min(20, base_rows - grid_lvl))
 
             vp = self.guide_grid_table.viewport()
             vh = vp.height() if vp else 0

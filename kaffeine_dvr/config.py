@@ -97,6 +97,8 @@ class ConfigManager:
                         data["timeshift_buffer_seconds"] = 2
                     if "delete_timeshift_on_exit" not in data:
                         data["delete_timeshift_on_exit"] = True
+                    if "grid_visible_rows" not in data:
+                        data["grid_visible_rows"] = 9
                     if "category_colors" not in data or not isinstance(data.get("category_colors"), dict):
                         data["category_colors"] = dict(DEFAULT_CATEGORY_COLORS)
                     else:
@@ -146,6 +148,7 @@ class ConfigManager:
             "live_tv_watch_mode": "timeshift",
             "timeshift_buffer_seconds": 2,
             "delete_timeshift_on_exit": True,
+            "grid_visible_rows": 9,
             "category_colors": dict(DEFAULT_CATEGORY_COLORS)
         }
         self._save(default_data)
@@ -565,5 +568,20 @@ class ConfigManager:
 
     def reset_category_colors(self):
         self.data["category_colors"] = dict(DEFAULT_CATEGORY_COLORS)
+        self.save()
+
+    @property
+    def grid_visible_rows(self) -> int:
+        try:
+            return max(4, min(16, int(self.data.get("grid_visible_rows", 9))))
+        except (ValueError, TypeError):
+            return 9
+
+    @grid_visible_rows.setter
+    def grid_visible_rows(self, val: int):
+        try:
+            self.data["grid_visible_rows"] = max(4, min(16, int(val)))
+        except (ValueError, TypeError):
+            self.data["grid_visible_rows"] = 9
         self.save()
 
