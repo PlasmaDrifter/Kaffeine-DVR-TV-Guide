@@ -9,6 +9,7 @@ def test_default_config(isolated_config: ConfigManager):
     assert cfg.auto_check_updates is False
     assert cfg.update_check_frequency == "weekly"
     assert cfg.grid_visible_rows == 9
+    assert cfg.guide_detail_lines == 3
     assert cfg.lead_time_mins == 5
     assert cfg.watcher_interval_seconds == 120
 
@@ -22,6 +23,21 @@ def test_grid_visible_rows_clamping(isolated_config: ConfigManager):
 
     cfg.grid_visible_rows = 11
     assert cfg.grid_visible_rows == 11
+
+
+def test_guide_detail_lines_clamping(isolated_config: ConfigManager):
+    cfg = isolated_config
+    cfg.guide_detail_lines = 1
+    assert cfg.guide_detail_lines == 2
+
+    cfg.guide_detail_lines = 5
+    assert cfg.guide_detail_lines == 3
+
+    cfg.guide_detail_lines = 2
+    assert cfg.guide_detail_lines == 2
+
+    cfg.guide_detail_lines = 3
+    assert cfg.guide_detail_lines == 3
 
 def test_reset_to_defaults_preserves_user_data(isolated_config: ConfigManager):
     cfg = isolated_config

@@ -1575,7 +1575,7 @@ class ProgramTileDelegate(QStyledItemDelegate):
 
         # Uniform padding inside box
         pad_left = 10
-        pad_top = 8
+        pad_top = 5
         pad_right = 10
         inner_width = max(10, rect.width() - pad_left - pad_right)
 
@@ -1625,10 +1625,11 @@ class ProgramTileDelegate(QStyledItemDelegate):
         fm_title = painter.fontMetrics()
         inner_width_title = max(10, inner_width - badge_reserved_w)
         elided_title = fm_title.elidedText(primary_title, Qt.TextElideMode.ElideRight, inner_width_title)
-        line1_rect = QRect(rect.left() + pad_left, rect.top() + pad_top, inner_width_title, fm_title.height())
+        line1_y = rect.top() + pad_top
+        line1_rect = QRect(rect.left() + pad_left, line1_y, inner_width_title, fm_title.height())
         painter.drawText(line1_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, elided_title)
 
-        # Lower-right live badge (Concept 3: compact micro solid pill)
+        # Lower-right live badge (compact micro solid pill)
         live_badge_w = 0
         hide_badge = bool(getattr(self.config_mgr, "hide_live_badge", False)) if self.config_mgr else False
         if timing_state == "live" and not hide_badge:
@@ -1641,7 +1642,7 @@ class ProgramTileDelegate(QStyledItemDelegate):
             live_badge_w = max(24, text_w + 7)
             live_badge_h = max(11, fm_badge.height() + 1)
 
-            pad_b = 6
+            pad_b = 5
             badge_x = rect.right() - pad_right - live_badge_w
             badge_y = rect.bottom() - pad_b - live_badge_h
             badge_rect = QRect(badge_x, badge_y, live_badge_w, live_badge_h)
@@ -1655,19 +1656,31 @@ class ProgramTileDelegate(QStyledItemDelegate):
             painter.setFont(badge_font)
             painter.drawText(badge_rect, Qt.AlignmentFlag.AlignCenter, "LIVE")
 
-        # Line 2: Time Range & Subtitle
+        # Line 2 & 3 Subtext font setup
         font_sub = QFont(option.font)
         font_sub.setBold(False)
-        font_sub.setPointSize(max(7, 9 + self.zoom_delta))
+        font_sub.setPointSize(max(7, 8 + self.zoom_delta))
         painter.setFont(font_sub)
         painter.setPen(subtext_color)
-
         fm_sub = painter.fontMetrics()
-        subtext = f"{time_range} • {secondary_sub}" if secondary_sub else time_range
-        inner_width_sub = max(10, inner_width - (live_badge_w + 6 if live_badge_w > 0 else 0))
-        elided_sub = fm_sub.elidedText(subtext, Qt.TextElideMode.ElideRight, inner_width_sub)
-        line2_rect = QRect(rect.left() + pad_left, rect.top() + pad_top + fm_title.height() + 4, inner_width_sub, fm_sub.height())
-        painter.drawText(line2_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, elided_sub)
+
+        # Line 2: Time Range
+        line2_y = line1_y + fm_title.height() + 2
+        # If there is no line 3, clear space for the live badge on line 2
+        line2_reserve = (live_badge_w + 6) if (live_badge_w > 0 and not secondary_sub) else 0
+        inner_width_time = max(10, inner_width - line2_reserve)
+        elided_time = fm_sub.elidedText(time_range, Qt.TextElideMode.ElideRight, inner_width_time)
+        line2_rect = QRect(rect.left() + pad_left, line2_y, inner_width_time, fm_sub.height())
+        painter.drawText(line2_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, elided_time)
+
+        # Line 3: Subtitle / Episode Title (rendered if present and space permits)
+        if secondary_sub:
+            line3_y = line2_y + fm_sub.height() + 2
+            if line3_y + fm_sub.height() <= rect.bottom() + 1:
+                inner_width_sub = max(10, inner_width - (live_badge_w + 6 if live_badge_w > 0 else 0))
+                elided_sub = fm_sub.elidedText(secondary_sub, Qt.TextElideMode.ElideRight, inner_width_sub)
+                line3_rect = QRect(rect.left() + pad_left, line3_y, inner_width_sub, fm_sub.height())
+                painter.drawText(line3_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, elided_sub)
 
         painter.restore()
 
@@ -3025,11 +3038,7 @@ class MainWindow(QMainWindow):
         font.setPixelSize(16)
         self.guide_detail_text.setFont(font)
         self.guide_detail_text.setStyleSheet("font-size: 16px; line-height: 1.35; padding: 6px 10px;")
-        # Size description box to fit approximately 2 lines of text
-        line_height = self.guide_detail_text.fontMetrics().lineSpacing()
-        doc_margin = int(self.guide_detail_text.document().documentMargin())
-        desc_height = line_height * 2 + doc_margin * 2 + 16
-        self.guide_detail_text.setFixedHeight(desc_height)
+        self._update_guide_detail_box_height()
         detail_layout.addWidget(self.guide_detail_text)
 
         action_bar = QHBoxLayout()
@@ -4085,6 +4094,21 @@ class MainWindow(QMainWindow):
         self.grid_rows_spin.valueChanged.connect(self._on_grid_rows_changed)
         color_grid.addWidget(self.grid_rows_spin, 3, 5, Qt.AlignmentFlag.AlignVCenter)
 
+        # Row 4: Description Box Lines (2 or 3 lines)
+        lbl_desc_lines = QLabel("<b>Description Lines:</b>")
+        lbl_desc_lines.setStyleSheet("font-size: 13px; color: #e2e8f0;")
+        color_grid.addWidget(lbl_desc_lines, 4, 3, 1, 2, Qt.AlignmentFlag.AlignVCenter)
+
+        self.guide_desc_lines_combo = QComboBox()
+        self.guide_desc_lines_combo.addItem("2 Lines", 2)
+        self.guide_desc_lines_combo.addItem("3 Lines", 3)
+        self.guide_desc_lines_combo.setFixedWidth(130)
+        cur_desc_lines = getattr(self.config_mgr, "guide_detail_lines", 3)
+        d_idx = self.guide_desc_lines_combo.findData(cur_desc_lines)
+        self.guide_desc_lines_combo.setCurrentIndex(d_idx if d_idx >= 0 else 1)
+        self.guide_desc_lines_combo.currentIndexChanged.connect(self._on_guide_desc_lines_changed)
+        color_grid.addWidget(self.guide_desc_lines_combo, 4, 5, Qt.AlignmentFlag.AlignVCenter)
+
         color_grid.setColumnMinimumWidth(2, 28)
         color_grid.setColumnStretch(6, 1)
         color_layout.addLayout(color_grid)
@@ -4399,6 +4423,13 @@ class MainWindow(QMainWindow):
             self.live_same_bg_check.blockSignals(True)
             self.live_same_bg_check.setChecked(self.config_mgr.live_same_bg_as_others)
             self.live_same_bg_check.blockSignals(False)
+
+        if hasattr(self, "guide_desc_lines_combo"):
+            self.guide_desc_lines_combo.blockSignals(True)
+            d_idx = self.guide_desc_lines_combo.findData(self.config_mgr.guide_detail_lines)
+            self.guide_desc_lines_combo.setCurrentIndex(d_idx if d_idx >= 0 else 1)
+            self.guide_desc_lines_combo.blockSignals(False)
+            self._update_guide_detail_box_height()
 
         # Color Swatches
         colors = self.config_mgr.category_colors
@@ -5261,6 +5292,8 @@ class MainWindow(QMainWindow):
             self.config_mgr.hide_live_badge = self.hide_live_badge_check.isChecked()
         if hasattr(self, "live_same_bg_check"):
             self.config_mgr.live_same_bg_as_others = self.live_same_bg_check.isChecked()
+        if hasattr(self, "guide_desc_lines_combo"):
+            self.config_mgr.guide_detail_lines = self.guide_desc_lines_combo.currentData()
 
         # Storage & Retention settings
         self.config_mgr.auto_cleanup_enabled = self.cleanup_enable_check.isChecked()
@@ -5270,6 +5303,23 @@ class MainWindow(QMainWindow):
 
         self.update_storage_status_ui()
         self.flash_save_indicator("Settings Saved")
+
+    def _update_guide_detail_box_height(self):
+        """Size description box to fit 2 or 3 lines of text based on user setting."""
+        if not hasattr(self, "guide_detail_text"):
+            return
+        lines = getattr(self.config_mgr, "guide_detail_lines", 3)
+        line_height = self.guide_detail_text.fontMetrics().lineSpacing()
+        doc_margin = int(self.guide_detail_text.document().documentMargin())
+        desc_height = line_height * lines + doc_margin * 2 + 16
+        self.guide_detail_text.setFixedHeight(desc_height)
+
+    def _on_guide_desc_lines_changed(self, idx: int):
+        val = self.guide_desc_lines_combo.currentData()
+        if val in (2, 3):
+            self.config_mgr.guide_detail_lines = val
+            self._update_guide_detail_box_height()
+            self.flash_save_indicator("Settings Saved")
 
     def _on_grid_rows_changed(self, val: int):
         self.config_mgr.grid_visible_rows = val
@@ -6086,12 +6136,17 @@ class MainWindow(QMainWindow):
             safety_margin = 4 if (total_rows > 0 and total_rows <= target_rows) else 0
 
             if vh < 100:
-                base_row_h = max(44, 62 + (grid_lvl * 12))
+                base_row_h = max(58, 62 + (grid_lvl * 12))
                 rem = 0
             else:
                 eff_vh = max(16, vh - safety_margin)
-                base_row_h = max(16, eff_vh // target_rows)
-                rem = eff_vh % target_rows
+                calc_h = eff_vh // target_rows
+                if calc_h < 58:
+                    base_row_h = 58
+                    rem = 0
+                else:
+                    base_row_h = calc_h
+                    rem = eff_vh % target_rows
 
             for r in range(total_rows):
                 extra = 1 if (r % target_rows) < rem else 0

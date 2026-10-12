@@ -55,3 +55,48 @@ def test_main_window_reset_defaults_ui(qtbot, isolated_config):
 
     assert win.end_buffer_spin.value() == 0
     assert win.grid_rows_spin.value() == 9
+
+
+def test_program_tile_delegate_paint(qtbot, isolated_config):
+    from PyQt6.QtWidgets import QTableWidget, QTableWidgetItem, QStyleOptionViewItem
+    from PyQt6.QtGui import QPixmap, QPainter, QFont
+    from PyQt6.QtCore import QRect
+    from kaffeine_dvr.gui import ProgramTileDelegate
+
+    table = QTableWidget(2, 2)
+    qtbot.addWidget(table)
+    delegate = ProgramTileDelegate(table, config_mgr=isolated_config)
+
+    prog_3line = {
+        "show_title": "The Lawrence Welk Show",
+        "episode_title": "Wunnerful Hit Songs",
+        "_primary_title": "The Lawrence Welk Show",
+        "_secondary_sub": "Wunnerful Hit Songs",
+        "_time_range": "4:00 PM - 5:00 PM",
+        "_category": "tvshows",
+        "_timing_state": "upcoming",
+    }
+    item = QTableWidgetItem()
+    item.setData(Qt.ItemDataRole.UserRole, prog_3line)
+    table.setItem(0, 0, item)
+
+    pix = QPixmap(200, 60)
+    painter = QPainter(pix)
+    opt = QStyleOptionViewItem()
+    opt.rect = QRect(0, 0, 200, 60)
+    opt.font = QFont("Sans Serif", 10)
+
+    # Should paint cleanly without throwing exceptions
+    delegate.paint(painter, opt, table.model().index(0, 0))
+    painter.end()
+
+
+def test_grid_zoom_base_row_h_minimum(qtbot, isolated_config):
+    win = MainWindow(config_mgr=isolated_config)
+    qtbot.addWidget(win)
+
+    # Set visible rows high and check that base_row_h does not collapse below 58
+    win.config_mgr.grid_visible_rows = 16
+    win._apply_guide_zoom()
+    assert win.guide_grid_table.verticalHeader().defaultSectionSize() >= 58
+

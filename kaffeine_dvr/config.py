@@ -99,6 +99,8 @@ class ConfigManager:
                         data["delete_timeshift_on_exit"] = True
                     if "grid_visible_rows" not in data:
                         data["grid_visible_rows"] = 9
+                    if "guide_detail_lines" not in data:
+                        data["guide_detail_lines"] = 3
                     if "live_same_bg_as_others" not in data:
                         data["live_same_bg_as_others"] = False
                     if "hide_live_badge" not in data:
@@ -159,6 +161,7 @@ class ConfigManager:
             "timeshift_buffer_seconds": 2,
             "delete_timeshift_on_exit": True,
             "grid_visible_rows": 9,
+            "guide_detail_lines": 3,
             "live_same_bg_as_others": False,
             "hide_live_badge": False,
             "category_colors": dict(DEFAULT_CATEGORY_COLORS)
@@ -609,6 +612,23 @@ class ConfigManager:
             self.data["grid_visible_rows"] = max(4, min(16, int(val)))
         except (ValueError, TypeError):
             self.data["grid_visible_rows"] = 9
+        self.save()
+
+    @property
+    def guide_detail_lines(self) -> int:
+        try:
+            val = int(self.data.get("guide_detail_lines", 3))
+            return 3 if val != 2 else 2
+        except (ValueError, TypeError):
+            return 3
+
+    @guide_detail_lines.setter
+    def guide_detail_lines(self, val: int):
+        try:
+            v = int(val)
+            self.data["guide_detail_lines"] = 2 if v <= 2 else 3
+        except (ValueError, TypeError):
+            self.data["guide_detail_lines"] = 3
         self.save()
 
     @property
