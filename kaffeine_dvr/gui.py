@@ -2915,7 +2915,7 @@ class MainWindow(QMainWindow):
             for m in (0, 30):
                 grid_headers.append(f"{h%12 or 12}:{m:02d} {'AM' if h < 12 else 'PM'}")
         self.guide_grid_table.setHorizontalHeaderLabels(grid_headers)
-        self.guide_grid_table.horizontalHeader().setDefaultSectionSize(165)
+        self.guide_grid_table.horizontalHeader().setDefaultSectionSize(200)
         self.guide_grid_table.horizontalHeader().setHighlightSections(False)
         self.guide_grid_table.verticalHeader().setDefaultSectionSize(62)
         self.guide_grid_table.verticalHeader().setHighlightSections(False)
@@ -5631,7 +5631,7 @@ class MainWindow(QMainWindow):
 
     def _scroll_grid_to_slot(self, slot: int, center: bool = False):
         bar = self.guide_grid_table.horizontalScrollBar()
-        col_width = self.guide_grid_table.horizontalHeader().defaultSectionSize() or 165
+        col_width = self.guide_grid_table.horizontalHeader().defaultSectionSize() or 200
         is_pixel = (self.guide_grid_table.horizontalScrollMode() == QAbstractItemView.ScrollMode.ScrollPerPixel)
 
         if not center or slot <= 0:
@@ -5802,7 +5802,7 @@ class MainWindow(QMainWindow):
             self.guide_grid_table.verticalHeader().setDefaultSectionSize(base_row_h)
             self.guide_grid_table.verticalScrollBar().setSingleStep(base_row_h)
 
-            col_w = max(130, int(base_row_h * 2.3))
+            col_w = max(180, int(base_row_h * 3.15))
             self.guide_grid_table.horizontalHeader().setDefaultSectionSize(col_w)
 
             zoom_delta = int((base_row_h - 62) / 8)
