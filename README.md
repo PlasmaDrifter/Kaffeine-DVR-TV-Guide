@@ -46,13 +46,13 @@ Kaffeine is a powerful digital TV viewer for KDE and Linux desktop environments,
 |:---:|
 | [![Traditional EPG Grid TV Guide View](docs/screenshots/guide_grid.png)](docs/screenshots/guide_grid.png) |
 
-| Recordings Schedule (DVR Queue & History) | Automation and DVR Settings |
-|:---:|:---:|
-| [![Recordings Schedule](docs/screenshots/recordings_schedule.png)](docs/screenshots/recordings_schedule.png) | [![Automation and DVR Settings](docs/screenshots/automation_dvr.png)](docs/screenshots/automation_dvr.png) |
-
-| Help and Information Setup Walkthrough |
+| General Settings |
 |:---:|
-| [![Help and Information Setup Walkthrough](docs/screenshots/help_guide.png)](docs/screenshots/help_guide.png) |
+| [![General Settings](docs/screenshots/general_settings.png)](docs/screenshots/general_settings.png) |
+
+| Recordings Schedule (DVR Queue & History) | Help and Information Setup Walkthrough |
+|:---:|:---:|
+| [![Recordings Schedule](docs/screenshots/recordings_schedule.png)](docs/screenshots/recordings_schedule.png) | [![Help and Information Setup Walkthrough](docs/screenshots/help_guide.png)](docs/screenshots/help_guide.png) |
 
 ---
 
