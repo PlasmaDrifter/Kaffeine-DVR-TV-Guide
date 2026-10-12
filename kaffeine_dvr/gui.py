@@ -7676,8 +7676,15 @@ class MainWindow(QMainWindow):
         super().keyPressEvent(event)
 
     def closeEvent(self, event):
-        self.settings.setValue("geometry", self.saveGeometry())
-        self._auto_save_automation_settings()
+        try:
+            self.settings.setValue("geometry", self.saveGeometry())
+            self._auto_save_automation_settings()
+            if hasattr(self, "_timeshift_poll_timer") and self._timeshift_poll_timer.isActive():
+                self._timeshift_poll_timer.stop()
+            if getattr(self, "_active_timeshift", None):
+                self.stop_timeshift_session(user_initiated=False)
+        except Exception:
+            pass
         super().closeEvent(event)
 
 
@@ -7829,7 +7836,12 @@ def main():
     setup_dark_theme(app)
     window = MainWindow()
     window.show()
-    sys.exit(app.exec())
+    ret = app.exec()
+    try:
+        app.removeEventFilter(wheel_filter)
+    except Exception:
+        pass
+    os._exit(ret)
 
 
 if __name__ == "__main__":
