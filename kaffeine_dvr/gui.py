@@ -2616,7 +2616,7 @@ class MainWindow(QMainWindow):
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(6)
 
-        self.guide_status_lbl = QLabel("TV Guide: Checking...")
+        self.guide_status_lbl = QLabel("Guide: Checking...")
         self.guide_status_lbl.setStyleSheet("font-size: 12px; color: #a4b0c2; font-weight: 500;")
         right_layout.addWidget(self.guide_status_lbl)
 
@@ -3569,7 +3569,8 @@ class MainWindow(QMainWindow):
         dvr_layout.addRow(
             make_setting_label(
                 "Default End Buffer:",
-                "Extra post-roll buffer added to the end of scheduled recordings to avoid clipping broadcast overruns."
+                "Extra post-roll buffer added to the end of scheduled recordings to avoid clipping broadcast overruns.\n\n"
+                "Note: Automatically suppressed for back-to-back recordings scheduled on different channels to yield the tuner for the next program on time."
             ),
             self.end_buffer_spin
         )
@@ -3933,22 +3934,6 @@ class MainWindow(QMainWindow):
         color_layout.setContentsMargins(15, 15, 15, 15)
         color_layout.setSpacing(12)
 
-        grid_rows_row = QHBoxLayout()
-        grid_rows_row.setSpacing(10)
-        grid_rows_lbl = QLabel("Visible Grid Rows:")
-        grid_rows_lbl.setStyleSheet("font-size: 13px; font-weight: bold; color: #e2e8f0;")
-        grid_rows_row.addWidget(grid_rows_lbl)
-
-        self.grid_rows_spin = NumberStepper()
-        self.grid_rows_spin.setRange(4, 16)
-        self.grid_rows_spin.setValue(self.config_mgr.grid_visible_rows)
-        self.grid_rows_spin.setSuffix(" rows")
-        self.grid_rows_spin.setFixedWidth(140)
-        self.grid_rows_spin.valueChanged.connect(self._on_grid_rows_changed)
-        grid_rows_row.addWidget(self.grid_rows_spin)
-        grid_rows_row.addStretch()
-        color_layout.addLayout(grid_rows_row)
-
         color_grid = QGridLayout()
         color_grid.setHorizontalSpacing(14)
         color_grid.setVerticalSpacing(8)
@@ -4036,6 +4021,19 @@ class MainWindow(QMainWindow):
         self.live_same_bg_check.setChecked(self.config_mgr.live_same_bg_as_others)
         self.live_same_bg_check.toggled.connect(self._on_live_same_bg_toggled)
         color_grid.addWidget(self.live_same_bg_check, 2, 4, Qt.AlignmentFlag.AlignVCenter)
+
+        # Row 3: Visible Grid Rows right under Live Tile Tint
+        lbl_rows = QLabel("<b>Visible Grid Rows:</b>")
+        lbl_rows.setStyleSheet("font-size: 13px; color: #e2e8f0;")
+        color_grid.addWidget(lbl_rows, 3, 2, 1, 2, Qt.AlignmentFlag.AlignVCenter)
+
+        self.grid_rows_spin = NumberStepper()
+        self.grid_rows_spin.setRange(4, 16)
+        self.grid_rows_spin.setValue(self.config_mgr.grid_visible_rows)
+        self.grid_rows_spin.setSuffix(" rows")
+        self.grid_rows_spin.setFixedWidth(130)
+        self.grid_rows_spin.valueChanged.connect(self._on_grid_rows_changed)
+        color_grid.addWidget(self.grid_rows_spin, 3, 4, Qt.AlignmentFlag.AlignVCenter)
 
         color_grid.setColumnStretch(1, 1)
         color_grid.setColumnStretch(3, 0)
@@ -4208,10 +4206,173 @@ class MainWindow(QMainWindow):
         action_layout.addLayout(install_btn_row)
 
         main_layout.addWidget(action_box)
+
+        # 4. Maintenance & Reset
+        maint_box = QGroupBox("Maintenance")
+        maint_layout = QVBoxLayout(maint_box)
+        maint_layout.setContentsMargins(15, 15, 15, 15)
+        maint_layout.setSpacing(12)
+
+        maint_desc = QLabel(
+            "Restore all application preferences, recording buffers, lead times, player options, and guide display settings to factory defaults. "
+            "Your channel lineup and recording rules will be preserved."
+        )
+        maint_desc.setStyleSheet("color: #8c98aa; font-size: 12px;")
+        maint_desc.setWordWrap(True)
+        maint_layout.addWidget(maint_desc)
+
+        maint_btn_row = QHBoxLayout()
+        self.reset_defaults_btn = QPushButton("Reset to Default Settings")
+        self.reset_defaults_btn.setStyleSheet(
+            "QPushButton { background-color: #2e3846; color: #f87171; border: 1px solid #475569; font-weight: bold; padding: 6px 14px; border-radius: 4px; }"
+            "QPushButton:hover { background-color: #7f1d1d; color: #ffffff; border-color: #ef4444; }"
+        )
+        self.reset_defaults_btn.clicked.connect(self._confirm_reset_to_defaults)
+        maint_btn_row.addWidget(self.reset_defaults_btn)
+        maint_btn_row.addStretch()
+        maint_layout.addLayout(maint_btn_row)
+
+        main_layout.addWidget(maint_box)
         main_layout.addStretch()
 
         scroll.setWidget(container)
         return scroll
+
+    def _confirm_reset_to_defaults(self):
+        reply = QMessageBox.question(
+            self,
+            "Reset to Default Settings",
+            "Are you sure you want to reset all settings to their default values?\n\n"
+            "This will restore all buffers, lead times, player options, and guide display settings to defaults.\n\n"
+            "Your channel lineup and recording rules will be preserved.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self.config_mgr.reset_to_defaults(keep_channels_and_rules=True)
+            self._refresh_all_settings_ui()
+            self._apply_guide_zoom()
+            if hasattr(self, "guide_grid_table"):
+                self.guide_grid_table.viewport().update()
+            self.flash_save_indicator("Settings restored to defaults")
+            QMessageBox.information(
+                self,
+                "Settings Reset",
+                "All settings have been restored to their default values."
+            )
+
+    def _refresh_all_settings_ui(self):
+        # General / Automation tab
+        if hasattr(self, "lead_time_spin"):
+            self.lead_time_spin.blockSignals(True)
+            self.lead_time_spin.setValue(self.config_mgr.lead_time_mins)
+            self.lead_time_spin.blockSignals(False)
+
+        if hasattr(self, "end_buffer_spin"):
+            self.end_buffer_spin.blockSignals(True)
+            self.end_buffer_spin.setValue(self.config_mgr.end_buffer_mins)
+            self.end_buffer_spin.blockSignals(False)
+
+        if hasattr(self, "auto_buffer_sports_check"):
+            self.auto_buffer_sports_check.blockSignals(True)
+            self.auto_buffer_sports_check.setChecked(self.config_mgr.auto_buffer_sports)
+            self.auto_buffer_sports_check.blockSignals(False)
+
+        if hasattr(self, "sports_buffer_spin"):
+            self.sports_buffer_spin.blockSignals(True)
+            self.sports_buffer_spin.setValue(self.config_mgr.sports_buffer_mins)
+            self.sports_buffer_spin.blockSignals(False)
+
+        if hasattr(self, "interval_spin"):
+            self.interval_spin.blockSignals(True)
+            self.interval_spin.setValue(self.config_mgr.watcher_interval_seconds)
+            self.interval_spin.blockSignals(False)
+
+        if hasattr(self, "notify_check"):
+            self.notify_check.blockSignals(True)
+            self.notify_check.setChecked(self.config_mgr.enable_desktop_notifications)
+            self.notify_check.blockSignals(False)
+
+        if hasattr(self, "notify_lead_spin"):
+            self.notify_lead_spin.blockSignals(True)
+            self.notify_lead_spin.setValue(self.config_mgr.notification_lead_time_mins)
+            self.notify_lead_spin.setEnabled(self.config_mgr.enable_desktop_notifications)
+            self.notify_lead_spin.blockSignals(False)
+
+        if hasattr(self, "launch_mode_combo"):
+            self.launch_mode_combo.blockSignals(True)
+            idx = self.launch_mode_combo.findData(self.config_mgr.launch_mode)
+            if idx >= 0:
+                self.launch_mode_combo.setCurrentIndex(idx)
+            self.launch_mode_combo.blockSignals(False)
+
+        if hasattr(self, "playback_player_combo"):
+            self.playback_player_combo.blockSignals(True)
+            idx = self.playback_player_combo.findData(self.config_mgr.playback_player)
+            if idx >= 0:
+                self.playback_player_combo.setCurrentIndex(idx)
+            self.playback_player_combo.blockSignals(False)
+
+        if hasattr(self, "custom_player_edit"):
+            self.custom_player_edit.blockSignals(True)
+            self.custom_player_edit.setText(self.config_mgr.custom_playback_player_cmd)
+            self.custom_player_edit.blockSignals(False)
+
+        if hasattr(self, "live_tv_mode_combo"):
+            self.live_tv_mode_combo.blockSignals(True)
+            idx = self.live_tv_mode_combo.findData(self.config_mgr.live_tv_watch_mode)
+            if idx >= 0:
+                self.live_tv_mode_combo.setCurrentIndex(idx)
+            self.live_tv_mode_combo.blockSignals(False)
+
+        if hasattr(self, "timeshift_buffer_spin"):
+            self.timeshift_buffer_spin.blockSignals(True)
+            self.timeshift_buffer_spin.setValue(self.config_mgr.timeshift_buffer_seconds)
+            self.timeshift_buffer_spin.blockSignals(False)
+
+        if hasattr(self, "delete_timeshift_check"):
+            self.delete_timeshift_check.blockSignals(True)
+            self.delete_timeshift_check.setChecked(self.config_mgr.delete_timeshift_on_exit)
+            self.delete_timeshift_check.blockSignals(False)
+
+        # Grid Guide Options
+        if hasattr(self, "grid_rows_spin"):
+            self.grid_rows_spin.blockSignals(True)
+            self.grid_rows_spin.setValue(self.config_mgr.grid_visible_rows)
+            self.grid_rows_spin.blockSignals(False)
+
+        if hasattr(self, "hide_live_badge_check"):
+            self.hide_live_badge_check.blockSignals(True)
+            self.hide_live_badge_check.setChecked(self.config_mgr.hide_live_badge)
+            self.hide_live_badge_check.blockSignals(False)
+
+        if hasattr(self, "live_same_bg_check"):
+            self.live_same_bg_check.blockSignals(True)
+            self.live_same_bg_check.setChecked(self.config_mgr.live_same_bg_as_others)
+            self.live_same_bg_check.blockSignals(False)
+
+        # Color Swatches
+        colors = self.config_mgr.category_colors
+        if hasattr(self, "_cat_swatches"):
+            for cat_key, swatch_btn in self._cat_swatches.items():
+                hex_val = colors.get(cat_key, DEFAULT_CATEGORY_COLORS.get(cat_key, "#ffffff"))
+                swatch_btn.setStyleSheet(f"QPushButton.category-color-tile {{ background-color: {hex_val}; }}")
+
+        # Updates tab
+        if hasattr(self, "auto_check_updates_cb"):
+            self.auto_check_updates_cb.blockSignals(True)
+            self.auto_check_updates_cb.setChecked(self.config_mgr.auto_check_updates)
+            self.auto_check_updates_cb.blockSignals(False)
+
+        if hasattr(self, "update_freq_combo"):
+            self.update_freq_combo.blockSignals(True)
+            current_freq = self.config_mgr.update_check_frequency.capitalize()
+            self.update_freq_combo.setCurrentText(current_freq if current_freq in ("Weekly", "Monthly") else "Weekly")
+            self.update_freq_combo.setEnabled(self.config_mgr.auto_check_updates)
+            self.update_freq_combo.blockSignals(False)
+
+        if hasattr(self, "check_desc"):
+            self.check_desc.setText(self._get_update_freq_desc_text())
 
     def _get_update_freq_desc_text(self) -> str:
         freq = self.config_mgr.update_check_frequency
@@ -5368,11 +5529,11 @@ class MainWindow(QMainWindow):
             except Exception:
                 relative_str = last_updated
 
-            self.guide_status_lbl.setText(f"TV Guide Updated: {relative_str}")
+            self.guide_status_lbl.setText(f"Guide Updated: {relative_str}")
             friendly_updated = format_american_datetime(last_updated) or last_updated
             self.guide_status_lbl.setToolTip(f"Last sync completed: {friendly_updated}")
         else:
-            self.guide_status_lbl.setText("TV Guide: Not Synced")
+            self.guide_status_lbl.setText("Guide: Not Synced")
 
     def launch_kaffeine(self):
         self.status_bar.showMessage("Launching Kaffeine...", 3000)

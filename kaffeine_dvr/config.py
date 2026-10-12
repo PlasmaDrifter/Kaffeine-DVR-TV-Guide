@@ -113,7 +113,13 @@ class ConfigManager:
             except Exception:
                 pass
         
-        default_data = {
+        default_data = self.get_default_config()
+        self._save(default_data)
+        return default_data
+
+    @staticmethod
+    def get_default_config() -> Dict[str, Any]:
+        return {
             "channel_map": DEFAULT_CHANNEL_MAP.copy(),
             "rules": [],
             "guide_days_ahead": 14,
@@ -157,8 +163,22 @@ class ConfigManager:
             "hide_live_badge": False,
             "category_colors": dict(DEFAULT_CATEGORY_COLORS)
         }
-        self._save(default_data)
-        return default_data
+
+    def reset_to_defaults(self, keep_channels_and_rules: bool = True):
+        cur_channels = self.data.get("channel_map", DEFAULT_CHANNEL_MAP.copy())
+        cur_rules = self.data.get("rules", [])
+        cur_passport = self.data.get("tvpassport_stations", {})
+        cur_first_run = self.data.get("first_run_completed", True)
+
+        defaults = self.get_default_config()
+        if keep_channels_and_rules:
+            defaults["channel_map"] = cur_channels
+            defaults["rules"] = cur_rules
+            defaults["tvpassport_stations"] = cur_passport
+            defaults["first_run_completed"] = cur_first_run
+
+        self.data = defaults
+        self.save()
 
 
     def _save(self, data: Dict[str, Any]):
