@@ -10,8 +10,8 @@ DEFAULT_CATEGORY_COLORS = {
     "movies": "#c084fc",
     "tvshows": "#b9feff",
     "highlight": "#38bdf8",
-    "live_progress": "#38bdf8",
-    "live_bg": "#232b3e",
+    "live_badge": "#ef4444",
+    "live_bg": "#132400",
 }
 
 class ConfigManager:

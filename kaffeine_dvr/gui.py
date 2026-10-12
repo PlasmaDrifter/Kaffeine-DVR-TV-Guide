@@ -1411,7 +1411,7 @@ class ProgramTileDelegate(QStyledItemDelegate):
     COLOR_DEFAULT_BG_ALT = QColor("#1e2332")
     COLOR_PAST_BG = QColor("#161922")
     COLOR_PAST_BG_ALT = QColor("#14171f")
-    COLOR_LIVE_BG = QColor("#232b3e")
+    COLOR_LIVE_BG = QColor("#132400")
     COLOR_DEFAULT_BORDER_SCHED = QColor("#e53935")
     COLOR_DEFAULT_BORDER = QColor("#333c4e")
     COLOR_PAST_BORDER = QColor("#262c3a")
@@ -1432,8 +1432,8 @@ class ProgramTileDelegate(QStyledItemDelegate):
         "movies": QColor("#c084fc"),
         "tvshows": QColor("#b9feff"),
         "highlight": QColor("#38bdf8"),
-        "live_progress": QColor("#38bdf8"),
-        "live_bg": QColor("#232b3e"),
+        "live_badge": QColor("#ef4444"),
+        "live_bg": QColor("#132400"),
     }
 
     def __init__(self, parent=None, config_mgr=None):
@@ -1531,29 +1531,6 @@ class ProgramTileDelegate(QStyledItemDelegate):
             pen_width = 2 if is_scheduled else 1
 
         painter.fillRect(rect, bg_color)
-
-        # Draw live broadcast progress bar at bottom of tile if currently airing
-        if timing_state == "live":
-            start_iso = prog.get("start_iso")
-            dur_iso = prog.get("duration_iso") or "00:30:00"
-            if start_iso:
-                try:
-                    dt = datetime.fromisoformat(start_iso)
-                    parts = [int(x) for x in dur_iso.split(":")]
-                    dur = timedelta(hours=parts[0], minutes=parts[1], seconds=parts[2] if len(parts) > 2 else 0)
-                    now = datetime.now()
-                    tot_sec = dur.total_seconds()
-                    if tot_sec > 0:
-                        prog_ratio = max(0.0, min(1.0, (now - dt).total_seconds() / tot_sec))
-                        if prog_ratio > 0.0:
-                            prog_bar_h = 3
-                            pw = max(2, int((rect.width() - 2) * prog_ratio))
-                            painter.fillRect(QRect(rect.left() + 1, rect.bottom() - prog_bar_h, rect.width() - 2, prog_bar_h), QColor("#181f2a"))
-                            prog_bar_color = self.get_category_color("live_progress")
-                            painter.fillRect(QRect(rect.left() + 1, rect.bottom() - prog_bar_h, pw, prog_bar_h), prog_bar_color)
-                except Exception:
-                    pass
-
         painter.setPen(QPen(border_color, pen_width))
         painter.drawRect(rect.adjusted(0, 0, -1, -1))
 
@@ -1612,6 +1589,31 @@ class ProgramTileDelegate(QStyledItemDelegate):
         line1_rect = QRect(rect.left() + pad_left, rect.top() + pad_top, inner_width_title, fm_title.height())
         painter.drawText(line1_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, elided_title)
 
+        # Lower-right live badge
+        live_badge_w = 0
+        if timing_state == "live":
+            badge_font = QFont(option.font)
+            badge_font.setBold(True)
+            badge_font.setPointSize(max(7, 8 + int(self.zoom_delta * 0.5)))
+            fm_badge = QFontMetrics(badge_font)
+            text_w = fm_badge.horizontalAdvance("LIVE")
+            live_badge_w = max(34, text_w + 10)
+            live_badge_h = max(14, fm_badge.height() + 2)
+
+            pad_b = 6
+            badge_x = rect.right() - pad_right - live_badge_w
+            badge_y = rect.bottom() - pad_b - live_badge_h
+            badge_rect = QRect(badge_x, badge_y, live_badge_w, live_badge_h)
+
+            badge_color = self.get_category_color("live_badge")
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(badge_color)
+            painter.drawRoundedRect(badge_rect, 3, 3)
+
+            painter.setPen(QColor("#ffffff"))
+            painter.setFont(badge_font)
+            painter.drawText(badge_rect, Qt.AlignmentFlag.AlignCenter, "LIVE")
+
         # Line 2: Time Range & Subtitle
         font_sub = QFont(option.font)
         font_sub.setBold(False)
@@ -1621,8 +1623,9 @@ class ProgramTileDelegate(QStyledItemDelegate):
 
         fm_sub = painter.fontMetrics()
         subtext = f"{time_range} • {secondary_sub}" if secondary_sub else time_range
-        elided_sub = fm_sub.elidedText(subtext, Qt.TextElideMode.ElideRight, inner_width)
-        line2_rect = QRect(rect.left() + pad_left, rect.top() + pad_top + fm_title.height() + 4, inner_width, fm_sub.height())
+        inner_width_sub = max(10, inner_width - (live_badge_w + 6 if live_badge_w > 0 else 0))
+        elided_sub = fm_sub.elidedText(subtext, Qt.TextElideMode.ElideRight, inner_width_sub)
+        line2_rect = QRect(rect.left() + pad_left, rect.top() + pad_top + fm_title.height() + 4, inner_width_sub, fm_sub.height())
         painter.drawText(line2_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, elided_sub)
 
         painter.restore()
@@ -3952,7 +3955,7 @@ class MainWindow(QMainWindow):
             ("movies", "Movies"),
             ("tvshows", "TV Shows / Series"),
             ("highlight", "Selection Highlighter"),
-            ("live_progress", "Live Progress Bar"),
+            ("live_badge", "Live Badge"),
             ("live_bg", "Live Tile Tint"),
         ]
 
