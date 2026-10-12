@@ -2595,11 +2595,6 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
 
-        # Status Banner
-        self.status_banner_widget = QWidget()
-        self.status_banner_widget.setLayout(self.create_status_banner())
-        main_layout.addWidget(self.status_banner_widget)
-
         # Muted update notification badge (placed in action bar just above status bar)
         self.update_badge_widget = self._create_update_badge_widget()
 
@@ -2656,53 +2651,6 @@ class MainWindow(QMainWindow):
 
         widget.setVisible(False)
         return widget
-
-    def create_status_banner(self) -> QGridLayout:
-        banner = QGridLayout()
-        banner.setContentsMargins(0, 0, 0, 0)
-        banner.setSpacing(0)
-
-        # Column 0: Far Left empty spacer container to balance grid layout
-        left_container = QWidget()
-        banner.addWidget(left_container, 0, 0, Qt.AlignmentFlag.AlignLeft)
-
-        # Column 1: Middle auto-save notification indicator (guaranteed true center)
-        self.save_indicator_lbl = QLabel("Changes save automatically")
-        self.save_indicator_lbl.setStyleSheet(
-            "color: #8c98aa; font-size: 11px; padding: 4px 6px; background: transparent;"
-        )
-        self.save_indicator_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        banner.addWidget(self.save_indicator_lbl, 0, 1, Qt.AlignmentFlag.AlignCenter)
-
-        # Column 2: Far Right Guide status label and sync button
-        right_container = QWidget()
-        right_layout = QHBoxLayout(right_container)
-        right_layout.setContentsMargins(0, 0, 0, 0)
-        right_layout.setSpacing(6)
-
-        self.guide_status_lbl = QLabel("Guide: Checking...")
-        self.guide_status_lbl.setStyleSheet("font-size: 12px; color: #a4b0c2; font-weight: 500;")
-        right_layout.addWidget(self.guide_status_lbl)
-
-        self.sync_guide_btn = QPushButton("Sync Guide Now")
-        self.sync_guide_btn.setStyleSheet(
-            "QPushButton { padding: 3px 10px; font-size: 11px; font-weight: 500; "
-            "border: 1px solid #3d465c; border-radius: 4px; background-color: #212635; color: #c8d2df; }"
-            "QPushButton:hover { background-color: #313d56; border: 1px solid #5a80b8; color: #ffffff; }"
-            "QPushButton:pressed { background-color: #1a1e2b; border: 1px solid #353d50; }"
-            "QPushButton:disabled { background-color: #1a1c26; border: 1px solid #2a3040; color: #5d6778; }"
-        )
-        self.sync_guide_btn.clicked.connect(self.sync_guide)
-        right_layout.addWidget(self.sync_guide_btn)
-
-        banner.addWidget(right_container, 0, 2, Qt.AlignmentFlag.AlignRight)
-
-        # Guarantee true horizontal centering by making col 0 and col 2 stretch equally
-        banner.setColumnStretch(0, 1)
-        banner.setColumnStretch(1, 0)
-        banner.setColumnStretch(2, 1)
-
-        return banner
 
     # ------------------ TAB 1: RECORDINGS ------------------
     def create_recordings_tab(self) -> QWidget:
@@ -3077,10 +3025,10 @@ class MainWindow(QMainWindow):
         font.setPixelSize(16)
         self.guide_detail_text.setFont(font)
         self.guide_detail_text.setStyleSheet("font-size: 16px; line-height: 1.35; padding: 6px 10px;")
-        # Size description box to fit approximately 4 lines of text
+        # Size description box to fit approximately 3 lines of text
         line_height = self.guide_detail_text.fontMetrics().lineSpacing()
         doc_margin = int(self.guide_detail_text.document().documentMargin())
-        desc_height = line_height * 4 + doc_margin * 2 + 16
+        desc_height = line_height * 3 + doc_margin * 2 + 16
         self.guide_detail_text.setFixedHeight(desc_height)
         detail_layout.addWidget(self.guide_detail_text)
 
@@ -3256,6 +3204,18 @@ class MainWindow(QMainWindow):
         self.test_health_btn = QPushButton("Test All Sources Now")
         self.test_health_btn.clicked.connect(lambda: self.test_all_sources_health(silent=False))
         btn_row.addWidget(self.test_health_btn)
+
+        self.sync_guide_btn = QPushButton("Sync Guide Now")
+        self.sync_guide_btn.setStyleSheet(
+            "QPushButton { padding: 4px 14px; font-weight: 500; }"
+        )
+        self.sync_guide_btn.clicked.connect(self.sync_guide)
+        btn_row.addWidget(self.sync_guide_btn)
+
+        self.guide_status_lbl = QLabel("Guide: Checking...")
+        self.guide_status_lbl.setStyleSheet("font-size: 12px; color: #a4b0c2; font-weight: 500; padding-left: 6px;")
+        btn_row.addWidget(self.guide_status_lbl)
+
         btn_row.addStretch()
         health_layout.addLayout(btn_row)
         layout.addWidget(health_box)
@@ -3629,13 +3589,26 @@ class MainWindow(QMainWindow):
         self.lead_time_spin.setValue(self.config_mgr.lead_time_mins)
         self.lead_time_spin.setSuffix(" minutes")
         self.lead_time_spin.setFixedWidth(160)
+
+        # Auto-save indicator aligned on the far right of the top DVR row
+        self.save_indicator_lbl = QLabel("Auto-save active")
+        self.save_indicator_lbl.setStyleSheet(
+            "color: #8c98aa; font-size: 11px; padding: 2px 4px; background: transparent;"
+        )
+
+        lead_time_row = QHBoxLayout()
+        lead_time_row.setContentsMargins(0, 0, 0, 0)
+        lead_time_row.addWidget(self.lead_time_spin)
+        lead_time_row.addStretch()
+        lead_time_row.addWidget(self.save_indicator_lbl)
+
         dvr_layout.addRow(
             make_setting_label(
                 "Just-In-Time Lead Time:",
                 "Minutes before show start time to auto-launch Kaffeine and arm recording timer.\n"
                 "Keeping this low (e.g. 2-5m) prevents Kaffeine from blocking system reboots and shutdowns."
             ),
-            self.lead_time_spin
+            lead_time_row
         )
 
         self.end_buffer_spin = NumberStepper()
@@ -5162,9 +5135,9 @@ class MainWindow(QMainWindow):
 
     def _reset_save_indicator(self):
         if hasattr(self, "save_indicator_lbl"):
-            self.save_indicator_lbl.setText("Changes save automatically")
+            self.save_indicator_lbl.setText("Auto-save active")
             self.save_indicator_lbl.setStyleSheet(
-                "color: #8c98aa; font-size: 11px; padding: 4px 6px; background: transparent;"
+                "color: #8c98aa; font-size: 11px; padding: 2px 4px; background: transparent;"
             )
 
     def _get_window_size_label_text(self) -> str:
@@ -5392,7 +5365,7 @@ class MainWindow(QMainWindow):
             self.storage_status_lbl.setText(
                 f"Directory: {folder}\nFree Disk Space: {free_gb} GB / {total_gb} GB ({pct}% free)"
             )
-            self.storage_status_lbl.setStyleSheet(f"font-weight: bold; font-size: 11px; color: {color};")
+            self.storage_status_lbl.setStyleSheet(f"font-weight: bold; font-size: 13px; color: {color};")
 
     def run_manual_cleanup(self):
         retention_days = self.retention_days_spin.value()
@@ -6177,9 +6150,6 @@ class MainWindow(QMainWindow):
     def toggle_guide_maximized(self):
         self._guide_maximized = not getattr(self, "_guide_maximized", False)
         is_max = self._guide_maximized
-
-        if hasattr(self, "status_banner_widget"):
-            self.status_banner_widget.setVisible(not is_max)
 
         if hasattr(self, "tabs"):
             self.tabs.tabBar().setVisible(not is_max)
