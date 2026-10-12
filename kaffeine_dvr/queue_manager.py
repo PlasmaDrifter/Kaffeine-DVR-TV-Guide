@@ -504,6 +504,20 @@ class QueueManager:
                 mapping[(ch, start)] = r
         return mapping
 
+    def get_history_map(self, limit: int = 200) -> Dict[Any, Dict[str, Any]]:
+        """
+        Returns a mapping of (channel_lower, start_iso[:16]) -> history_dict
+        for past completed recordings in recording_history.
+        """
+        history = self.list_history(limit=limit)
+        mapping = {}
+        for r in history:
+            ch = r.get("channel", "").strip().lower()
+            start = r.get("start_iso", "")[:16]
+            if ch and start:
+                mapping[(ch, start)] = r
+        return mapping
+
     def remove_recording(self, queue_id: int) -> Optional[Dict[str, Any]]:
         """
         Removes/cancels a recording from queue. Returns the recording's details dictionary

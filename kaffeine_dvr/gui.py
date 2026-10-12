@@ -1521,6 +1521,7 @@ class ProgramTileDelegate(QStyledItemDelegate):
                         is_selected = True
 
         is_scheduled = bool(prog.get("_scheduled_rec"))
+        is_past_recorded = bool(prog.get("_history_rec"))
         timing_state = prog.get("_timing_state")
         if not timing_state:
             start_iso = prog.get("start_iso")
@@ -1550,22 +1551,23 @@ class ProgramTileDelegate(QStyledItemDelegate):
 
         # Determine background fill based on program timing state
         same_bg = bool(getattr(self.config_mgr, "live_same_bg_as_others", False)) if self.config_mgr else False
+        has_rec_border = is_scheduled or (timing_state == "past" and is_past_recorded)
         if timing_state == "past":
             bg_color = self.COLOR_PAST_BG_ALT if is_alt else self.COLOR_PAST_BG
-            default_border = self.COLOR_PAST_BORDER_SCHED if is_scheduled else self.COLOR_PAST_BORDER
+            default_border = self.COLOR_PAST_BORDER_SCHED if has_rec_border else self.COLOR_PAST_BORDER
         elif timing_state == "live" and not same_bg:
             bg_color = self.get_category_color("live_bg")
-            default_border = self.COLOR_DEFAULT_BORDER_SCHED if is_scheduled else self.COLOR_DEFAULT_BORDER
+            default_border = self.COLOR_DEFAULT_BORDER_SCHED if has_rec_border else self.COLOR_DEFAULT_BORDER
         else:
             bg_color = self.COLOR_DEFAULT_BG_ALT if is_alt else self.COLOR_DEFAULT_BG
-            default_border = self.COLOR_DEFAULT_BORDER_SCHED if is_scheduled else self.COLOR_DEFAULT_BORDER
+            default_border = self.COLOR_DEFAULT_BORDER_SCHED if has_rec_border else self.COLOR_DEFAULT_BORDER
 
         if is_selected:
             border_color = self.get_category_color("highlight")
             pen_width = 2
         else:
             border_color = default_border
-            pen_width = 2 if is_scheduled else 1
+            pen_width = 2 if has_rec_border else 1
 
         painter.fillRect(rect, bg_color)
         painter.setPen(QPen(border_color, pen_width))
@@ -2894,6 +2896,19 @@ class MainWindow(QMainWindow):
         self.jump_prime_btn.setStyleSheet(jump_btn_style)
         self.jump_prime_btn.clicked.connect(self.jump_guide_to_primetime)
         filter_bar.addWidget(self.jump_prime_btn)
+
+        self.guide_refresh_btn = QPushButton()
+        self.guide_refresh_btn.setIcon(self._create_guide_refresh_icon())
+        self.guide_refresh_btn.setIconSize(QSize(16, 16))
+        self.guide_refresh_btn.setToolTip("Refresh Guide & Recording Statuses")
+        self.guide_refresh_btn.setStyleSheet(
+            "QPushButton { min-width: 28px; max-width: 28px; min-height: 24px; max-height: 24px; "
+            "padding: 0px; border: 1px solid #3d465c; border-radius: 4px; background-color: #212635; }"
+            "QPushButton:hover { background-color: #313d56; border: 1px solid #5a80b8; }"
+            "QPushButton:pressed { background-color: #1a1e2b; border: 1px solid #353d50; }"
+        )
+        self.guide_refresh_btn.clicked.connect(self.filter_guide)
+        filter_bar.addWidget(self.guide_refresh_btn)
 
         # Dynamic stretch before Zoom (+ / -) controls to center between Prime Time and Search
         filter_bar.addStretch(1)
@@ -5955,13 +5970,10 @@ class MainWindow(QMainWindow):
     def jump_guide_to_now(self):
         if self._is_grid_view_active():
             now = datetime.now()
-            # 10-minute buffer: if 50+ minutes past the hour, advance to the next hour's slot
-            if now.minute >= 50:
-                target_slot = min(47, (now.hour + 1) * 2)
-            elif now.minute >= 30:
-                target_slot = now.hour * 2 + 1
-            else:
-                target_slot = now.hour * 2
+            # Align the left edge of the grid to the current hour (e.g. 10:00 AM at 10:15).
+            # Do not advance to the next hour until :50 past the hour.
+            effective_hour = (now.hour + 1) if now.minute >= 50 else now.hour
+            target_slot = min(47, effective_hour * 2)
             self._scroll_grid_to_slot(target_slot, center=False)
         else:
             self._scroll_list_to_first_active()
@@ -6253,6 +6265,35 @@ class MainWindow(QMainWindow):
             # Bottom-Right corner pointing toward center
             p.drawLine(QPointF(19.5, 14.0), QPointF(14.0, 14.0))
             p.drawLine(QPointF(14.0, 14.0), QPointF(14.0, 19.5))
+
+            p.end()
+            icon.addPixmap(pix, mode)
+        return icon
+
+    @staticmethod
+    def _create_guide_refresh_icon() -> QIcon:
+        """
+        Crisp circular refresh arrow icon (22x22).
+        """
+        icon = QIcon()
+        for mode, color in [(QIcon.Mode.Normal, "#c8d2df"), (QIcon.Mode.Disabled, "#414b5d")]:
+            pix = QPixmap(22, 22)
+            pix.fill(Qt.GlobalColor.transparent)
+            p = QPainter(pix)
+            p.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+            arc_pen = QPen(QColor(color), 2.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
+            p.setPen(arc_pen)
+            # Circular arc centered in 22x22 box
+            arc_rect = QRectF(3.5, 3.5, 15.0, 15.0)
+            # Span from 45 degrees for 280 degrees clockwise
+            p.drawArc(arc_rect, int(45 * 16), int(280 * 16))
+
+            # Arrow head pointing clockwise at top-right
+            arrow_pen = QPen(QColor(color), 2.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.MiterJoin)
+            p.setPen(arrow_pen)
+            p.drawLine(QPointF(14.0, 2.0), QPointF(17.5, 5.5))
+            p.drawLine(QPointF(13.0, 6.5), QPointF(17.5, 5.5))
 
             p.end()
             icon.addPixmap(pix, mode)
@@ -6563,6 +6604,7 @@ class MainWindow(QMainWindow):
 
     def _populate_list_guide(self, programs: List[Dict[str, Any]]):
         active_scheduled = self.queue_mgr.get_active_scheduled_map()
+        history_map = self.queue_mgr.get_history_map(limit=200)
         self.guide_table.setUpdatesEnabled(False)
         self.guide_table.blockSignals(True)
         try:
@@ -6571,6 +6613,7 @@ class MainWindow(QMainWindow):
                 ch = (p.get("kaffeine_channel") or "").strip().lower()
                 start_iso = (p.get("start_iso") or "")[:16]
                 rec_info = active_scheduled.get((ch, start_iso))
+                hist_info = history_map.get((ch, start_iso))
 
                 timing_info = self._get_program_timing_state(p)
                 timing_state = timing_info.get("state", "upcoming")
@@ -6583,22 +6626,31 @@ class MainWindow(QMainWindow):
                     rec_text = "● REC"
                 elif rec_info:
                     rec_text = "○ SCHED"
+                elif hist_info and timing_state == "past":
+                    rec_text = "● REC"
                 else:
                     rec_text = ""
 
                 rec_item = QTableWidgetItem(rec_text)
                 rec_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                if rec_info:
-                    if is_recording:
-                        rec_item.setForeground(QColor("#ff5252"))
-                        tip_prefix = "Recording Now"
-                    else:
-                        rec_item.setForeground(QColor("#ffa028"))
-                        tip_prefix = "Recording Scheduled"
+                if is_recording:
+                    rec_item.setForeground(QColor("#ff5252"))
+                    tip_prefix = "Recording Now"
+                    buf_val = rec_info.get("buffer_mins", 0) if rec_info else 0
+                    buf_tip = f" | +{buf_val}m buffer" if buf_val else ""
+                    rec_item.setToolTip(f"{tip_prefix} (Queue #{rec_info.get('id')} - {rec_info.get('status')}{buf_tip})")
                     rec_item.setFont(QFont("", -1, QFont.Weight.Bold))
+                elif rec_info:
+                    rec_item.setForeground(QColor("#ffa028"))
+                    tip_prefix = "Recording Scheduled"
                     buf_val = rec_info.get("buffer_mins", 0)
                     buf_tip = f" | +{buf_val}m buffer" if buf_val else ""
                     rec_item.setToolTip(f"{tip_prefix} (Queue #{rec_info.get('id')} - {rec_info.get('status')}{buf_tip})")
+                    rec_item.setFont(QFont("", -1, QFont.Weight.Bold))
+                elif hist_info and timing_state == "past":
+                    rec_item.setForeground(QColor("#8b0000"))
+                    rec_item.setToolTip(f"Recorded Program (Completed at {hist_info.get('completed_at', '')})")
+                    rec_item.setFont(QFont("", -1, QFont.Weight.Bold))
                 self.guide_table.setItem(row, 0, rec_item)
 
                 raw_start = p.get("start_time_local", "")
@@ -6669,6 +6721,7 @@ class MainWindow(QMainWindow):
 
     def _populate_grid_guide(self, programs: List[Dict[str, Any]], airdate: Optional[str], keep_scroll: bool = False):
         active_scheduled = self.queue_mgr.get_active_scheduled_map()
+        history_map = self.queue_mgr.get_history_map(limit=200)
 
         # Clear existing spans and items
         self.guide_grid_table.clearSpans()
@@ -6766,10 +6819,11 @@ class MainWindow(QMainWindow):
                 end_fmt = end_dt.strftime("%I:%M %p").lstrip("0")
                 time_range = f"{start_fmt} - {end_fmt}"
 
-                # Match active recording
+                # Match active recording or past completed recording
                 ch_key = (ch or "").strip().lower()
                 iso_key = (start_iso or "")[:16]
                 scheduled_rec = active_scheduled.get((ch_key, iso_key))
+                history_rec = history_map.get((ch_key, iso_key))
 
                 # Determine timing state (past, live, upcoming)
                 now = datetime.now()
@@ -6785,6 +6839,7 @@ class MainWindow(QMainWindow):
                 p_copy["_time_range"] = time_range
                 p_copy["_category"] = classify_guide_category(p)
                 p_copy["_scheduled_rec"] = scheduled_rec
+                p_copy["_history_rec"] = history_rec
                 p_copy["_timing_state"] = timing_state
                 p_title, p_sub = get_program_display_titles(p)
                 p_copy["_primary_title"] = p_title
