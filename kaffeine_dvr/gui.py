@@ -1159,7 +1159,7 @@ class TableViewportResizeFilter(QObject):
         return super().eventFilter(obj, event)
 
 
-class NumberStepper(QWidget):
+class NumberStepper(QFrame):
     """
     Horizontal stepper control with [-] [ Number Box ] [+] layout.
     Provides clear, easy-to-click decrement and increment buttons with auto-repeat,
@@ -1169,8 +1169,15 @@ class NumberStepper(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setObjectName("numberStepper")
+        self.setStyleSheet(
+            "QFrame#numberStepper { "
+            "border: 1px solid #3c465d; border-radius: 6px; "
+            "background-color: #12141d; min-height: 28px; max-height: 28px; } "
+            "QFrame#numberStepper:hover { border-color: #4f5d7e; }"
+        )
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(2, 2, 2, 2)
         layout.setSpacing(0)
 
         self._btn_minus = QPushButton("−")
@@ -1180,13 +1187,11 @@ class NumberStepper(QWidget):
         self._btn_minus.setAutoRepeatInterval(80)
         self._btn_minus.setStyleSheet(
             "QPushButton { "
-            "min-width: 28px; max-width: 28px; min-height: 28px; max-height: 28px; "
-            "font-size: 15px; font-weight: bold; border: 1px solid #3c465d; "
-            "border-top-left-radius: 4px; border-bottom-left-radius: 4px; "
-            "border-top-right-radius: 0px; border-bottom-right-radius: 0px; "
-            "border-right: none; background-color: #212635; color: #c8d2df; padding: 0px; } "
-            "QPushButton:hover { background-color: #313d56; color: #ffffff; border-color: #5a80b8; } "
-            "QPushButton:pressed { background-color: #171b26; }"
+            "min-width: 24px; max-width: 24px; min-height: 24px; max-height: 24px; "
+            "font-size: 14px; font-weight: bold; border: none; border-radius: 4px; "
+            "background-color: transparent; color: #94a3b8; padding: 0px; } "
+            "QPushButton:hover { background-color: #242c3d; color: #ffffff; } "
+            "QPushButton:pressed { background-color: #1a202c; }"
         )
 
         self._spin = QSpinBox()
@@ -1194,10 +1199,8 @@ class NumberStepper(QWidget):
         self._spin.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._spin.setStyleSheet(
             "QSpinBox { "
-            "border-radius: 0px; border: 1px solid #3c465d; "
-            "background-color: #12141d; color: #e4e9f0; "
-            "min-height: 28px; max-height: 28px; padding: 2px 6px; } "
-            "QSpinBox:focus { border-color: #4a8df5; }"
+            "border: none; background: transparent; "
+            "color: #e4e9f0; min-height: 24px; max-height: 24px; font-size: 13px; padding: 0px 4px; } "
         )
 
         self._btn_plus = QPushButton("+")
@@ -1207,13 +1210,11 @@ class NumberStepper(QWidget):
         self._btn_plus.setAutoRepeatInterval(80)
         self._btn_plus.setStyleSheet(
             "QPushButton { "
-            "min-width: 28px; max-width: 28px; min-height: 28px; max-height: 28px; "
-            "font-size: 15px; font-weight: bold; border: 1px solid #3c465d; "
-            "border-top-right-radius: 4px; border-bottom-right-radius: 4px; "
-            "border-top-left-radius: 0px; border-bottom-left-radius: 0px; "
-            "border-left: none; background-color: #212635; color: #c8d2df; padding: 0px; } "
-            "QPushButton:hover { background-color: #313d56; color: #ffffff; border-color: #5a80b8; } "
-            "QPushButton:pressed { background-color: #171b26; }"
+            "min-width: 24px; max-width: 24px; min-height: 24px; max-height: 24px; "
+            "font-size: 14px; font-weight: bold; border: none; border-radius: 4px; "
+            "background-color: transparent; color: #94a3b8; padding: 0px; } "
+            "QPushButton:hover { background-color: #242c3d; color: #ffffff; } "
+            "QPushButton:pressed { background-color: #1a202c; }"
         )
 
         layout.addWidget(self._btn_minus)
@@ -4081,10 +4082,10 @@ class MainWindow(QMainWindow):
         self.live_same_bg_check.toggled.connect(self._on_live_same_bg_toggled)
         color_grid.addWidget(self.live_same_bg_check, 2, 5, Qt.AlignmentFlag.AlignVCenter)
 
-        # Row 3: Visible Grid Rows right under Live Tile Tint
-        lbl_rows = QLabel("<b>Visible Grid Rows:</b>")
+        # Column 3: Guide & Detail Sizing
+        lbl_rows = QLabel("<b>Grid Rows:</b>")
         lbl_rows.setStyleSheet("font-size: 13px; color: #e2e8f0;")
-        color_grid.addWidget(lbl_rows, 3, 3, 1, 2, Qt.AlignmentFlag.AlignVCenter)
+        color_grid.addWidget(lbl_rows, 0, 7, Qt.AlignmentFlag.AlignVCenter)
 
         self.grid_rows_spin = NumberStepper()
         self.grid_rows_spin.setRange(4, 16)
@@ -4092,12 +4093,11 @@ class MainWindow(QMainWindow):
         self.grid_rows_spin.setSuffix(" rows")
         self.grid_rows_spin.setFixedWidth(130)
         self.grid_rows_spin.valueChanged.connect(self._on_grid_rows_changed)
-        color_grid.addWidget(self.grid_rows_spin, 3, 5, Qt.AlignmentFlag.AlignVCenter)
+        color_grid.addWidget(self.grid_rows_spin, 0, 8, Qt.AlignmentFlag.AlignVCenter)
 
-        # Row 4: Description Box Lines (2 or 3 lines)
-        lbl_desc_lines = QLabel("<b>Description Lines:</b>")
+        lbl_desc_lines = QLabel("<b>Grid Box:</b>")
         lbl_desc_lines.setStyleSheet("font-size: 13px; color: #e2e8f0;")
-        color_grid.addWidget(lbl_desc_lines, 4, 3, 1, 2, Qt.AlignmentFlag.AlignVCenter)
+        color_grid.addWidget(lbl_desc_lines, 1, 7, Qt.AlignmentFlag.AlignVCenter)
 
         self.guide_desc_lines_combo = QComboBox()
         self.guide_desc_lines_combo.addItem("2 Lines", 2)
@@ -4107,10 +4107,11 @@ class MainWindow(QMainWindow):
         d_idx = self.guide_desc_lines_combo.findData(cur_desc_lines)
         self.guide_desc_lines_combo.setCurrentIndex(d_idx if d_idx >= 0 else 1)
         self.guide_desc_lines_combo.currentIndexChanged.connect(self._on_guide_desc_lines_changed)
-        color_grid.addWidget(self.guide_desc_lines_combo, 4, 5, Qt.AlignmentFlag.AlignVCenter)
+        color_grid.addWidget(self.guide_desc_lines_combo, 1, 8, Qt.AlignmentFlag.AlignVCenter)
 
-        color_grid.setColumnMinimumWidth(2, 28)
-        color_grid.setColumnStretch(6, 1)
+        color_grid.setColumnMinimumWidth(2, 24)
+        color_grid.setColumnMinimumWidth(6, 24)
+        color_grid.setColumnStretch(9, 1)
         color_layout.addLayout(color_grid)
 
         cat_btn_row = QHBoxLayout()
