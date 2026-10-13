@@ -92,6 +92,13 @@ def get_pip_flags() -> list:
 
 
 EMBEDDED_RELEASE_NOTES: Dict[str, str] = {
+    "0.8.9": (
+        "## What's Changed in v0.8.9\n\n"
+        "• **Guide Auto-Advance Controls**: Added a customizable minute-past-the-hour stepper and enable/disable toggle for guide auto-advance, with an inline help badge explaining next-hour advancement.\n"
+        "• **Three-Way Guide Unhighlighting**: Added toggle-on-click, click-empty-space to deselect, and Escape key clearing across both EPG Grid and List views.\n"
+        "• **Corner Clock Display & Sizing**: Added a live top-right tab bar clock widget with color customization, show/hide toggle, and a dedicated font size stepper in Settings.\n"
+        "• **Settings UI Polish**: Standardized numeric stepper widths to 130 px, changed Live Badge toggle text to 'Disable' for consistency, and aligned auto-advance minute calculations across live sync and manual Jump-to-Now actions."
+    ),
     "0.8.8": (
         "## What's Changed in v0.8.8\n\n"
         "• **Grid Options Three-Column Layout**: Reorganized the Grid Guide Options settings card into three balanced columns for cleaner visual hierarchy.\n"

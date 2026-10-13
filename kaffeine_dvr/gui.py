@@ -884,6 +884,7 @@ def make_setting_label(title: str, tooltip_text: str) -> QWidget:
     lay.setSpacing(6)
     badge = HelpBadge(tooltip_text)
     lbl = QLabel(title)
+    lbl.setStyleSheet("font-size: 13px; color: #e2e8f0;")
     lay.addWidget(badge)
     lay.addWidget(lbl)
     lay.addStretch()
@@ -1523,26 +1524,26 @@ class ProgramTileDelegate(QStyledItemDelegate):
 
         is_scheduled = bool(prog.get("_scheduled_rec"))
         is_past_recorded = bool(prog.get("_history_rec"))
+        # Dynamically evaluate timing state against current time
+        start_iso = prog.get("start_iso")
+        dur_iso = prog.get("duration_iso") or "00:30:00"
         timing_state = prog.get("_timing_state")
-        if not timing_state:
-            start_iso = prog.get("start_iso")
-            dur_iso = prog.get("duration_iso") or "00:30:00"
-            if start_iso:
-                try:
-                    dt = datetime.fromisoformat(start_iso)
-                    parts = [int(x) for x in dur_iso.split(":")]
-                    dur = timedelta(hours=parts[0], minutes=parts[1], seconds=parts[2] if len(parts) > 2 else 0)
-                    now = datetime.now()
-                    if now >= dt + dur:
-                        timing_state = "past"
-                    elif dt <= now < dt + dur:
-                        timing_state = "live"
-                    else:
-                        timing_state = "upcoming"
-                except Exception:
+        if start_iso:
+            try:
+                dt = datetime.fromisoformat(start_iso)
+                parts = [int(x) for x in dur_iso.split(":")]
+                dur = timedelta(hours=parts[0], minutes=parts[1], seconds=parts[2] if len(parts) > 2 else 0)
+                now = datetime.now()
+                if now >= dt + dur:
+                    timing_state = "past"
+                elif dt <= now < dt + dur:
+                    timing_state = "live"
+                else:
                     timing_state = "upcoming"
-            else:
-                timing_state = "upcoming"
+            except Exception:
+                timing_state = timing_state or "upcoming"
+        else:
+            timing_state = timing_state or "upcoming"
 
         # Background fill & border styling
         is_alt = (index.row() % 2 == 1)
@@ -1691,9 +1692,10 @@ class GridPanFilter(QObject):
     Event filter installed on the guide grid table viewport to support
     mouse grab-and-drag panning/scrolling while preserving cell click selection.
     """
-    def __init__(self, table: QTableWidget, parent=None):
+    def __init__(self, table: QTableWidget, parent=None, main_window=None):
         super().__init__(parent or table)
         self.table = table
+        self.main_window = main_window
         self._dragging = False
         self._drag_start_pos = None
         self._last_drag_pos = None
@@ -1710,6 +1712,13 @@ class GridPanFilter(QObject):
             pass
 
     def eventFilter(self, watched, event):
+        evt_type = event.type()
+        if evt_type == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_Escape:
+            mw = self.main_window or getattr(self.table, "main_window", None)
+            if mw and hasattr(mw, "clear_guide_selection"):
+                mw.clear_guide_selection()
+                return True
+
         try:
             vp = self.table.viewport()
             hdr = self.table.horizontalHeader()
@@ -1719,8 +1728,6 @@ class GridPanFilter(QObject):
 
         if watched not in (vp, hdr_vp):
             return super().eventFilter(watched, event)
-
-        evt_type = event.type()
 
         if evt_type == QEvent.Type.MouseButtonPress:
             if event.button() in (Qt.MouseButton.LeftButton, Qt.MouseButton.MiddleButton):
@@ -1791,6 +1798,10 @@ class GridPanFilter(QObject):
                                     break
                         self.table.setCurrentCell(row, target_col)
                         self.table.cellClicked.emit(row, col)
+                    else:
+                        mw = self.main_window or getattr(self.table, "main_window", None)
+                        if mw and hasattr(mw, "clear_guide_selection"):
+                            mw.clear_guide_selection()
                     return True
                 return False
 
@@ -1814,6 +1825,117 @@ class GridPanFilter(QObject):
                 self._set_cursor(Qt.CursorShape.OpenHandCursor)
 
         return super().eventFilter(watched, event)
+
+
+class GuideListClickFilter(QObject):
+    """
+    Event filter for guide list view (table) to handle clicking empty background space
+    and pressing Escape to clear selection / unhighlight.
+    """
+    def __init__(self, table: QTableWidget, main_window=None):
+        super().__init__(table)
+        self.table = table
+        self.main_window = main_window
+
+    def eventFilter(self, watched, event):
+        evt_type = event.type()
+        if evt_type == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton:
+            pos = event.position().toPoint()
+            row = self.table.rowAt(pos.y())
+            if row < 0:
+                mw = self.main_window or getattr(self.table, "main_window", None)
+                if mw and hasattr(mw, "clear_guide_selection"):
+                    mw.clear_guide_selection()
+        elif evt_type == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_Escape:
+            mw = self.main_window or getattr(self.table, "main_window", None)
+            if mw and hasattr(mw, "clear_guide_selection"):
+                mw.clear_guide_selection()
+                return True
+        return super().eventFilter(watched, event)
+
+
+class GuideGridHeader(QHeaderView):
+    """
+    Custom horizontal header for the guide grid that draws a subtle current-time
+    indicator marker when viewing today's programming.
+    """
+    def __init__(self, orientation, parent=None, main_window=None):
+        super().__init__(orientation, parent)
+        self.main_window = main_window
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        mw = getattr(self, "main_window", None)
+        if not mw or not getattr(mw, "config_mgr", None):
+            return
+        if not getattr(mw.config_mgr, "guide_show_time_indicator", True):
+            return
+        if not mw.is_viewing_today():
+            return
+
+        now = datetime.now()
+        current_slot = min(47, max(0, now.hour * 2 + (1 if now.minute >= 30 else 0)))
+        slot_minute = now.minute % 30
+        fraction = (slot_minute + now.second / 60.0) / 30.0
+        slot_left_x = self.sectionViewportPosition(current_slot)
+        slot_width = self.sectionSize(current_slot)
+        line_x = slot_left_x + int(fraction * slot_width)
+
+        vp_width = self.viewport().width()
+        if 0 <= line_x <= vp_width:
+            line_col_hex = mw.config_mgr.category_colors.get("time_indicator", "#06b6d4")
+            painter = QPainter(self.viewport())
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(line_col_hex))
+            h = self.viewport().height()
+            tri = QPolygon([
+                QPoint(line_x - 5, h - 7),
+                QPoint(line_x + 5, h - 7),
+                QPoint(line_x, h)
+            ])
+            painter.drawPolygon(tri)
+            painter.end()
+
+
+class GuideGridTable(QTableWidget):
+    """
+    Custom table widget for the guide grid that draws a vertical current-time
+    indicator line down across the table viewport when viewing today's programming.
+    """
+    def __init__(self, *args, main_window=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.main_window = main_window
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        mw = getattr(self, "main_window", None)
+        if not mw or not getattr(mw, "config_mgr", None):
+            return
+        if not getattr(mw.config_mgr, "guide_show_time_indicator", True):
+            return
+        if not mw.is_viewing_today():
+            return
+
+        hdr = self.horizontalHeader()
+        if not hdr:
+            return
+
+        now = datetime.now()
+        current_slot = min(47, max(0, now.hour * 2 + (1 if now.minute >= 30 else 0)))
+        slot_minute = now.minute % 30
+        fraction = (slot_minute + now.second / 60.0) / 30.0
+        slot_left_x = hdr.sectionViewportPosition(current_slot)
+        slot_width = self.columnWidth(current_slot)
+        line_x = slot_left_x + int(fraction * slot_width)
+
+        vp_width = self.viewport().width()
+        if 0 <= line_x <= vp_width:
+            line_col_hex = mw.config_mgr.category_colors.get("time_indicator", "#06b6d4")
+            painter = QPainter(self.viewport())
+            painter.setPen(QPen(QColor(line_col_hex), 2))
+            painter.drawLine(line_x, 0, line_x, self.viewport().height())
+            painter.end()
 
 
 class UpcomingShowDialog(QDialog):
@@ -2582,6 +2704,8 @@ class MainWindow(QMainWindow):
         self.storage_mgr = StorageManager(self.config_mgr, self.queue_mgr)
         self.day_nav_offset = 0
         self._active_timeshift = None
+        self.selected_grid_program = None
+        self._last_clicked_guide_list_row = -1
 
         self.init_ui()
         self.setup_timers()
@@ -2620,6 +2744,11 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.create_settings_tab(), "Settings")
         self.tabs.addTab(self.create_help_tab(), "Help and Information")
         self.tabs.currentChanged.connect(self._on_main_tab_changed)
+
+        # Top-Right Corner Clock Widget
+        self.clock_widget = self._create_clock_widget()
+        self.tabs.setCornerWidget(self.clock_widget, Qt.Corner.TopRightCorner)
+        self._update_clock_display()
         main_layout.addWidget(self.tabs)
 
         # Status Bar
@@ -2632,6 +2761,34 @@ class MainWindow(QMainWindow):
         self.progress_bar.setTextVisible(True)
         self.progress_bar.setVisible(False)
         self.status_bar.addPermanentWidget(self.progress_bar)
+
+    def _create_clock_widget(self) -> QWidget:
+        clock_frame = QFrame()
+        clock_frame.setObjectName("topCornerClockFrame")
+        clock_frame.setStyleSheet(
+            "QFrame#topCornerClockFrame { "
+            "background: transparent; border: none; "
+            "margin-right: 8px; margin-top: 2px; margin-bottom: 2px; }"
+        )
+        layout = QHBoxLayout(clock_frame)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.clock_label = QLabel()
+        self.clock_label.setObjectName("topCornerClockLabel")
+        layout.addWidget(self.clock_label)
+        return clock_frame
+
+    def _update_clock_display(self):
+        if not hasattr(self, "clock_label") or not hasattr(self, "clock_widget"):
+            return
+        is_shown = getattr(self.config_mgr, "show_clock", True)
+        self.clock_widget.setVisible(is_shown)
+        if not is_shown:
+            return
+        now = datetime.now()
+        col_hex = self.config_mgr.category_colors.get("clock", DEFAULT_CATEGORY_COLORS.get("clock", "#38bdf8"))
+        font_sz = getattr(self.config_mgr, "clock_font_size", 11)
+        self.clock_label.setText(now.strftime("%a, %b %-d  %-I:%M %p"))
+        self.clock_label.setStyleSheet(f"color: {col_hex}; font-size: {font_sz}px; font-weight: bold; padding: 2px 4px;")
 
     def _create_update_badge_widget(self) -> QWidget:
         widget = QWidget()
@@ -2947,8 +3104,10 @@ class MainWindow(QMainWindow):
         self.guide_stack = QStackedWidget()
 
         # 1. Traditional EPG Grid Table
-        self.guide_grid_table = QTableWidget()
+        self.guide_grid_table = GuideGridTable(main_window=self)
         self.guide_grid_table.setObjectName("guideGridTable")
+        self.guide_grid_header = GuideGridHeader(Qt.Orientation.Horizontal, self.guide_grid_table, main_window=self)
+        self.guide_grid_table.setHorizontalHeader(self.guide_grid_header)
         self.guide_grid_table.setColumnCount(48)
         grid_headers = []
         for h in range(24):
@@ -2965,7 +3124,9 @@ class MainWindow(QMainWindow):
         self.guide_grid_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self.guide_grid_table.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.guide_grid_table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
-        self.grid_pan_filter = GridPanFilter(self.guide_grid_table)
+        self.guide_grid_table.main_window = self
+        self.grid_pan_filter = GridPanFilter(self.guide_grid_table, main_window=self)
+        self.guide_grid_table.installEventFilter(self.grid_pan_filter)
         self.guide_grid_table.viewport().installEventFilter(self.grid_pan_filter)
         self.guide_grid_table.horizontalHeader().viewport().installEventFilter(self.grid_pan_filter)
         self.grid_resize_filter = TableViewportResizeFilter(self._apply_guide_zoom, self)
@@ -2995,6 +3156,10 @@ class MainWindow(QMainWindow):
         self.guide_table.verticalHeader().setVisible(False)
         self.guide_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.guide_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.guide_list_click_filter = GuideListClickFilter(self.guide_table, main_window=self)
+        self.guide_table.installEventFilter(self.guide_list_click_filter)
+        self.guide_table.viewport().installEventFilter(self.guide_list_click_filter)
+        self.guide_table.cellClicked.connect(self.on_guide_list_cell_clicked)
         self.guide_table.itemSelectionChanged.connect(self.on_guide_selection_changed)
         self.guide_table.itemDoubleClicked.connect(self.on_guide_table_double_clicked)
         self.guide_stack.addWidget(self.guide_table)
@@ -4057,7 +4222,7 @@ class MainWindow(QMainWindow):
         lbl_badge.setStyleSheet("font-size: 13px; color: #e2e8f0;")
         color_grid.addWidget(lbl_badge, 1, 4, Qt.AlignmentFlag.AlignVCenter)
 
-        self.hide_live_badge_check = QCheckBox("Hide Badge")
+        self.hide_live_badge_check = QCheckBox("Disable")
         self.hide_live_badge_check.setChecked(self.config_mgr.hide_live_badge)
         self.hide_live_badge_check.toggled.connect(self._on_hide_live_badge_toggled)
         color_grid.addWidget(self.hide_live_badge_check, 1, 5, Qt.AlignmentFlag.AlignVCenter)
@@ -4081,6 +4246,46 @@ class MainWindow(QMainWindow):
         self.live_same_bg_check.setChecked(self.config_mgr.live_same_bg_as_others)
         self.live_same_bg_check.toggled.connect(self._on_live_same_bg_toggled)
         color_grid.addWidget(self.live_same_bg_check, 2, 5, Qt.AlignmentFlag.AlignVCenter)
+
+        # Row 3: Time Line Swatch & Disable Toggle
+        line_hex = cur_colors.get("time_indicator", DEFAULT_CATEGORY_COLORS.get("time_indicator", "#06b6d4"))
+        swatch_line = QPushButton()
+        swatch_line.setProperty("class", "category-color-tile")
+        swatch_line.setFixedSize(26, 26)
+        swatch_line.setCursor(Qt.CursorShape.PointingHandCursor)
+        swatch_line.setStyleSheet(f"QPushButton.category-color-tile {{ background-color: {line_hex}; }}")
+        swatch_line.clicked.connect(lambda checked=False: self._choose_category_color("time_indicator", "Time Line"))
+        color_grid.addWidget(swatch_line, 3, 3, Qt.AlignmentFlag.AlignVCenter)
+        self._cat_swatches["time_indicator"] = swatch_line
+
+        lbl_time_line = QLabel("<b>Time Line</b>")
+        lbl_time_line.setStyleSheet("font-size: 13px; color: #e2e8f0;")
+        color_grid.addWidget(lbl_time_line, 3, 4, Qt.AlignmentFlag.AlignVCenter)
+
+        self.hide_time_line_check = QCheckBox("Disable")
+        self.hide_time_line_check.setChecked(not getattr(self.config_mgr, "guide_show_time_indicator", True))
+        self.hide_time_line_check.toggled.connect(self._on_hide_time_line_toggled)
+        color_grid.addWidget(self.hide_time_line_check, 3, 5, Qt.AlignmentFlag.AlignVCenter)
+
+        # Row 4: Clock Swatch & Disable Toggle
+        clock_hex = cur_colors.get("clock", DEFAULT_CATEGORY_COLORS.get("clock", "#38bdf8"))
+        swatch_clock = QPushButton()
+        swatch_clock.setProperty("class", "category-color-tile")
+        swatch_clock.setFixedSize(26, 26)
+        swatch_clock.setCursor(Qt.CursorShape.PointingHandCursor)
+        swatch_clock.setStyleSheet(f"QPushButton.category-color-tile {{ background-color: {clock_hex}; }}")
+        swatch_clock.clicked.connect(lambda checked=False: self._choose_category_color("clock", "Clock"))
+        color_grid.addWidget(swatch_clock, 4, 3, Qt.AlignmentFlag.AlignVCenter)
+        self._cat_swatches["clock"] = swatch_clock
+
+        lbl_clock = QLabel("<b>Clock</b>")
+        lbl_clock.setStyleSheet("font-size: 13px; color: #e2e8f0;")
+        color_grid.addWidget(lbl_clock, 4, 4, Qt.AlignmentFlag.AlignVCenter)
+
+        self.hide_clock_check = QCheckBox("Disable")
+        self.hide_clock_check.setChecked(not getattr(self.config_mgr, "show_clock", True))
+        self.hide_clock_check.toggled.connect(self._on_hide_clock_toggled)
+        color_grid.addWidget(self.hide_clock_check, 4, 5, Qt.AlignmentFlag.AlignVCenter)
 
         # Column 3: Guide & Detail Sizing
         lbl_rows = QLabel("<b>Grid Rows:</b>")
@@ -4108,6 +4313,48 @@ class MainWindow(QMainWindow):
         self.guide_desc_lines_combo.setCurrentIndex(d_idx if d_idx >= 0 else 1)
         self.guide_desc_lines_combo.currentIndexChanged.connect(self._on_guide_desc_lines_changed)
         color_grid.addWidget(self.guide_desc_lines_combo, 1, 8, Qt.AlignmentFlag.AlignVCenter)
+
+        auto_adv_lbl = make_setting_label(
+            "<b>Auto-Advance:</b>",
+            "Automatically advances the guide forward to the next hour when the clock reaches the configured minute past the hour (default :50 min).\n\n"
+            "Safeguards prevent scrolling while actively dragging or browsing past/future time slots, and auto-advance only runs when viewing today's guide."
+        )
+        color_grid.addWidget(auto_adv_lbl, 2, 7, Qt.AlignmentFlag.AlignVCenter)
+
+        auto_adv_widget = QWidget()
+        auto_adv_layout = QHBoxLayout(auto_adv_widget)
+        auto_adv_layout.setContentsMargins(0, 0, 0, 0)
+        auto_adv_layout.setSpacing(6)
+
+        self.guide_auto_advance_spin = NumberStepper()
+        self.guide_auto_advance_spin.setRange(0, 59)
+        self.guide_auto_advance_spin.setValue(getattr(self.config_mgr, "guide_auto_advance_minute", 50))
+        self.guide_auto_advance_spin.setPrefix(":")
+        self.guide_auto_advance_spin.setSuffix(" min")
+        self.guide_auto_advance_spin.setFixedWidth(130)
+        self.guide_auto_advance_spin.valueChanged.connect(self._on_guide_auto_advance_min_changed)
+        auto_adv_layout.addWidget(self.guide_auto_advance_spin)
+
+        self.guide_auto_advance_check = QCheckBox()
+        self.guide_auto_advance_check.setToolTip("Enable or disable guide auto-advance past the hour")
+        self.guide_auto_advance_check.setChecked(getattr(self.config_mgr, "guide_auto_advance", True))
+        self.guide_auto_advance_check.toggled.connect(self._on_guide_auto_advance_toggled)
+        self.guide_auto_advance_spin.setEnabled(self.guide_auto_advance_check.isChecked())
+        auto_adv_layout.addWidget(self.guide_auto_advance_check)
+
+        color_grid.addWidget(auto_adv_widget, 2, 8, Qt.AlignmentFlag.AlignVCenter)
+
+        lbl_clock_size = QLabel("<b>Clock Size:</b>")
+        lbl_clock_size.setStyleSheet("font-size: 13px; color: #e2e8f0;")
+        color_grid.addWidget(lbl_clock_size, 3, 7, Qt.AlignmentFlag.AlignVCenter)
+
+        self.clock_size_spin = NumberStepper()
+        self.clock_size_spin.setRange(8, 24)
+        self.clock_size_spin.setValue(getattr(self.config_mgr, "clock_font_size", 11))
+        self.clock_size_spin.setSuffix(" pt")
+        self.clock_size_spin.setFixedWidth(130)
+        self.clock_size_spin.valueChanged.connect(self._on_clock_size_changed)
+        color_grid.addWidget(self.clock_size_spin, 3, 8, Qt.AlignmentFlag.AlignVCenter)
 
         color_grid.setColumnMinimumWidth(2, 24)
         color_grid.setColumnMinimumWidth(6, 24)
@@ -4431,6 +4678,33 @@ class MainWindow(QMainWindow):
             self.guide_desc_lines_combo.setCurrentIndex(d_idx if d_idx >= 0 else 1)
             self.guide_desc_lines_combo.blockSignals(False)
             self._update_guide_detail_box_height()
+
+        if hasattr(self, "guide_auto_advance_check"):
+            self.guide_auto_advance_check.blockSignals(True)
+            self.guide_auto_advance_check.setChecked(self.config_mgr.guide_auto_advance)
+            self.guide_auto_advance_check.blockSignals(False)
+
+        if hasattr(self, "guide_auto_advance_spin"):
+            self.guide_auto_advance_spin.blockSignals(True)
+            self.guide_auto_advance_spin.setValue(self.config_mgr.guide_auto_advance_minute)
+            self.guide_auto_advance_spin.setEnabled(self.config_mgr.guide_auto_advance)
+            self.guide_auto_advance_spin.blockSignals(False)
+
+        if hasattr(self, "hide_time_line_check"):
+            self.hide_time_line_check.blockSignals(True)
+            self.hide_time_line_check.setChecked(not self.config_mgr.guide_show_time_indicator)
+            self.hide_time_line_check.blockSignals(False)
+
+        if hasattr(self, "hide_clock_check"):
+            self.hide_clock_check.blockSignals(True)
+            self.hide_clock_check.setChecked(not self.config_mgr.show_clock)
+            self.hide_clock_check.blockSignals(False)
+
+        if hasattr(self, "clock_size_spin"):
+            self.clock_size_spin.blockSignals(True)
+            self.clock_size_spin.setValue(self.config_mgr.clock_font_size)
+            self.clock_size_spin.blockSignals(False)
+        self._update_clock_display()
 
         # Color Swatches
         colors = self.config_mgr.category_colors
@@ -4898,13 +5172,24 @@ class MainWindow(QMainWindow):
         self.health_worker.start()
 
     def on_health_check_finished(self, results: Dict[str, Any], silent: bool):
-        self.test_health_btn.setEnabled(True)
-        if not results:
-            if not silent:
-                self.status_bar.showMessage("Health check failed.", 4000)
+        try:
+            if hasattr(self, "test_health_btn") and self.test_health_btn:
+                self.test_health_btn.setEnabled(True)
+        except RuntimeError:
             return
 
-        self.health_table.setRowCount(len(results))
+        if not results:
+            if not silent:
+                try:
+                    self.status_bar.showMessage("Health check failed.", 4000)
+                except RuntimeError:
+                    pass
+            return
+
+        try:
+            self.health_table.setRowCount(len(results))
+        except RuntimeError:
+            return
         for row, (key, data) in enumerate(results.items()):
             name = data.get("name", key)
             ptype = data.get("provider_type", "API")
@@ -5295,6 +5580,16 @@ class MainWindow(QMainWindow):
             self.config_mgr.live_same_bg_as_others = self.live_same_bg_check.isChecked()
         if hasattr(self, "guide_desc_lines_combo"):
             self.config_mgr.guide_detail_lines = self.guide_desc_lines_combo.currentData()
+        if hasattr(self, "guide_auto_advance_check"):
+            self.config_mgr.guide_auto_advance = self.guide_auto_advance_check.isChecked()
+        if hasattr(self, "guide_auto_advance_spin"):
+            self.config_mgr.guide_auto_advance_minute = self.guide_auto_advance_spin.value()
+        if hasattr(self, "hide_time_line_check"):
+            self.config_mgr.guide_show_time_indicator = not self.hide_time_line_check.isChecked()
+        if hasattr(self, "hide_clock_check"):
+            self.config_mgr.show_clock = not self.hide_clock_check.isChecked()
+        if hasattr(self, "clock_size_spin"):
+            self.config_mgr.clock_font_size = self.clock_size_spin.value()
 
         # Storage & Retention settings
         self.config_mgr.auto_cleanup_enabled = self.cleanup_enable_check.isChecked()
@@ -5340,6 +5635,29 @@ class MainWindow(QMainWindow):
         if hasattr(self, "guide_grid_table"):
             self.guide_grid_table.viewport().update()
 
+    def _on_guide_auto_advance_toggled(self, checked: bool):
+        self.config_mgr.guide_auto_advance = checked
+        if hasattr(self, "guide_auto_advance_spin"):
+            self.guide_auto_advance_spin.setEnabled(checked)
+
+    def _on_guide_auto_advance_min_changed(self, val: int):
+        self.config_mgr.guide_auto_advance_minute = val
+
+    def _on_hide_time_line_toggled(self, checked: bool):
+        self.config_mgr.guide_show_time_indicator = not checked
+        if hasattr(self, "guide_grid_table"):
+            self.guide_grid_table.viewport().update()
+            if self.guide_grid_table.horizontalHeader():
+                self.guide_grid_table.horizontalHeader().viewport().update()
+
+    def _on_hide_clock_toggled(self, checked: bool):
+        self.config_mgr.show_clock = not checked
+        self._update_clock_display()
+
+    def _on_clock_size_changed(self, val: int):
+        self.config_mgr.clock_font_size = val
+        self._update_clock_display()
+
     def _choose_category_color(self, category_key: str, category_label: str):
         """Open dark-themed QColorDialog to select a custom color for a guide category."""
         cur_hex = self.config_mgr.category_colors.get(
@@ -5370,6 +5688,10 @@ class MainWindow(QMainWindow):
             # Refresh views live
             self._apply_guide_zoom()
             self._refresh_guide_view(keep_scroll=True)
+            if hasattr(self, "guide_grid_table") and self.guide_grid_table.horizontalHeader():
+                self.guide_grid_table.horizontalHeader().viewport().update()
+            if category_key == "clock":
+                self._update_clock_display()
             active_prog = self._get_active_selected_program()
             if active_prog:
                 self._display_program_details(active_prog)
@@ -5391,6 +5713,9 @@ class MainWindow(QMainWindow):
 
         self._apply_guide_zoom()
         self._refresh_guide_view(keep_scroll=True)
+        if hasattr(self, "guide_grid_table") and self.guide_grid_table.horizontalHeader():
+            self.guide_grid_table.horizontalHeader().viewport().update()
+        self._update_clock_display()
         active_prog = self._get_active_selected_program()
         if active_prog:
             self._display_program_details(active_prog)
@@ -5539,6 +5864,204 @@ class MainWindow(QMainWindow):
         self._timeshift_poll_timer = QTimer(self)
         self._timeshift_poll_timer.setInterval(1000)
         self._timeshift_poll_timer.timeout.connect(self._poll_timeshift_session)
+
+        # Top-corner clock update timer (1 second interval)
+        self._clock_timer = QTimer(self)
+        self._clock_timer.setInterval(1000)
+        self._clock_timer.timeout.connect(self._update_clock_display)
+        self._clock_timer.start()
+
+        # Real-time guide synchronization every 60 seconds
+        self._guide_realtime_timer = QTimer(self)
+        self._guide_realtime_timer.setInterval(60000)
+        self._guide_realtime_timer.timeout.connect(self._update_guide_realtime)
+        self._guide_realtime_timer.start()
+
+    def is_viewing_today(self) -> bool:
+        """Returns True if the current guide date selector is viewing today or all upcoming."""
+        if not hasattr(self, "guide_date_combo"):
+            return True
+        sel_date = self.guide_date_combo.currentData()
+        today_str = date.today().strftime("%Y-%m-%d")
+        return sel_date is None or sel_date == today_str
+
+    def _update_guide_realtime(self):
+        """
+        Periodic (60s) timer callback to:
+        1. Keep tile timing states (past, live, upcoming) synchronized in memory for Grid & List views.
+        2. Repaint viewport so the current-time indicator line advances.
+        3. Auto-advance the grid / list view at :50 past the hour if enabled.
+        """
+        now = datetime.now()
+        is_today = self.is_viewing_today()
+
+        # At midnight, refresh date dropdown so 'Today' refers to the new date
+        today_str = date.today().strftime("%Y-%m-%d")
+        combo_today = self.guide_date_combo.itemData(1) if hasattr(self, "guide_date_combo") and self.guide_date_combo.count() > 1 else None
+        if combo_today and combo_today != today_str:
+            self.refresh_date_dropdown()
+            return
+
+        # 1. Update Grid View tiles if populated
+        if hasattr(self, "guide_grid_table") and self.guide_grid_table.rowCount() > 0:
+            rows = self.guide_grid_table.rowCount()
+            cols = self.guide_grid_table.columnCount()
+            for r in range(rows):
+                for c in range(cols):
+                    item = self.guide_grid_table.item(r, c)
+                    if not item:
+                        continue
+                    p_copy = item.data(Qt.ItemDataRole.UserRole)
+                    if not isinstance(p_copy, dict):
+                        continue
+                    start_iso = p_copy.get("start_iso")
+                    if not start_iso:
+                        continue
+                    try:
+                        dt = datetime.fromisoformat(start_iso)
+                        dur_iso = p_copy.get("duration_iso") or "00:30:00"
+                        parts = [int(x) for x in dur_iso.split(":")]
+                        dur = timedelta(hours=parts[0], minutes=parts[1], seconds=parts[2] if len(parts) > 2 else 0)
+                        end_dt = dt + dur
+
+                        if now >= end_dt:
+                            new_timing = "past"
+                        elif dt <= now < end_dt:
+                            new_timing = "live"
+                        else:
+                            new_timing = "upcoming"
+
+                        old_timing = p_copy.get("_timing_state")
+                        if new_timing != old_timing:
+                            p_copy["_timing_state"] = new_timing
+                            item.setData(Qt.ItemDataRole.UserRole, p_copy)
+                            # Visual background styling based on timing state
+                            if new_timing == "past":
+                                cur_bg = QColor("#161922") if (r % 2 == 0) else QColor("#14171f")
+                            elif new_timing == "live":
+                                cur_bg = QColor("#17261c")
+                            else:
+                                tile_bg = QColor("#1a1e28")
+                                tile_bg_alt = QColor("#1e222d")
+                                cur_bg = tile_bg if (r % 2 == 0) else tile_bg_alt
+                            item.setBackground(cur_bg)
+                    except Exception:
+                        pass
+
+            # Repaint viewport and header so time line and tiles update
+            self.guide_grid_table.viewport().update()
+            if self.guide_grid_table.horizontalHeader():
+                self.guide_grid_table.horizontalHeader().viewport().update()
+
+        # 2. Update List View items if populated
+        if hasattr(self, "guide_table") and self.guide_table.rowCount() > 0:
+            programs = getattr(self, "current_guide_items", None) or []
+            cat_colors = self.config_mgr.category_colors
+            active_scheduled = self.queue_mgr.get_active_scheduled_map() if hasattr(self, "queue_mgr") else {}
+            history_map = self.queue_mgr.get_history_map(limit=200) if hasattr(self, "queue_mgr") else {}
+
+            for r, p in enumerate(programs):
+                if r >= self.guide_table.rowCount():
+                    break
+                timing_info = self._get_program_timing_state(p)
+                timing_state = timing_info.get("state", "upcoming")
+                cat = p.get("_category") or classify_guide_category(p)
+
+                # REC column
+                ch = (p.get("kaffeine_channel") or "").strip().lower()
+                start_iso = (p.get("start_iso") or "")[:16]
+                rec_info = active_scheduled.get((ch, start_iso))
+                hist_info = history_map.get((ch, start_iso))
+                rec_status = rec_info.get("status", "") if isinstance(rec_info, dict) else ""
+                is_recording = bool(rec_info) and (rec_status == "RECORDING" or (timing_state == "live" and rec_status in ("ARMED", "RECORDING")))
+
+                rec_item = self.guide_table.item(r, 0)
+                if rec_item:
+                    if is_recording:
+                        rec_item.setText("● REC")
+                        rec_item.setForeground(QColor("#ff5252"))
+                    elif rec_info:
+                        rec_item.setText("○ SCHED")
+                        rec_item.setForeground(QColor("#ffa028"))
+                    elif hist_info and timing_state == "past":
+                        rec_item.setText("● REC")
+                        rec_item.setForeground(QColor("#8b0000"))
+                    else:
+                        rec_item.setText("")
+
+                time_item = self.guide_table.item(r, 1)
+                chan_item = self.guide_table.item(r, 2)
+                dur_item = self.guide_table.item(r, 3)
+                title_item = self.guide_table.item(r, 4)
+                sub_item = self.guide_table.item(r, 5)
+
+                if timing_state == "past":
+                    gray_color = QColor("#788292")
+                    for it in (time_item, chan_item, dur_item, title_item, sub_item):
+                        if it:
+                            it.setForeground(gray_color)
+                            f = it.font()
+                            f.setBold(False)
+                            it.setFont(f)
+                elif timing_state == "live":
+                    t_color = QColor(cat_colors.get(cat, DEFAULT_CATEGORY_COLORS.get(cat, "#b9feff")))
+                    if title_item:
+                        title_item.setForeground(t_color)
+                        f = title_item.font()
+                        f.setBold(True)
+                        title_item.setFont(f)
+                    for it in (time_item, chan_item, dur_item, sub_item):
+                        if it:
+                            it.setForeground(QColor("#e2e8f0"))
+                            f = it.font()
+                            f.setBold(False)
+                            it.setFont(f)
+                else:
+                    t_color = QColor(cat_colors.get(cat, DEFAULT_CATEGORY_COLORS.get(cat, "#b9feff")))
+                    if title_item:
+                        title_item.setForeground(t_color)
+                        f = title_item.font()
+                        f.setBold(False)
+                        title_item.setFont(f)
+                    for it in (time_item, chan_item, dur_item, sub_item):
+                        if it:
+                            it.setForeground(QColor("#e2e8f0"))
+                            f = it.font()
+                            f.setBold(False)
+                            it.setFont(f)
+
+        # 3. Auto-Advance at configured minute past the hour (default :50)
+        auto_adv = getattr(self.config_mgr, "guide_auto_advance", True)
+        adv_min = getattr(self.config_mgr, "guide_auto_advance_minute", 50)
+        if auto_adv and is_today and now.minute >= adv_min:
+            last_adv = getattr(self, "_last_auto_advanced_hour", None)
+            cur_key = (now.year, now.month, now.day, now.hour)
+            if last_adv != cur_key:
+                # Check user interaction guards:
+                is_dragging = getattr(self, "grid_pan_filter", None) and getattr(self.grid_pan_filter, "_dragging", False)
+                has_modal = QApplication.activeModalWidget() is not None
+                if not is_dragging and not has_modal:
+                    if self._is_grid_view_active():
+                        # Browsing safeguard: only advance if scroll is near current hour slot
+                        col_width = self.guide_grid_table.horizontalHeader().defaultSectionSize()
+                        cur_hour_slot = min(47, now.hour * 2)
+                        expected_x = self.guide_grid_table.horizontalHeader().sectionPosition(cur_hour_slot)
+                        cur_x = self.guide_grid_table.horizontalScrollBar().value()
+                        if abs(cur_x - expected_x) <= col_width * 2:
+                            self.jump_guide_to_now()
+                            self._last_auto_advanced_hour = cur_key
+                    else:
+                        cur_top_row = self.guide_table.rowAt(0)
+                        programs = getattr(self, "current_guide_items", None) or []
+                        first_act = -1
+                        for r, p in enumerate(programs):
+                            tm = self._get_program_timing_state(p)
+                            if tm.get("state") in ("live", "upcoming"):
+                                first_act = r
+                                break
+                        if first_act >= 0 and abs(cur_top_row - first_act) <= 5:
+                            self._scroll_list_to_first_active()
+                            self._last_auto_advanced_hour = cur_key
 
     def refresh_date_dropdown(self, reset_to_default: bool = False):
         """Refreshes the Date dropdown when a new calendar day begins or on app startup."""
@@ -5995,8 +6518,9 @@ class MainWindow(QMainWindow):
         if self._is_grid_view_active():
             now = datetime.now()
             # Align the left edge of the grid to the current hour (e.g. 10:00 AM at 10:15).
-            # Do not advance to the next hour until :50 past the hour.
-            effective_hour = (now.hour + 1) if now.minute >= 50 else now.hour
+            # Advance to the next hour when reaching the configured minute past the hour (default :50).
+            adv_min = getattr(self.config_mgr, "guide_auto_advance_minute", 50) if hasattr(self, "config_mgr") else 50
+            effective_hour = (now.hour + 1) if now.minute >= adv_min else now.hour
             target_slot = min(47, effective_hour * 2)
             self._scroll_grid_to_slot(target_slot, center=False)
         else:
@@ -6910,6 +7434,43 @@ class MainWindow(QMainWindow):
             else:
                 QTimer.singleShot(60, self.jump_guide_to_noon)
 
+    def clear_guide_selection(self):
+        """
+        Clears the selection and unhighlights any selected program in both
+        the guide grid and list views, resetting the program detail panel.
+        """
+        self.selected_grid_program = None
+        self._last_clicked_guide_list_row = -1
+
+        if hasattr(self, "guide_grid_table") and self.guide_grid_table:
+            self.guide_grid_table.clearSelection()
+            self.guide_grid_table.setCurrentCell(-1, -1)
+            self.guide_grid_table.viewport().update()
+
+        if hasattr(self, "guide_table") and self.guide_table:
+            self.guide_table.clearSelection()
+            self.guide_table.setCurrentCell(-1, -1)
+            self.guide_table.viewport().update()
+
+        if hasattr(self, "guide_detail_title"):
+            self.guide_detail_title.setText("Select a program to view details")
+        if hasattr(self, "guide_detail_text"):
+            self.guide_detail_text.clear()
+
+        if hasattr(self, "watch_guide_btn"):
+            self.watch_guide_btn.setVisible(False)
+        if hasattr(self, "alt_watch_guide_btn"):
+            self.alt_watch_guide_btn.setVisible(False)
+        if hasattr(self, "stop_timeshift_btn"):
+            self.stop_timeshift_btn.setVisible(False)
+        if hasattr(self, "record_guide_btn"):
+            self.record_guide_btn.setVisible(True)
+            self.record_guide_btn.setText("Record This Program")
+        if hasattr(self, "adjust_buffer_guide_btn"):
+            self.adjust_buffer_guide_btn.setVisible(False)
+        if hasattr(self, "cancel_guide_btn"):
+            self.cancel_guide_btn.setVisible(False)
+
     def on_grid_cell_clicked(self, row: int, col: int):
         item = self.guide_grid_table.item(row, col)
         if not item:
@@ -6921,21 +7482,23 @@ class MainWindow(QMainWindow):
                     break
 
         if not item or not item.data(Qt.ItemDataRole.UserRole):
-            self.guide_detail_title.setText("Select a program to view details")
-            self.guide_detail_text.clear()
-            self.selected_grid_program = None
-            if hasattr(self, "watch_guide_btn"):
-                self.watch_guide_btn.setVisible(False)
-            if hasattr(self, "record_guide_btn"):
-                self.record_guide_btn.setVisible(True)
-                self.record_guide_btn.setText("Record This Program")
-            if hasattr(self, "adjust_buffer_guide_btn"):
-                self.adjust_buffer_guide_btn.setVisible(False)
-            if hasattr(self, "cancel_guide_btn"):
-                self.cancel_guide_btn.setVisible(False)
+            self.clear_guide_selection()
             return
 
         prog = item.data(Qt.ItemDataRole.UserRole)
+        # Option 1: Clicking the currently selected program tile again toggles / unhighlights it
+        cur_sel = getattr(self, "selected_grid_program", None)
+        if cur_sel is not None and (
+            cur_sel is prog
+            or (
+                isinstance(cur_sel, dict)
+                and cur_sel.get("channel_id") == prog.get("channel_id")
+                and cur_sel.get("start_iso") == prog.get("start_iso")
+            )
+        ):
+            self.clear_guide_selection()
+            return
+
         root_col = prog.get("_start_col", col)
         root_item = self.guide_grid_table.item(row, root_col)
         if root_item:
@@ -7063,26 +7626,19 @@ class MainWindow(QMainWindow):
             else:
                 self.stop_timeshift_btn.setVisible(False)
 
+    def on_guide_list_cell_clicked(self, row: int, col: int):
+        if getattr(self, "_last_clicked_guide_list_row", -1) == row:
+            self.clear_guide_selection()
+        else:
+            self._last_clicked_guide_list_row = row
+
     def on_guide_selection_changed(self):
         row = self.guide_table.currentRow()
         if row < 0 or row >= len(getattr(self, "current_guide_items", [])):
-            self.guide_detail_title.setText("Select a program to view details")
-            self.guide_detail_text.clear()
-            if hasattr(self, "watch_guide_btn"):
-                self.watch_guide_btn.setVisible(False)
-            if hasattr(self, "alt_watch_guide_btn"):
-                self.alt_watch_guide_btn.setVisible(False)
-            if hasattr(self, "stop_timeshift_btn"):
-                self.stop_timeshift_btn.setVisible(False)
-            if hasattr(self, "record_guide_btn"):
-                self.record_guide_btn.setVisible(True)
-                self.record_guide_btn.setText("Record This Program")
-            if hasattr(self, "adjust_buffer_guide_btn"):
-                self.adjust_buffer_guide_btn.setVisible(False)
-            if hasattr(self, "cancel_guide_btn"):
-                self.cancel_guide_btn.setVisible(False)
+            self.clear_guide_selection()
             return
 
+        self._last_clicked_guide_list_row = row
         prog = self.current_guide_items[row]
         self._display_program_details(prog)
 
@@ -7807,10 +8363,20 @@ class MainWindow(QMainWindow):
                     QMessageBox.information(self, "New Recordings Scheduled", f"Scheduled {len(scheduled)} shows:\n\n{details}")
 
     def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_Escape and getattr(self, "_guide_maximized", False):
-            self.toggle_guide_maximized()
-            event.accept()
-            return
+        if event.key() == Qt.Key.Key_Escape:
+            has_sel = (
+                getattr(self, "selected_grid_program", None) is not None
+                or (hasattr(self, "guide_grid_table") and bool(self.guide_grid_table.selectedItems()))
+                or (hasattr(self, "guide_table") and bool(self.guide_table.selectedItems()))
+            )
+            if has_sel:
+                self.clear_guide_selection()
+                event.accept()
+                return
+            if getattr(self, "_guide_maximized", False):
+                self.toggle_guide_maximized()
+                event.accept()
+                return
         super().keyPressEvent(event)
 
     def closeEvent(self, event):
@@ -7819,6 +8385,10 @@ class MainWindow(QMainWindow):
             self._auto_save_automation_settings()
             if hasattr(self, "_timeshift_poll_timer") and self._timeshift_poll_timer.isActive():
                 self._timeshift_poll_timer.stop()
+            if hasattr(self, "_clock_timer") and self._clock_timer.isActive():
+                self._clock_timer.stop()
+            if hasattr(self, "_guide_realtime_timer") and self._guide_realtime_timer.isActive():
+                self._guide_realtime_timer.stop()
             if getattr(self, "_active_timeshift", None):
                 self.stop_timeshift_session(user_initiated=False)
         except Exception:

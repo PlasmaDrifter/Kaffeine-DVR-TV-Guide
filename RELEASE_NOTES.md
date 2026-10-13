@@ -1,5 +1,12 @@
 # Release Notes
 
+## v0.8.9
+
+- **Guide Auto-Advance Controls**: Added a customizable minute-past-the-hour stepper and enable/disable toggle for guide auto-advance, with an inline help badge explaining next-hour advancement.
+- **Three-Way Guide Unhighlighting**: Added toggle-on-click, click-empty-space to deselect, and Escape key clearing across both EPG Grid and List views.
+- **Corner Clock Display & Sizing**: Added a live top-right tab bar clock widget with color customization, show/hide toggle, and a dedicated font size stepper in Settings.
+- **Settings UI Polish**: Standardized numeric stepper widths to 130 px, changed Live Badge toggle text to "Disable" for consistency, and aligned auto-advance minute calculations across live sync and manual Jump-to-Now actions.
+
 ## v0.8.8
 
 - **Grid Options Three-Column Layout**: Reorganized the Grid Guide Options settings card into three balanced columns for cleaner visual hierarchy.

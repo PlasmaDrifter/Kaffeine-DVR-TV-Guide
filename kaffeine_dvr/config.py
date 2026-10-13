@@ -12,6 +12,8 @@ DEFAULT_CATEGORY_COLORS = {
     "highlight": "#38bdf8",
     "live_badge": "#059669",
     "live_bg": "#132400",
+    "time_indicator": "#06b6d4",
+    "clock": "#38bdf8",
 }
 
 class ConfigManager:
@@ -105,6 +107,16 @@ class ConfigManager:
                         data["live_same_bg_as_others"] = False
                     if "hide_live_badge" not in data:
                         data["hide_live_badge"] = False
+                    if "guide_auto_advance" not in data:
+                        data["guide_auto_advance"] = True
+                    if "guide_auto_advance_minute" not in data:
+                        data["guide_auto_advance_minute"] = 50
+                    if "guide_show_time_indicator" not in data:
+                        data["guide_show_time_indicator"] = True
+                    if "show_clock" not in data:
+                        data["show_clock"] = True
+                    if "clock_font_size" not in data:
+                        data["clock_font_size"] = 11
                     if "category_colors" not in data or not isinstance(data.get("category_colors"), dict):
                         data["category_colors"] = dict(DEFAULT_CATEGORY_COLORS)
                     else:
@@ -164,6 +176,11 @@ class ConfigManager:
             "guide_detail_lines": 3,
             "live_same_bg_as_others": False,
             "hide_live_badge": False,
+            "guide_auto_advance": True,
+            "guide_auto_advance_minute": 50,
+            "guide_show_time_indicator": True,
+            "show_clock": True,
+            "clock_font_size": 11,
             "category_colors": dict(DEFAULT_CATEGORY_COLORS)
         }
 
@@ -648,4 +665,50 @@ class ConfigManager:
     def hide_live_badge(self, val: bool):
         self.data["hide_live_badge"] = bool(val)
         self.save()
+
+    @property
+    def guide_auto_advance(self) -> bool:
+        return bool(self.data.get("guide_auto_advance", True))
+
+    @guide_auto_advance.setter
+    def guide_auto_advance(self, val: bool):
+        self.data["guide_auto_advance"] = bool(val)
+        self.save()
+
+    @property
+    def guide_auto_advance_minute(self) -> int:
+        return int(self.data.get("guide_auto_advance_minute", 50))
+
+    @guide_auto_advance_minute.setter
+    def guide_auto_advance_minute(self, val: int):
+        self.data["guide_auto_advance_minute"] = max(0, min(59, int(val)))
+        self.save()
+
+    @property
+    def guide_show_time_indicator(self) -> bool:
+        return bool(self.data.get("guide_show_time_indicator", True))
+
+    @guide_show_time_indicator.setter
+    def guide_show_time_indicator(self, val: bool):
+        self.data["guide_show_time_indicator"] = bool(val)
+        self.save()
+
+    @property
+    def show_clock(self) -> bool:
+        return bool(self.data.get("show_clock", True))
+
+    @show_clock.setter
+    def show_clock(self, val: bool):
+        self.data["show_clock"] = bool(val)
+        self.save()
+
+    @property
+    def clock_font_size(self) -> int:
+        return int(self.data.get("clock_font_size", 11))
+
+    @clock_font_size.setter
+    def clock_font_size(self, val: int):
+        self.data["clock_font_size"] = max(8, min(24, int(val)))
+        self.save()
+
 
