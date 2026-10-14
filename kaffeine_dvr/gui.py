@@ -17,7 +17,8 @@ from PyQt6.QtWidgets import (
     QScrollArea, QToolButton, QSizePolicy, QAbstractSpinBox, QSlider,
     QStackedWidget, QButtonGroup, QStyledItemDelegate, QStyleOptionViewItem,
     QStyle, QListWidget, QListWidgetItem, QAbstractItemView, QToolTip,
-    QLayout, QPlainTextEdit, QProxyStyle, QStyleFactory, QColorDialog
+    QLayout, QPlainTextEdit, QProxyStyle, QStyleFactory, QColorDialog,
+    QStylePainter, QStyleOptionComboBox
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QSettings, QByteArray, QEvent, QObject, QPoint, QPointF, QRect, QRectF, QSize
 from PyQt6.QtGui import QColor, QFont, QFontMetrics, QIcon, QWheelEvent, QPainter, QPalette, QPixmap, QPen, QPolygon, QBrush
@@ -1265,6 +1266,42 @@ class NumberStepper(QFrame):
 
     def spinBox(self) -> QSpinBox:
         return self._spin
+
+
+class CenteredComboBox(QComboBox):
+    """
+    QComboBox that displays its selected text and dropdown menu items centered.
+    """
+    def addItem(self, text: str, userData: Any = None):
+        if userData is not None:
+            super().addItem(text, userData)
+        else:
+            super().addItem(text)
+        self.setItemData(self.count() - 1, Qt.AlignmentFlag.AlignCenter, Qt.ItemDataRole.TextAlignmentRole)
+
+    def addItems(self, texts):
+        super().addItems(texts)
+        for i in range(self.count()):
+            self.setItemData(i, Qt.AlignmentFlag.AlignCenter, Qt.ItemDataRole.TextAlignmentRole)
+
+    def insertItem(self, index: int, text: str, userData: Any = None):
+        if userData is not None:
+            super().insertItem(index, text, userData)
+        else:
+            super().insertItem(index, text)
+        self.setItemData(index, Qt.AlignmentFlag.AlignCenter, Qt.ItemDataRole.TextAlignmentRole)
+
+    def paintEvent(self, event):
+        painter = QStylePainter(self)
+        opt = QStyleOptionComboBox()
+        self.initStyleOption(opt)
+        opt.currentText = ""  # Prevent default left-aligned text rendering
+        painter.drawComplexControl(QStyle.ComplexControl.CC_ComboBox, opt)
+        sub_rect = self.style().subControlRect(
+            QStyle.ComplexControl.CC_ComboBox, opt, QStyle.SubControl.SC_ComboBoxEditField, self
+        )
+        text = self.itemText(self.currentIndex())
+        painter.drawItemText(sub_rect, Qt.AlignmentFlag.AlignCenter, self.palette(), self.isEnabled(), text, QPalette.ColorRole.Text)
 
 
 def format_american_datetime(val: Any) -> str:
@@ -3431,15 +3468,14 @@ class MainWindow(QMainWindow):
 
         pass_instructions = QLabel(
             "<b>24/7 Broadcast Station & Affiliate Guide (TV Passport):</b><br>"
-            "TV Passport provides 24/7 local affiliate listings. In Free Hybrid mode, "
-            "mapped stations automatically replace national TVMaze listings for those channels, "
-            "while TVMaze seamlessly covers all remaining channels without duplicates.<br><br>"
+            "TV Passport provides full 24/7 local broadcast schedules for your stations. "
+            "Any stations you configure here will automatically download their complete daily listings for your guide.<br><br>"
             "<b>Instructions:</b><br>"
             "1. Visit <a href='https://www.tvpassport.com/index.php/lineups' style='color: #64b5f6; font-weight: bold;'>tvpassport.com</a> in your browser, enter your postal/ZIP code, and select your antenna broadcast lineup.<br>"
             "2. Select your channel to open its listings page. Look at the web address (URL):<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;<code>https://www.tvpassport.com/tv-listings/stations/station/<b>1812</b>/2026-10-07</code><br>"
             "3. The number right after <code>/station/</code> is your station ID (e.g. <b>1812</b>).<br>"
-            "4. Enter one mapping per line using the format: <b>KaffeineChannelName = StationID</b> (e.g. <code>NBC = 1812</code> or <code>CW = 11611</code>).<br><br>"
+            "4. Enter one station per line: <b>Guide Name = Station ID</b> (e.g. <code>NBC = 1812</code>, <code>Fox = 1809</code>, or <code>PBS = 1184</code>).<br><br>"
             "<b>Automatic Sync:</b> When you click <i>Save Station IDs</i>, Kaffeine DVR immediately syncs guide listings in the background without needing a manual sync."
         )
         pass_instructions.setWordWrap(True)
@@ -3464,7 +3500,7 @@ class MainWindow(QMainWindow):
         right_col_layout.setContentsMargins(0, 0, 0, 0)
         right_col_layout.setSpacing(8)
 
-        mapping_hdr = QLabel("<b>Station ID Mappings (KaffeineChannel = StationID):</b>")
+        mapping_hdr = QLabel("<b>Station ID Setup (Guide Name = Station ID):</b>")
         mapping_hdr.setStyleSheet("color: #9cb0c6; font-size: 12px; font-weight: bold;")
         right_col_layout.addWidget(mapping_hdr)
 
@@ -3569,8 +3605,7 @@ class MainWindow(QMainWindow):
         # Splitter / Two-panel layout
         lineup_panels = QHBoxLayout()
 
-        # Left Panel: Channel & Network Mapping
-        map_box = QGroupBox("Guide Network Mapping (Name = Channel)")
+        map_box = QGroupBox("Channel Importing && Renaming")
         map_layout = QVBoxLayout(map_box)
 
         self.mapping_text = QTextEdit()
@@ -3578,15 +3613,18 @@ class MainWindow(QMainWindow):
         self.mapping_text.setPlainText(mapping_str)
         self.mapping_text.setMinimumHeight(200)
 
-        # 5-line concise explainer inside the text area
+        # In-box explainer label
         self.mapping_tip_lbl = QLabel(self.mapping_text)
         self.mapping_tip_lbl.setTextFormat(Qt.TextFormat.RichText)
         self.mapping_tip_lbl.setText(
-            "Online guides use network names (e.g. Fox, NBC).<br>"
-            "Antennas scan local station callsigns (e.g. KSAZ-HD).<br>"
+            "<b>Want to rename how a channel appears in your guide? Do it here.</b><br>"
+            "This connects your guide display names to your scanned Kaffeine channels.<br>"
             "Format: <span style='color: #52b788;'>Guide Name = Tuned Channel</span>.<br>"
-            "Example: <span style='color: #52b788;'>Fox = KSAZ-HD</span> connects Fox to your antenna.<br>"
-            "If channels in Kaffeine already match, leave as <span style='color: #52b788;'>Fox = Fox</span>."
+            "Example: <span style='color: #52b788;'>Fox = KSAZ-HD</span> displays 'Fox' while tuning KSAZ-HD.<br>"
+            "If you renamed them already, leave as <span style='color: #52b788;'>Fox = Fox</span>.<br><br>"
+            "<i>Channels are typically imported automatically during the initial Welcome Wizard.<br>"
+            "If you skipped that, or recently scanned new channels in Kaffeine, click<br>"
+            "<span style='color: #52b788;'>Import Channels from Kaffeine</span> below to load your lineup.</i>"
         )
         self.mapping_tip_lbl.setStyleSheet("color: #8a99ad; font-size: 13px; line-height: 1.5; background: transparent;")
         self.mapping_tip_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
@@ -4304,7 +4342,7 @@ class MainWindow(QMainWindow):
         lbl_desc_lines.setStyleSheet("font-size: 13px; color: #e2e8f0;")
         color_grid.addWidget(lbl_desc_lines, 1, 7, Qt.AlignmentFlag.AlignVCenter)
 
-        self.guide_desc_lines_combo = QComboBox()
+        self.guide_desc_lines_combo = CenteredComboBox()
         self.guide_desc_lines_combo.addItem("2 Lines", 2)
         self.guide_desc_lines_combo.addItem("3 Lines", 3)
         self.guide_desc_lines_combo.setFixedWidth(130)
@@ -4974,14 +5012,13 @@ class MainWindow(QMainWindow):
         s2_lay = QVBoxLayout(s2_box)
         s2_lay.setContentsMargins(15, 15, 15, 15)
         s2_text = QLabel(
-            "• <b style='color: #4ade80;'>1. One-Click Database Import:</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;– In this app, go to <b>Settings &gt; Channel Source</b>.<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;– Click the emerald green button at the bottom: <b style='color: #4ade80;'>Import Channels from Kaffeine</b>.<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;– The app connects to <code>~/.local/share/kaffeine/sqlite.db</code>, instantly populating your channel lineup and guide mapping area.<br><br>"
-            "• <b style='color: #4ade80;'>2. Guide Network Mapping (Left Panel - Format: Guide Name = Tuned Channel):</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;– Online schedules use network names (e.g. <code>Fox</code>), while your antenna scans station callsigns (e.g. <code>KSAZ-HD</code>).<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;– Example: <code style='color: #52b788;'>Fox = KSAZ-HD</code> maps Fox schedule listings to tune <code>KSAZ-HD</code> on your antenna.<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;– If channels in Kaffeine already match, leave them as <code style='color: #52b788;'>Fox = Fox</code>.<br>"
+            "• <b style='color: #4ade80;'>1. Automatic & One-Click Channel Import:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Channels are normally imported automatically during the initial Welcome Wizard.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– If you skipped that step or recently scanned new channels in Kaffeine, go to <b>Settings &gt; Channel Source</b> and click <b style='color: #4ade80;'>Import Channels from Kaffeine</b> to refresh your lineup.<br><br>"
+            "• <b style='color: #4ade80;'>2. Channel Importing & Renaming (Left Panel - Format: Guide Name = Tuned Channel):</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Want to rename how a channel appears in your guide? Do it here. This connects your guide display names to your tuned Kaffeine channels.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Example: <code style='color: #52b788;'>Fox = KSAZ-HD</code> displays 'Fox' in the guide while tuning KSAZ-HD on your antenna.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– If you renamed them already, leave them as <code style='color: #52b788;'>Fox = Fox</code>.<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;– Click <b>Save Channels</b> when finished.<br><br>"
             "• <b style='color: #4ade80;'>3. TV Guide Channel Order (Right Panel):</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;– Drag and drop channels or use <b>Move Up</b> / <b>Move Down</b> / <b>Sort A-Z</b> to prioritize how channels are stacked in your EPG TV Guide grid."
@@ -5004,7 +5041,7 @@ class MainWindow(QMainWindow):
             "• <b style='color: #c084fc;'>Full 24/7 Local Affiliates, PBS, CW & Regional Channels (TV Passport):</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;1. Open <a href='https://www.tvpassport.com/index.php/lineups' style='color: #64b5f6; font-weight: bold;'>tvpassport.com</a>, enter your ZIP/postal code, and select your local broadcast lineup.<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;2. Copy the numeric station ID from the URL (e.g. <code>1809</code> for Fox Phoenix).<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;3. Go to <b>Settings &gt; Guide Sources &amp; Health</b>, expand <b>TV Passport Station IDs</b>, and enter: <code>Fox = 1809</code> (or <code>KSAZ-HD = 1809</code>).<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;3. Go to <b>Settings &gt; Guide Sources &amp; Health</b>, expand <b>TV Passport Station IDs</b>, and enter: <code>Guide Name = Station ID</code> (e.g. <code>Fox = 1809</code> or <code>PBS = 1184</code>).<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;4. Click <b>Save Station IDs</b> to download 24/7 listings with local news, daytime syndication, and sports."
         )
         s3_text.setWordWrap(True)
