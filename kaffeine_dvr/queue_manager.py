@@ -1,7 +1,15 @@
+"""
+Recording queue and history state manager for Kaffeine DVR.
+
+Manages scheduled, armed, recording, completed, and cancelled recordings in SQLite.
+Handles seamless back-to-back channel handovers and end buffer adjustments.
+"""
+
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+
 
 class QueueManager:
     def __init__(self, data_dir: Optional[Path] = None):

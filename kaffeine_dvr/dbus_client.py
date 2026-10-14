@@ -1,9 +1,15 @@
+"""
+D-Bus client and external player interface for Kaffeine DVB.
+
+Handles IPC communication with Kaffeine via org.kde.kaffeine interface,
+channel tuning, recording scheduling, and media player dispatching.
+"""
+
 import os
 import sqlite3
 import subprocess
 from pathlib import Path
-from typing import List, Dict, Any, Optional
-from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 SUPPORTED_PLAYERS: Dict[str, Dict[str, Any]] = {
     "system": {
@@ -392,7 +398,6 @@ class KaffeineDbusClient:
                             break
             except Exception:
                 pass
-                pass
 
     def tune_channel(self, channel: str, raise_window: bool = True, view_mode: Optional[str] = None) -> bool:
         """
@@ -469,7 +474,6 @@ class KaffeineDbusClient:
 
     def switch_to_tv_view(self, view_mode: Optional[str] = None):
         """Switch view mode if needed without pressing numeric channel keys."""
-        pass
 
     def raise_window(self):
         """Unminimize and raise Kaffeine window to the foreground."""
@@ -524,8 +528,8 @@ class KaffeineDbusClient:
         Inherits all user settings, skins, themes, iconsets, and GUI choices from ~/.config/smplayer/
         while ensuring single_instance_enabled=false so it never hijacks or affects other player windows.
         """
-        import shutil
         import re
+        import shutil
 
         base_user_dir = Path.home() / ".config" / "smplayer"
         target_dir = Path.home() / ".config" / "kaffeine-dvr" / "smplayer"
@@ -577,9 +581,8 @@ class KaffeineDbusClient:
         env = self._get_display_env()
         player_mode = (player or "system").lower().strip()
 
-        import shutil
         import shlex
-        from pathlib import Path
+        import shutil
 
         cmd = []
         if player_mode == "custom" and custom_cmd and custom_cmd.strip():

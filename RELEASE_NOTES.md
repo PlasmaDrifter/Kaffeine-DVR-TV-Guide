@@ -1,5 +1,13 @@
 # Release Notes
 
+## v0.8.11
+
+- **Idle CPU Optimization**: Eliminated redundant 1-second stylesheet parsing and canvas invalidation on the top-corner clock, bringing idle CPU consumption down to flat 0.00%.
+- **Grid Options Box Checkbox Alignment**: Repositioned the "Disable" checkboxes in Sub-Column 2 immediately adjacent to their items (Live Badge, Live Tile Tint, Time Line, Clock), and moved the Auto-Advance HelpBadge to the right of its checkbox.
+- **Guide Sync & Channel Import UI Reorganization**: Relocated the Guide Sync progress bar and real-time status text to Settings > Guide Sources and Health directly next to the "Sync Guide Now" button. Moved channel import and reset buttons above the channel mapping box.
+- **Resource Lifecycle & Memory Hardening**: Connected `deleteLater` to all background QThread workers on task completion and added explicit post-sync garbage collection.
+- **Codebase Organization & Documentation**: Cleaned, sorted, and formatted imports according to PEP 8 standards, eliminated dead code and unused symbols, and added PEP 257 docstrings across all modules.
+
 ## v0.8.10
 
 - **Channel Importing & Renaming Setup**: Clarified the channel lineup and renaming section in Settings to focus on guide display names (`Guide Name = Tuned Channel`), using `Fox = KSAZ-HD` as an example, with guidance on Welcome Wizard imports and re-importing.

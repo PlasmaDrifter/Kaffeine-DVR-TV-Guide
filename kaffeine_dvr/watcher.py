@@ -1,12 +1,22 @@
+"""
+Background daemon watcher for Kaffeine DVR.
+
+Periodically monitors the recording queue, dispatches just-in-time recordings
+to Kaffeine over D-Bus before airtime, manages back-to-back channel handover,
+and triggers automatic background guide sync and storage retention cycles.
+"""
+
 import os
-import time
 import subprocess
+import time
 from datetime import datetime, timedelta
 from typing import Optional
+
+from .config import ConfigManager
 from .dbus_client import KaffeineDbusClient
 from .queue_manager import QueueManager
-from .config import ConfigManager
 from .storage_manager import StorageManager
+
 
 def send_desktop_notification(title: str, channel: str, start_display: str, lead_mins: int = 0):
     """

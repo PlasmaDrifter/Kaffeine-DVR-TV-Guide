@@ -1,6 +1,13 @@
+"""
+Configuration management and theme definitions for Kaffeine DVR.
+
+Manages persistent JSON configuration settings in ~/.config/kaffeine-dvr/,
+color themes, channel mappings, recording safety buffers, and bounds checking.
+"""
+
 import json
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Any, Dict, List
 
 DEFAULT_CHANNEL_MAP: Dict[str, str] = {}
 
@@ -15,6 +22,314 @@ DEFAULT_CATEGORY_COLORS = {
     "time_indicator": "#06b6d4",
     "clock": "#38bdf8",
 }
+
+APP_THEMES: Dict[str, Dict[str, str]] = {
+    "midnight": {
+        "name": "Midnight Navy (Default)",
+        "bg_window": "#191c28",
+        "bg_panel": "#151822",
+        "bg_subpanel": "#1e2333",
+        "bg_input": "#12141d",
+        "bg_button": "#272d3d",
+        "bg_button_hover": "#333a50",
+        "bg_button_pressed": "#1e2330",
+        "border_color": "#333a4c",
+        "border_light": "#3d465c",
+        "border_subtabs": "#323a4d",
+        "accent_primary": "#2d6cd4",
+        "accent_hover": "#3b7ee8",
+        "accent_pressed": "#2259b3",
+        "text_primary": "#dce1e8",
+        "text_secondary": "#8c9bb0",
+        "table_header_bg": "#1e2330",
+        "table_bg": "#161922",
+        "table_gridline": "#2b3242",
+        "scrollbar_bg": "#141722",
+        "scrollbar_handle": "#4a5568",
+        "scrollbar_handle_hover": "#55a84c",
+        "scrollbar_handle_pressed": "#43873c",
+        "tooltip_bg": "#1e293b",
+        "tooltip_border": "#4a8df5",
+        "menu_bg": "#1c202e",
+        "menu_item_selected": "#2b3346",
+    },
+    "oled_black": {
+        "name": "Obsidian (Pure OLED Black)",
+        "bg_window": "#000000",
+        "bg_panel": "#0a0a0d",
+        "bg_subpanel": "#121217",
+        "bg_input": "#050508",
+        "bg_button": "#141419",
+        "bg_button_hover": "#22222a",
+        "bg_button_pressed": "#0a0a0d",
+        "border_color": "#26262b",
+        "border_light": "#33333a",
+        "border_subtabs": "#26262b",
+        "accent_primary": "#22c55e",
+        "accent_hover": "#28d968",
+        "accent_pressed": "#1ca14d",
+        "text_primary": "#f4f4f5",
+        "text_secondary": "#a1a1aa",
+        "table_header_bg": "#0f0f13",
+        "table_bg": "#050508",
+        "table_gridline": "#1e1e24",
+        "scrollbar_bg": "#050508",
+        "scrollbar_handle": "#33333d",
+        "scrollbar_handle_hover": "#22c55e",
+        "scrollbar_handle_pressed": "#1ca14d",
+        "tooltip_bg": "#121217",
+        "tooltip_border": "#22c55e",
+        "menu_bg": "#0d0d11",
+        "menu_item_selected": "#1f1f26",
+    },
+    "nordic_frost": {
+        "name": "Nordic Frost (Arctic Slate)",
+        "bg_window": "#161c26",
+        "bg_panel": "#11161f",
+        "bg_subpanel": "#1d2533",
+        "bg_input": "#0c1017",
+        "bg_button": "#232d3d",
+        "bg_button_hover": "#2f3d52",
+        "bg_button_pressed": "#19212c",
+        "border_color": "#2a374a",
+        "border_light": "#384961",
+        "border_subtabs": "#273446",
+        "accent_primary": "#0284c7",
+        "accent_hover": "#0ea5e9",
+        "accent_pressed": "#0369a1",
+        "text_primary": "#e2e8f0",
+        "text_secondary": "#94a3b8",
+        "table_header_bg": "#1b2330",
+        "table_bg": "#0f141c",
+        "table_gridline": "#222c3c",
+        "scrollbar_bg": "#0e131b",
+        "scrollbar_handle": "#3b495d",
+        "scrollbar_handle_hover": "#38bdf8",
+        "scrollbar_handle_pressed": "#0284c7",
+        "tooltip_bg": "#1a222e",
+        "tooltip_border": "#38bdf8",
+        "menu_bg": "#171f2b",
+        "menu_item_selected": "#263447",
+    },
+    "charcoal": {
+        "name": "Deep Charcoal (Graphite)",
+        "bg_window": "#1e2025",
+        "bg_panel": "#17181c",
+        "bg_subpanel": "#26282f",
+        "bg_input": "#121316",
+        "bg_button": "#2d3038",
+        "bg_button_hover": "#3b3f4a",
+        "bg_button_pressed": "#22242a",
+        "border_color": "#363a44",
+        "border_light": "#454a57",
+        "border_subtabs": "#333640",
+        "accent_primary": "#4f46e5",
+        "accent_hover": "#6366f1",
+        "accent_pressed": "#4338ca",
+        "text_primary": "#e4e5e9",
+        "text_secondary": "#979aa5",
+        "table_header_bg": "#24262d",
+        "table_bg": "#141518",
+        "table_gridline": "#2e313a",
+        "scrollbar_bg": "#131417",
+        "scrollbar_handle": "#474b57",
+        "scrollbar_handle_hover": "#6366f1",
+        "scrollbar_handle_pressed": "#4f46e5",
+        "tooltip_bg": "#23252c",
+        "tooltip_border": "#6366f1",
+        "menu_bg": "#1f2127",
+        "menu_item_selected": "#31353f",
+    },
+    "cyberpunk": {
+        "name": "Cyberpunk (Neon Matrix)",
+        "bg_window": "#0a0d14",
+        "bg_panel": "#06090e",
+        "bg_subpanel": "#121824",
+        "bg_input": "#04060a",
+        "bg_button": "#141b29",
+        "bg_button_hover": "#1e293d",
+        "bg_button_pressed": "#0e131d",
+        "border_color": "#1b273b",
+        "border_light": "#283954",
+        "border_subtabs": "#192437",
+        "accent_primary": "#00f0ff",
+        "accent_hover": "#38f5ff",
+        "accent_pressed": "#00c4d1",
+        "text_primary": "#e6edf3",
+        "text_secondary": "#7d8fa3",
+        "table_header_bg": "#101621",
+        "table_bg": "#06080d",
+        "table_gridline": "#172132",
+        "scrollbar_bg": "#05070c",
+        "scrollbar_handle": "#263750",
+        "scrollbar_handle_hover": "#00f0ff",
+        "scrollbar_handle_pressed": "#00c4d1",
+        "tooltip_bg": "#101724",
+        "tooltip_border": "#00f0ff",
+        "menu_bg": "#0d131d",
+        "menu_item_selected": "#1a2538",
+    },
+    "warm_sunset": {
+        "name": "Warm Amber (Espresso Dusk)",
+        "bg_window": "#1f1816",
+        "bg_panel": "#171210",
+        "bg_subpanel": "#29201d",
+        "bg_input": "#120e0d",
+        "bg_button": "#302421",
+        "bg_button_hover": "#42322e",
+        "bg_button_pressed": "#241b19",
+        "border_color": "#3d2e2a",
+        "border_light": "#4f3c36",
+        "border_subtabs": "#382925",
+        "accent_primary": "#ea580c",
+        "accent_hover": "#f97316",
+        "accent_pressed": "#c2410c",
+        "text_primary": "#f3ede8",
+        "text_secondary": "#a89993",
+        "table_header_bg": "#261e1b",
+        "table_bg": "#140f0e",
+        "table_gridline": "#332623",
+        "scrollbar_bg": "#130f0e",
+        "scrollbar_handle": "#523e38",
+        "scrollbar_handle_hover": "#f97316",
+        "scrollbar_handle_pressed": "#ea580c",
+        "tooltip_bg": "#291f1c",
+        "tooltip_border": "#f97316",
+        "menu_bg": "#221a18",
+        "menu_item_selected": "#3a2c28",
+    },
+    "synthwave": {
+        "name": "Retro Synthwave (Violet Dusk)",
+        "bg_window": "#181424",
+        "bg_panel": "#120f1c",
+        "bg_subpanel": "#221c33",
+        "bg_input": "#0e0c16",
+        "bg_button": "#29213d",
+        "bg_button_hover": "#392e54",
+        "bg_button_pressed": "#1f192e",
+        "border_color": "#352b4f",
+        "border_light": "#463968",
+        "border_subtabs": "#312749",
+        "accent_primary": "#9333ea",
+        "accent_hover": "#a855f7",
+        "accent_pressed": "#7e22ce",
+        "text_primary": "#eeeaf7",
+        "text_secondary": "#9c93b3",
+        "table_header_bg": "#1f1a2e",
+        "table_bg": "#100d19",
+        "table_gridline": "#2c2442",
+        "scrollbar_bg": "#0f0c17",
+        "scrollbar_handle": "#4a3c6e",
+        "scrollbar_handle_hover": "#a855f7",
+        "scrollbar_handle_pressed": "#9333ea",
+        "tooltip_bg": "#231c34",
+        "tooltip_border": "#a855f7",
+        "menu_bg": "#1b1629",
+        "menu_item_selected": "#332a4d",
+    },
+}
+
+THEME_PRESETS: Dict[str, Dict[str, Any]] = {
+    "midnight": {
+        "name": "Midnight Navy (Default)",
+        "colors": {
+            "sports": "#ffa028",
+            "news": "#4fc3f7",
+            "movies": "#c084fc",
+            "tvshows": "#b9feff",
+            "highlight": "#38bdf8",
+            "live_badge": "#059669",
+            "live_bg": "#132400",
+            "time_indicator": "#06b6d4",
+            "clock": "#38bdf8",
+        },
+    },
+    "cyberpunk": {
+        "name": "Cyberpunk / Neon",
+        "colors": {
+            "sports": "#ff5500",
+            "news": "#00f0ff",
+            "movies": "#ff007f",
+            "tvshows": "#ffe600",
+            "highlight": "#00f0ff",
+            "live_badge": "#00ff66",
+            "live_bg": "#032814",
+            "time_indicator": "#ff007f",
+            "clock": "#00f0ff",
+        },
+    },
+    "nordic_frost": {
+        "name": "Nordic Frost",
+        "colors": {
+            "sports": "#38bdf8",
+            "news": "#67e8f9",
+            "movies": "#c4b5fd",
+            "tvshows": "#e0f2fe",
+            "highlight": "#7dd3fc",
+            "live_badge": "#10b981",
+            "live_bg": "#0c222b",
+            "time_indicator": "#38bdf8",
+            "clock": "#67e8f9",
+        },
+    },
+    "warm_sunset": {
+        "name": "Warm Amber / Sunset",
+        "colors": {
+            "sports": "#f97316",
+            "news": "#f59e0b",
+            "movies": "#fb7185",
+            "tvshows": "#fde68a",
+            "highlight": "#fb923c",
+            "live_badge": "#ef4444",
+            "live_bg": "#28120c",
+            "time_indicator": "#f59e0b",
+            "clock": "#fcd34d",
+        },
+    },
+    "emerald_forest": {
+        "name": "Emerald Forest",
+        "colors": {
+            "sports": "#f59e0b",
+            "news": "#4ade80",
+            "movies": "#a7f3d0",
+            "tvshows": "#6ee7b7",
+            "highlight": "#34d399",
+            "live_badge": "#15803d",
+            "live_bg": "#0a2612",
+            "time_indicator": "#10b981",
+            "clock": "#6ee7b7",
+        },
+    },
+    "oled_contrast": {
+        "name": "OLED High Contrast",
+        "colors": {
+            "sports": "#facc15",
+            "news": "#38bdf8",
+            "movies": "#f472b6",
+            "tvshows": "#ffffff",
+            "highlight": "#facc15",
+            "live_badge": "#22c55e",
+            "live_bg": "#182c00",
+            "time_indicator": "#ef4444",
+            "clock": "#facc15",
+        },
+    },
+    "synthwave": {
+        "name": "Retro Synthwave",
+        "colors": {
+            "sports": "#fb923c",
+            "news": "#06b6d4",
+            "movies": "#e879f9",
+            "tvshows": "#f43f5e",
+            "highlight": "#d946ef",
+            "live_badge": "#8b5cf6",
+            "live_bg": "#1f0933",
+            "time_indicator": "#ec4899",
+            "clock": "#06b6d4",
+        },
+    },
+}
+GUIDE_THEME_PRESETS = THEME_PRESETS
 
 class ConfigManager:
     def __init__(self):
@@ -117,6 +432,10 @@ class ConfigManager:
                         data["show_clock"] = True
                     if "clock_font_size" not in data:
                         data["clock_font_size"] = 11
+                    if "app_theme" not in data:
+                        data["app_theme"] = "midnight"
+                    if "theme_preset" not in data:
+                        data["theme_preset"] = "midnight"
                     if "category_colors" not in data or not isinstance(data.get("category_colors"), dict):
                         data["category_colors"] = dict(DEFAULT_CATEGORY_COLORS)
                     else:
@@ -181,6 +500,9 @@ class ConfigManager:
             "guide_show_time_indicator": True,
             "show_clock": True,
             "clock_font_size": 11,
+            "use_custom_title_bar": True,
+            "app_theme": "midnight",
+            "theme_preset": "midnight",
             "category_colors": dict(DEFAULT_CATEGORY_COLORS)
         }
 
@@ -606,14 +928,58 @@ class ConfigManager:
         merged.update(raw)
         return merged
 
+    @property
+    def app_theme(self) -> str:
+        val = str(self.data.get("app_theme", "midnight"))
+        return val if val in APP_THEMES else "midnight"
+
+    @app_theme.setter
+    def app_theme(self, val: str):
+        self.data["app_theme"] = str(val) if str(val) in APP_THEMES else "midnight"
+        self.save()
+
+    def apply_app_theme(self, theme_key: str):
+        if theme_key in APP_THEMES:
+            self.data["app_theme"] = theme_key
+            self.save()
+
+    @property
+    def theme_preset(self) -> str:
+        return str(self.data.get("theme_preset", "midnight"))
+
+    @theme_preset.setter
+    def theme_preset(self, val: str):
+        self.data["theme_preset"] = str(val)
+        self.save()
+
+    @property
+    def guide_theme(self) -> str:
+        return self.theme_preset
+
+    @guide_theme.setter
+    def guide_theme(self, val: str):
+        self.theme_preset = val
+
+    def apply_theme_preset(self, preset_key: str):
+        if preset_key in THEME_PRESETS:
+            preset = THEME_PRESETS[preset_key]
+            self.data["category_colors"] = dict(preset["colors"])
+            self.data["theme_preset"] = preset_key
+            self.save()
+
+    def apply_guide_theme(self, preset_key: str):
+        self.apply_theme_preset(preset_key)
+
     def set_category_color(self, category: str, hex_color: str):
         colors = dict(self.category_colors)
         colors[category] = str(hex_color).strip()
         self.data["category_colors"] = colors
+        self.data["theme_preset"] = "custom"
         self.save()
 
     def reset_category_colors(self):
         self.data["category_colors"] = dict(DEFAULT_CATEGORY_COLORS)
+        self.data["theme_preset"] = "midnight"
         self.save()
 
     @property
@@ -709,6 +1075,15 @@ class ConfigManager:
     @clock_font_size.setter
     def clock_font_size(self, val: int):
         self.data["clock_font_size"] = max(8, min(24, int(val)))
+        self.save()
+
+    @property
+    def use_custom_title_bar(self) -> bool:
+        return bool(self.data.get("use_custom_title_bar", True))
+
+    @use_custom_title_bar.setter
+    def use_custom_title_bar(self, val: bool):
+        self.data["use_custom_title_bar"] = bool(val)
         self.save()
 
 

@@ -1,44 +1,123 @@
+"""
+PyQt6 Graphical User Interface for Kaffeine DVR & TV Guide.
+
+Provides 24-hour single-day grid and list guide views, automated rule creation,
+recording schedule management, timeshift playback, custom frameless window styling,
+and real-time guide synchronization with antenna channel mapping.
+"""
+
+import html
 import os
 import re
+import subprocess
 import sys
 import time
-import html
-import subprocess
-from datetime import datetime, date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
-from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
-    QTabWidget, QLabel, QPushButton, QTableWidget, QTableWidgetItem,
-    QLineEdit, QComboBox, QTextEdit, QHeaderView,
-    QMessageBox, QDialog, QFormLayout, QSpinBox, QCheckBox, QRadioButton,
-    QProgressBar, QStatusBar, QFrame, QGroupBox, QFileDialog,
-    QScrollArea, QToolButton, QSizePolicy, QAbstractSpinBox, QSlider,
-    QStackedWidget, QButtonGroup, QStyledItemDelegate, QStyleOptionViewItem,
-    QStyle, QListWidget, QListWidgetItem, QAbstractItemView, QToolTip,
-    QLayout, QPlainTextEdit, QProxyStyle, QStyleFactory, QColorDialog,
-    QStylePainter, QStyleOptionComboBox
+from PyQt6.QtCore import (
+    QByteArray,
+    QEvent,
+    QObject,
+    QPoint,
+    QPointF,
+    QRect,
+    QRectF,
+    QSettings,
+    QSize,
+    Qt,
+    QThread,
+    QTimer,
+    pyqtSignal,
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QSettings, QByteArray, QEvent, QObject, QPoint, QPointF, QRect, QRectF, QSize
-from PyQt6.QtGui import QColor, QFont, QFontMetrics, QIcon, QWheelEvent, QPainter, QPalette, QPixmap, QPen, QPolygon, QBrush
+from PyQt6.QtGui import (
+    QBrush,
+    QColor,
+    QFont,
+    QFontMetrics,
+    QIcon,
+    QPainter,
+    QPalette,
+    QPen,
+    QPixmap,
+    QPolygon,
+    QWheelEvent,
+)
+from PyQt6.QtWidgets import (
+    QAbstractItemView,
+    QAbstractSpinBox,
+    QApplication,
+    QButtonGroup,
+    QCheckBox,
+    QColorDialog,
+    QComboBox,
+    QDialog,
+    QFileDialog,
+    QFormLayout,
+    QFrame,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QMainWindow,
+    QMessageBox,
+    QPlainTextEdit,
+    QProgressBar,
+    QProxyStyle,
+    QPushButton,
+    QScrollArea,
+    QSizeGrip,
+    QSizePolicy,
+    QSlider,
+    QSpinBox,
+    QStackedWidget,
+    QStatusBar,
+    QStyle,
+    QStyledItemDelegate,
+    QStyleFactory,
+    QStyleOptionComboBox,
+    QStyleOptionViewItem,
+    QStylePainter,
+    QTableWidget,
+    QTableWidgetItem,
+    QTabWidget,
+    QTextEdit,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 try:
-    from .config import ConfigManager, DEFAULT_CHANNEL_MAP, DEFAULT_CATEGORY_COLORS
+    from .config import (
+        APP_THEMES,
+        DEFAULT_CATEGORY_COLORS,
+        THEME_PRESETS,
+        ConfigManager,
+    )
     from .dbus_client import KaffeineDbusClient
     from .guide_service import GuideService
-    from .rules_engine import RulesEngine
     from .queue_manager import QueueManager
-    from .watcher import Watcher
+    from .rules_engine import RulesEngine
     from .storage_manager import StorageManager
+    from .watcher import Watcher
 except (ImportError, ValueError):
-    from kaffeine_dvr.config import ConfigManager, DEFAULT_CHANNEL_MAP, DEFAULT_CATEGORY_COLORS
+    from kaffeine_dvr.config import (
+        APP_THEMES,
+        DEFAULT_CATEGORY_COLORS,
+        THEME_PRESETS,
+        ConfigManager,
+    )
     from kaffeine_dvr.dbus_client import KaffeineDbusClient
     from kaffeine_dvr.guide_service import GuideService
-    from kaffeine_dvr.rules_engine import RulesEngine
     from kaffeine_dvr.queue_manager import QueueManager
-    from kaffeine_dvr.watcher import Watcher
+    from kaffeine_dvr.rules_engine import RulesEngine
     from kaffeine_dvr.storage_manager import StorageManager
+    from kaffeine_dvr.watcher import Watcher
 
 
 def _get_checkmark_icon_path() -> str:
@@ -198,7 +277,7 @@ class HealthCheckWorker(QThread):
         try:
             results = self.guide_service.check_all_sources_health()
             self.finished.emit(results)
-        except Exception as e:
+        except Exception:
             self.finished.emit({})
 
 
@@ -350,6 +429,7 @@ class ServiceLogsDialog(QDialog):
 
         self._worker = ServiceLogsWorker(lines=line_count)
         self._worker.finished.connect(self._on_logs_loaded)
+        self._worker.finished.connect(self._worker.deleteLater)
         self._worker.start()
 
     def _on_logs_loaded(self, output: str, ok: bool):
@@ -2299,123 +2379,125 @@ def get_app_icon() -> QIcon:
     return QIcon()
 
 
-APP_STYLESHEET = """
+def build_app_stylesheet(theme_key: str = "midnight", checkmark_icon_path: str = "") -> str:
+    tokens = APP_THEMES.get(theme_key, APP_THEMES["midnight"])
+    return f"""
 /* Base Application & Window Styling */
-QWidget {
-    background-color: #191c28;
-    color: #dce1e8;
+QWidget {{
+    background-color: {tokens["bg_window"]};
+    color: {tokens["text_primary"]};
     font-size: 13px;
-}
+}}
 
-QMainWindow, QDialog {
-    background-color: #191c28;
-    color: #dce1e8;
-}
+QMainWindow, QDialog {{
+    background-color: {tokens["bg_window"]};
+    color: {tokens["text_primary"]};
+}}
 
-QMessageBox {
-    background-color: #191c28;
-    color: #dce1e8;
-}
+QMessageBox {{
+    background-color: {tokens["bg_window"]};
+    color: {tokens["text_primary"]};
+}}
 
-QMenu {
-    background-color: #1c202e;
-    color: #e0e6ed;
-    border: 1px solid #333a4c;
+QMenu {{
+    background-color: {tokens["menu_bg"]};
+    color: {tokens["text_primary"]};
+    border: 1px solid {tokens["border_color"]};
     padding: 4px;
-}
-QMenu::item:selected {
-    background-color: #2b3346;
+}}
+QMenu::item:selected {{
+    background-color: {tokens["menu_item_selected"]};
     color: #ffffff;
-}
+}}
 
 /* Default Form Controls */
-QLineEdit, QTextEdit, QSpinBox, QComboBox {
-    background-color: #12141d;
-    border: 1px solid #333a4c;
+QLineEdit, QTextEdit, QSpinBox, QComboBox {{
+    background-color: {tokens["bg_input"]};
+    border: 1px solid {tokens["border_color"]};
     border-radius: 4px;
-    color: #e4e9f0;
+    color: {tokens["text_primary"]};
     padding: 5px 8px;
-}
-QLineEdit:focus, QTextEdit:focus, QSpinBox:focus, QComboBox:focus {
-    border-color: #4a8df5;
-}
+}}
+QLineEdit:focus, QTextEdit:focus, QSpinBox:focus, QComboBox:focus {{
+    border-color: {tokens["accent_primary"]};
+}}
 
 /* Buttons */
-QPushButton {
-    background-color: #272d3d;
-    border: 1px solid #3c465d;
+QPushButton {{
+    background-color: {tokens["bg_button"]};
+    border: 1px solid {tokens["border_color"]};
     border-radius: 5px;
-    color: #e0e6ed;
+    color: {tokens["text_primary"]};
     padding: 6px 16px;
     font-weight: 500;
-}
-QPushButton:hover {
-    background-color: #333a50;
-    border-color: #4f5b79;
+}}
+QPushButton:hover {{
+    background-color: {tokens["bg_button_hover"]};
+    border-color: {tokens["border_light"]};
     color: #ffffff;
-}
-QPushButton:pressed {
-    background-color: #1e2330;
-}
-QPushButton:disabled {
-    background-color: #181b24;
-    color: #5a6475;
-    border-color: #252b38;
-}
+}}
+QPushButton:pressed {{
+    background-color: {tokens["bg_button_pressed"]};
+}}
+QPushButton:disabled {{
+    background-color: {tokens["bg_window"]};
+    color: {tokens["text_secondary"]};
+    border-color: {tokens["border_color"]};
+}}
 
 /* Primary Action Buttons */
-QPushButton#primaryActionBtn {
-    background-color: #2d6cd4;
-    border: 1px solid #4a8df5;
+QPushButton#primaryActionBtn {{
+    background-color: {tokens["accent_primary"]};
+    border: 1px solid {tokens["accent_hover"]};
     color: #ffffff;
     font-weight: bold;
-}
-QPushButton#primaryActionBtn:hover {
-    background-color: #3b7ee8;
-}
-QPushButton#primaryActionBtn:pressed {
-    background-color: #2259b3;
-}
+}}
+QPushButton#primaryActionBtn:hover {{
+    background-color: {tokens["accent_hover"]};
+}}
+QPushButton#primaryActionBtn:pressed {{
+    background-color: {tokens["accent_pressed"]};
+}}
 
 /* Checkboxes */
-QCheckBox {
-    color: #dce1e8;
+QCheckBox {{
+    color: {tokens["text_primary"]};
     spacing: 8px;
     background: transparent;
-}
-QCheckBox::indicator {
+}}
+QCheckBox::indicator {{
     width: 16px;
     height: 16px;
-    border: 1px solid #3d465c;
+    border: 1px solid {tokens["border_color"]};
     border-radius: 3px;
-    background-color: #13151f;
-}
-QCheckBox::indicator:hover {
-    border-color: #505c75;
-}
-QCheckBox::indicator:checked {
-    background-color: #2d6cd4;
-    border-color: #4a8df5;
-    image: url("__CHECKMARK_ICON_PATH__");
-}
-QCheckBox::indicator:checked:disabled {
-    background-color: #238636;
-    border-color: #2ea043;
-    image: url("__CHECKMARK_ICON_PATH__");
-}
+    background-color: {tokens["bg_input"]};
+}}
+QCheckBox::indicator:hover {{
+    border-color: {tokens["border_light"]};
+}}
+QCheckBox::indicator:checked {{
+    background-color: {tokens["accent_primary"]};
+    border-color: {tokens["accent_hover"]};
+    image: url("{checkmark_icon_path}");
+}}
+QCheckBox::indicator:checked:disabled {{
+    background-color: {tokens["accent_pressed"]};
+    border-color: {tokens["accent_primary"]};
+    image: url("{checkmark_icon_path}");
+}}
 
 /* Top-Level Main Tabs: Option 4 Browser-Style Curved / Flowing Tabs */
-QTabWidget#mainTabs::pane {
-    border: 1px solid #3d465c;
-    border-top: 1.5px solid #4a5570;
+QTabWidget#mainTabs::pane {{
+    border: 1px solid {tokens["border_light"]};
+    border-top: 1.5px solid {tokens["border_light"]};
     border-radius: 8px;
-    background-color: #191c28;
+    background-color: {tokens["bg_window"]};
     top: -1px;
-}
-QTabWidget#mainTabs > QTabBar {
+}}
+QTabWidget#mainTabs > QTabBar {{
     background: transparent;
-}
-QTabWidget#mainTabs > QTabBar::tab {
+}}
+QTabWidget#mainTabs > QTabBar::tab {{
     background-color: transparent;
     border: 1px solid transparent;
     border-top-left-radius: 9px;
@@ -2423,14 +2505,14 @@ QTabWidget#mainTabs > QTabBar::tab {
     padding: 9px 24px 8px 24px;
     margin-right: 4px;
     margin-top: 5px;
-    color: #8c9bb0;
+    color: {tokens["text_secondary"]};
     font-size: 13px;
     font-weight: 500;
-}
-QTabWidget#mainTabs > QTabBar::tab:selected {
-    background-color: #191c28;
-    border: 1px solid #3d465c;
-    border-bottom: 2px solid #191c28;
+}}
+QTabWidget#mainTabs > QTabBar::tab:selected {{
+    background-color: {tokens["bg_window"]};
+    border: 1px solid {tokens["border_light"]};
+    border-bottom: 2px solid {tokens["bg_window"]};
     border-top-left-radius: 9px;
     border-top-right-radius: 9px;
     margin-top: 0px;
@@ -2438,28 +2520,28 @@ QTabWidget#mainTabs > QTabBar::tab:selected {
     padding-bottom: 9px;
     color: #ffffff;
     font-weight: bold;
-}
-QTabWidget#mainTabs > QTabBar::tab:hover:!selected {
-    background-color: #212637;
-    border: 1px solid #2f374a;
+}}
+QTabWidget#mainTabs > QTabBar::tab:hover:!selected {{
+    background-color: {tokens["bg_subpanel"]};
+    border: 1px solid {tokens["border_color"]};
     border-bottom: none;
-    color: #d8e2ee;
-}
+    color: {tokens["text_primary"]};
+}}
 
 /* Secondary Subtabs: Curved Flowing Subtabs */
 QTabWidget#recordingsSubTabs::pane,
 QTabWidget#settingsSubTabs::pane,
-QTabWidget#helpSubTabs::pane {
-    border: 1px solid #323a4d;
-    border-top: 1.5px solid #3f4961;
+QTabWidget#helpSubTabs::pane {{
+    border: 1px solid {tokens["border_subtabs"]};
+    border-top: 1.5px solid {tokens["border_light"]};
     border-radius: 6px;
-    background-color: #151822;
+    background-color: {tokens["bg_panel"]};
     padding: 6px;
     top: -1px;
-}
+}}
 QTabWidget#recordingsSubTabs > QTabBar::tab,
 QTabWidget#settingsSubTabs > QTabBar::tab,
-QTabWidget#helpSubTabs > QTabBar::tab {
+QTabWidget#helpSubTabs > QTabBar::tab {{
     background-color: transparent;
     border: 1px solid transparent;
     border-top-left-radius: 7px;
@@ -2467,208 +2549,271 @@ QTabWidget#helpSubTabs > QTabBar::tab {
     padding: 6px 18px 5px 18px;
     margin-right: 4px;
     margin-top: 3px;
-    color: #8896aa;
+    color: {tokens["text_secondary"]};
     font-size: 12px;
     font-weight: 500;
-}
+}}
 QTabWidget#recordingsSubTabs > QTabBar::tab:selected,
 QTabWidget#settingsSubTabs > QTabBar::tab:selected,
-QTabWidget#helpSubTabs > QTabBar::tab:selected {
-    background-color: #151822;
-    border: 1px solid #323a4d;
-    border-bottom: 2px solid #151822;
+QTabWidget#helpSubTabs > QTabBar::tab:selected {{
+    background-color: {tokens["bg_panel"]};
+    border: 1px solid {tokens["border_subtabs"]};
+    border-bottom: 2px solid {tokens["bg_panel"]};
     margin-top: 0px;
     padding-top: 8px;
     color: #ffffff;
     font-weight: bold;
-}
+}}
 QTabWidget#recordingsSubTabs > QTabBar::tab:hover:!selected,
 QTabWidget#settingsSubTabs > QTabBar::tab:hover:!selected,
-QTabWidget#helpSubTabs > QTabBar::tab:hover:!selected {
-    background-color: #1e2332;
-    border: 1px solid #2a3142;
+QTabWidget#helpSubTabs > QTabBar::tab:hover:!selected {{
+    background-color: {tokens["bg_subpanel"]};
+    border: 1px solid {tokens["border_color"]};
     border-bottom: none;
-    color: #d1dbe7;
-}
+    color: {tokens["text_primary"]};
+}}
 
 /* Scroll area background inside settings */
-QScrollArea, QScrollArea > QWidget, QScrollArea > QWidget > QWidget {
-    background-color: #171a26;
+QScrollArea, QScrollArea > QWidget, QScrollArea > QWidget > QWidget {{
+    background-color: {tokens["bg_panel"]};
     border: none;
-}
+}}
 
 /* Group Boxes */
-QGroupBox {
-    border: 1px solid #333a4c;
+QGroupBox {{
+    border: 1px solid {tokens["border_color"]};
     border-radius: 6px;
     margin-top: 14px;
     padding-top: 14px;
     font-weight: bold;
     font-size: 13px;
-}
-QGroupBox::title {
+}}
+QGroupBox::title {{
     subcontrol-origin: margin;
     subcontrol-position: top left;
     padding: 0 8px;
-    color: #d3dae3;
+    color: {tokens["text_primary"]};
     font-size: 13px;
-}
+}}
 
 /* High-Visibility Custom Scrollbars */
-QScrollBar:vertical {
-    border: 1px solid #2a3040;
-    background: #141722;
+QScrollBar:vertical {{
+    border: 1px solid {tokens["border_color"]};
+    background: {tokens["scrollbar_bg"]};
     width: 14px;
     margin: 0px;
     border-radius: 7px;
-}
-QScrollBar::handle:vertical {
-    background: #4a5568;
+}}
+QScrollBar::handle:vertical {{
+    background: {tokens["scrollbar_handle"]};
     min-height: 28px;
     border-radius: 6px;
-    border: 1px solid #5a667d;
-}
-QScrollBar::handle:vertical:hover {
-    background: #55a84c;
-    border: 1px solid #68c75e;
-}
-QScrollBar::handle:vertical:pressed {
-    background: #43873c;
-}
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    border: 1px solid {tokens["border_light"]};
+}}
+QScrollBar::handle:vertical:hover {{
+    background: {tokens["scrollbar_handle_hover"]};
+    border: 1px solid {tokens["scrollbar_handle_hover"]};
+}}
+QScrollBar::handle:vertical:pressed {{
+    background: {tokens["scrollbar_handle_pressed"]};
+}}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
     height: 0px;
     background: none;
-}
-QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+}}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
     background: none;
-}
+}}
 
-QScrollBar:horizontal {
-    border: 1px solid #2a3040;
-    background: #141722;
+QScrollBar:horizontal {{
+    border: 1px solid {tokens["border_color"]};
+    background: {tokens["scrollbar_bg"]};
     height: 14px;
     margin: 0px;
     border-radius: 7px;
-}
-QScrollBar::handle:horizontal {
-    background: #4a5568;
+}}
+QScrollBar::handle:horizontal {{
+    background: {tokens["scrollbar_handle"]};
     min-width: 28px;
     border-radius: 6px;
-    border: 1px solid #5a667d;
-}
-QScrollBar::handle:horizontal:hover {
-    background: #55a84c;
-    border: 1px solid #68c75e;
-}
-QScrollBar::handle:horizontal:pressed {
-    background: #43873c;
-}
-QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    border: 1px solid {tokens["border_light"]};
+}}
+QScrollBar::handle:horizontal:hover {{
+    background: {tokens["scrollbar_handle_hover"]};
+    border: 1px solid {tokens["scrollbar_handle_hover"]};
+}}
+QScrollBar::handle:horizontal:pressed {{
+    background: {tokens["scrollbar_handle_pressed"]};
+}}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
     width: 0px;
     background: none;
-}
-QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
+}}
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{
     background: none;
-}
+}}
 
 /* Channel Order List Widget */
-QListWidget#channelOrderList {
-    background-color: #141722;
-    border: 1px solid #323b4e;
+QListWidget#channelOrderList {{
+    background-color: {tokens["bg_panel"]};
+    border: 1px solid {tokens["border_color"]};
     border-radius: 6px;
     padding: 4px;
     font-size: 13px;
-}
-QListWidget#channelOrderList::item {
-    background-color: #1c2130;
-    border: 1px solid #2d3547;
+}}
+QListWidget#channelOrderList::item {{
+    background-color: {tokens["bg_subpanel"]};
+    border: 1px solid {tokens["border_color"]};
     border-radius: 5px;
     padding: 6px 10px;
     margin-bottom: 3px;
-    color: #e0e6ed;
+    color: {tokens["text_primary"]};
     font-weight: 500;
-}
-QListWidget#channelOrderList::item:hover {
-    background-color: #272f44;
-    border-color: #43516f;
-}
-QListWidget#channelOrderList::item:selected {
-    background-color: #2563eb;
-    border-color: #3b82f6;
+}}
+QListWidget#channelOrderList::item:hover {{
+    background-color: {tokens["bg_button_hover"]};
+    border-color: {tokens["border_light"]};
+}}
+QListWidget#channelOrderList::item:selected {{
+    background-color: {tokens["accent_primary"]};
+    border-color: {tokens["accent_hover"]};
     color: #ffffff;
     font-weight: bold;
-}
+}}
 
 /* EPG Grid Table Styles */
-QTableWidget#guideGridTable, QTableWidget#guideListTable {
-    background-color: #161922;
-    gridline-color: #2b3242;
-    border: 1px solid #363c4e;
+QTableWidget#guideGridTable, QTableWidget#guideListTable {{
+    background-color: {tokens["table_bg"]};
+    gridline-color: {tokens["table_gridline"]};
+    border: 1px solid {tokens["border_color"]};
     border-radius: 4px;
     font-size: 12px;
-}
-QTableWidget#guideGridTable QHeaderView::section:horizontal {
-    background-color: #1e2330;
-    color: #e2e8f0;
+}}
+QTableWidget#guideGridTable QHeaderView::section:horizontal {{
+    background-color: {tokens["table_header_bg"]};
+    color: {tokens["text_primary"]};
     font-weight: bold;
     font-size: 14px;
     padding: 6px;
-    border: 1px solid #2b3242;
+    border: 1px solid {tokens["table_gridline"]};
     border-top: none;
-}
-QTableWidget#guideGridTable QHeaderView::section:vertical {
-    background-color: #1e2330;
+}}
+QTableWidget#guideGridTable QHeaderView::section:vertical {{
+    background-color: {tokens["table_header_bg"]};
     color: #ffffff;
     font-weight: bold;
     font-size: 12px;
     padding: 6px 10px;
-    border: 1px solid #2b3242;
+    border: 1px solid {tokens["table_gridline"]};
     border-left: none;
-}
+}}
 
 /* Modern Status & Progress Bar */
-QProgressBar#statusBarProgressBar {
-    border: 1px solid #364156;
+QProgressBar#statusBarProgressBar {{
+    border: 1px solid {tokens["border_color"]};
     border-radius: 6px;
-    background-color: #12151e;
+    background-color: {tokens["bg_input"]};
     text-align: center;
     color: #ffffff;
     font-size: 11px;
     font-weight: bold;
     min-height: 18px;
     max-height: 18px;
-}
-QProgressBar#statusBarProgressBar::chunk {
+}}
+QProgressBar#statusBarProgressBar::chunk {{
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-        stop:0 #1d4ed8, stop:0.6 #2563eb, stop:1 #3b82f6);
+        stop:0 {tokens["accent_pressed"]}, stop:0.6 {tokens["accent_primary"]}, stop:1 {tokens["accent_hover"]});
     border-radius: 5px;
-}
+}}
 
 /* Category Color Picker Tile */
-QPushButton.category-color-tile {
-    border: 2px solid #3d465c;
+QPushButton.category-color-tile {{
+    border: 2px solid {tokens["border_light"]};
     border-radius: 6px;
     padding: 0px;
     margin: 0px;
-}
-QPushButton.category-color-tile:hover {
-    border: 2px solid #38bdf8;
-}
-QPushButton.category-color-tile:pressed {
+}}
+QPushButton.category-color-tile:hover {{
+    border: 2px solid {tokens["accent_primary"]};
+}}
+QPushButton.category-color-tile:pressed {{
     border: 2px solid #ffffff;
-}
+}}
 
-/* Tooltip Styling */
-QToolTip {
-    background-color: #1e293b;
-    color: #ffffff;
-    border: 1.5px solid #4a8df5;
+/* Custom Frameless Title Bar & Rounded Window */
+QWidget#centralWidget[frameless_rounded="true"] {{
+    background-color: {tokens["bg_window"]};
+    border: 1px solid {tokens["border_color"]};
+    border-top-left-radius: 9px;
+    border-top-right-radius: 9px;
+    border-bottom-left-radius: 0px;
+    border-bottom-right-radius: 0px;
+}}
+
+QWidget#customTitleBar {{
+    background-color: {tokens["bg_panel"]};
+    border-bottom: 1px solid {tokens["border_color"]};
+    min-height: 34px;
+    max-height: 34px;
+}}
+QWidget#customTitleBar[frameless_rounded="true"] {{
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+}}
+
+QStatusBar[frameless_rounded="true"] {{
+    border-bottom-left-radius: 0px;
+    border-bottom-right-radius: 0px;
+}}
+
+QLabel#customTitleBarTitle {{
+    color: {tokens["text_primary"]};
+    font-size: 13px;
+    font-weight: 600;
+    padding-left: 6px;
+    background: transparent;
+}}
+
+QToolButton.title-bar-btn {{
+    background-color: transparent;
+    border: none;
     border-radius: 4px;
-    padding: 3px 7px;
-    font-size: 12px;
-    font-weight: 500;
-}
+    color: {tokens["text_secondary"]};
+    font-size: 14px;
+    font-weight: bold;
+    min-width: 38px;
+    max-width: 38px;
+    min-height: 28px;
+    max-height: 28px;
+    margin: 3px 2px;
+}}
+QToolButton.title-bar-btn:hover {{
+    background-color: {tokens["bg_button_hover"]};
+    color: #ffffff;
+}}
+QToolButton.title-bar-btn:pressed {{
+    background-color: {tokens["bg_button_pressed"]};
+}}
+
+QToolButton#titleBarCloseBtn:hover {{
+    background-color: #dc2626;
+    color: #ffffff;
+}}
+QToolButton#titleBarCloseBtn:pressed {{
+    background-color: #b91c1c;
+    color: #ffffff;
+}}
+
+/* Corner Resize Grip */
+QSizeGrip#cornerResizeGrip {{
+    width: 14px;
+    height: 14px;
+    background-color: transparent;
+    margin: 0px 2px 2px 0px;
+}}
 """
+
+APP_STYLESHEET = build_app_stylesheet("midnight", "")
 
 
 class TooltipDelayStyle(QProxyStyle):
@@ -2681,7 +2826,7 @@ class TooltipDelayStyle(QProxyStyle):
         return super().styleHint(hint, option, widget, returnData)
 
 
-def setup_dark_theme(app: Optional[QApplication]):
+def setup_dark_theme(app: Optional[QApplication], theme_key: str = "midnight"):
     if not app:
         return
     base_style = QStyleFactory.create("Fusion")
@@ -2689,36 +2834,271 @@ def setup_dark_theme(app: Optional[QApplication]):
         app.setStyle(TooltipDelayStyle(base_style))
     else:
         app.setStyle("Fusion")
+
+    tokens = APP_THEMES.get(theme_key, APP_THEMES["midnight"])
     palette = QPalette()
-    palette.setColor(QPalette.ColorRole.Window, QColor("#191c28"))
-    palette.setColor(QPalette.ColorRole.WindowText, QColor("#e0e6ed"))
-    palette.setColor(QPalette.ColorRole.Base, QColor("#13151f"))
-    palette.setColor(QPalette.ColorRole.AlternateBase, QColor("#191c28"))
-    palette.setColor(QPalette.ColorRole.ToolTipBase, QColor("#1e293b"))
+    palette.setColor(QPalette.ColorRole.Window, QColor(tokens["bg_window"]))
+    palette.setColor(QPalette.ColorRole.WindowText, QColor(tokens["text_primary"]))
+    palette.setColor(QPalette.ColorRole.Base, QColor(tokens["bg_input"]))
+    palette.setColor(QPalette.ColorRole.AlternateBase, QColor(tokens["bg_window"]))
+    palette.setColor(QPalette.ColorRole.ToolTipBase, QColor(tokens["tooltip_bg"]))
     palette.setColor(QPalette.ColorRole.ToolTipText, QColor("#ffffff"))
-    palette.setColor(QPalette.ColorRole.Text, QColor("#e0e6ed"))
-    palette.setColor(QPalette.ColorRole.Button, QColor("#222634"))
-    palette.setColor(QPalette.ColorRole.ButtonText, QColor("#e0e6ed"))
+    palette.setColor(QPalette.ColorRole.Text, QColor(tokens["text_primary"]))
+    palette.setColor(QPalette.ColorRole.Button, QColor(tokens["bg_button"]))
+    palette.setColor(QPalette.ColorRole.ButtonText, QColor(tokens["text_primary"]))
     palette.setColor(QPalette.ColorRole.BrightText, QColor("#ffffff"))
-    palette.setColor(QPalette.ColorRole.Link, QColor("#5b9cf6"))
-    palette.setColor(QPalette.ColorRole.Highlight, QColor("#2d6cd4"))
+    palette.setColor(QPalette.ColorRole.Link, QColor(tokens["accent_primary"]))
+    palette.setColor(QPalette.ColorRole.Highlight, QColor(tokens["accent_primary"]))
     palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#ffffff"))
-    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText, QColor("#656f82"))
-    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, QColor("#656f82"))
-    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, QColor("#656f82"))
+    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText, QColor(tokens["text_secondary"]))
+    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, QColor(tokens["text_secondary"]))
+    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, QColor(tokens["text_secondary"]))
     app.setPalette(palette)
-    stylesheet = APP_STYLESHEET.replace("__CHECKMARK_ICON_PATH__", get_checkmark_icon_path())
+    stylesheet = build_app_stylesheet(theme_key, get_checkmark_icon_path())
     app.setStyleSheet(stylesheet)
+
+
+class CustomTitleBar(QWidget):
+    """Custom frameless window title bar with grab-and-move, title/icon, clock, and window controls."""
+
+    def __init__(self, parent: "MainWindow"):
+        super().__init__(parent)
+        self.main_window = parent
+        self.setObjectName("customTitleBar")
+        self.setFixedHeight(34)
+        self._drag_pos: Optional[QPoint] = None
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(10, 0, 4, 0)
+        layout.setSpacing(6)
+
+        # App Icon
+        self.icon_lbl = QLabel()
+        self.icon_lbl.setFixedSize(18, 18)
+        self.icon_lbl.setScaledContents(True)
+        app_ic = get_app_icon()
+        if not app_ic.isNull():
+            self.icon_lbl.setPixmap(app_ic.pixmap(18, 18))
+        layout.addWidget(self.icon_lbl, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        # Title Label
+        self.title_lbl = QLabel("Kaffeine DVR & TV Guide")
+        self.title_lbl.setObjectName("customTitleBarTitle")
+        layout.addWidget(self.title_lbl, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        layout.addStretch()
+
+        # Window Controls: Minimize, Maximize/Restore, Close
+        self.min_btn = QToolButton()
+        self.min_btn.setObjectName("titleBarMinBtn")
+        self.min_btn.setProperty("class", "title-bar-btn")
+        self.min_btn.setText("—")
+        self.min_btn.setToolTip("Minimize")
+        self.min_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.min_btn.clicked.connect(self.main_window.showMinimized)
+        layout.addWidget(self.min_btn)
+
+        self.max_btn = QToolButton()
+        self.max_btn.setObjectName("titleBarMaxBtn")
+        self.max_btn.setProperty("class", "title-bar-btn")
+        self.max_btn.setText("▢")
+        self.max_btn.setToolTip("Maximize")
+        self.max_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.max_btn.clicked.connect(self._toggle_maximize_restore)
+        layout.addWidget(self.max_btn)
+
+        self.close_btn = QToolButton()
+        self.close_btn.setObjectName("titleBarCloseBtn")
+        self.close_btn.setProperty("class", "title-bar-btn")
+        self.close_btn.setText("✕")
+        self.close_btn.setToolTip("Close")
+        self.close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.close_btn.clicked.connect(self.main_window.close)
+        layout.addWidget(self.close_btn)
+
+    def _toggle_maximize_restore(self):
+        if self.main_window.isMaximized():
+            self.main_window.showNormal()
+        else:
+            self.main_window.showMaximized()
+        self.update_max_button_icon()
+
+    def update_max_button_icon(self):
+        if self.main_window.isMaximized():
+            self.max_btn.setText("❐")
+            self.max_btn.setToolTip("Restore")
+        else:
+            self.max_btn.setText("▢")
+            self.max_btn.setToolTip("Maximize")
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            # Try native Wayland/X11 system move first for smooth desktop snapping
+            win_handle = self.main_window.windowHandle()
+            if win_handle and hasattr(win_handle, "startSystemMove"):
+                if win_handle.startSystemMove():
+                    event.accept()
+                    return
+            # Fallback manual drag calculation
+            self._drag_pos = event.globalPosition().toPoint() - self.main_window.frameGeometry().topLeft()
+            event.accept()
+        else:
+            super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._drag_pos and event.buttons() & Qt.MouseButton.LeftButton:
+            if not self.main_window.isMaximized():
+                self.main_window.move(event.globalPosition().toPoint() - self._drag_pos)
+                event.accept()
+        else:
+            super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        self._drag_pos = None
+        super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._toggle_maximize_restore()
+            event.accept()
+        else:
+            super().mouseDoubleClickEvent(event)
+
+
+class CornerResizeGrip(QSizeGrip):
+    """Custom size grip that paints classic diagonal grip stripes matching application theme."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(16, 16)
+        self.setCursor(Qt.CursorShape.SizeFDiagCursor)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+        pen_bg = QPen(QColor("#1e293b"), 1)
+        pen_fg = QPen(QColor("#64748b"), 1)
+        w, h = self.width(), self.height()
+        for offset in (4, 8, 12):
+            painter.setPen(pen_bg)
+            painter.drawLine(w - offset - 1, h, w, h - offset - 1)
+            painter.setPen(pen_fg)
+            painter.drawLine(w - offset, h, w, h - offset)
+
+
+class FramelessResizeFilter(QObject):
+    """
+    Enables smooth edge and corner window resizing from all 4 borders and 4 corners
+    for frameless windows, utilizing native startSystemResize where available
+    with manual geometry calculation fallback.
+    """
+    def __init__(self, target: "MainWindow", margin: int = 7):
+        super().__init__(target)
+        self.target = target
+        self.margin = margin
+        self._resizing = False
+        self._resize_edge = 0
+        self._drag_start_pos = QPoint()
+        self._drag_start_geom = QRect()
+        self.target.installEventFilter(self)
+
+    def _get_edges(self, pos: QPoint) -> int:
+        rect = self.target.rect()
+        edges = 0
+        if pos.x() <= self.margin:
+            edges |= Qt.Edge.LeftEdge.value
+        elif pos.x() >= rect.width() - self.margin:
+            edges |= Qt.Edge.RightEdge.value
+        if pos.y() <= self.margin:
+            edges |= Qt.Edge.TopEdge.value
+        elif pos.y() >= rect.height() - self.margin:
+            edges |= Qt.Edge.BottomEdge.value
+        return edges
+
+    def _cursor_for_edges(self, edges: int):
+        if (edges & Qt.Edge.LeftEdge.value and edges & Qt.Edge.TopEdge.value) or (edges & Qt.Edge.RightEdge.value and edges & Qt.Edge.BottomEdge.value):
+            return Qt.CursorShape.SizeFDiagCursor
+        if (edges & Qt.Edge.RightEdge.value and edges & Qt.Edge.TopEdge.value) or (edges & Qt.Edge.LeftEdge.value and edges & Qt.Edge.BottomEdge.value):
+            return Qt.CursorShape.SizeBDiagCursor
+        if edges & (Qt.Edge.LeftEdge.value | Qt.Edge.RightEdge.value):
+            return Qt.CursorShape.SizeHorCursor
+        if edges & (Qt.Edge.TopEdge.value | Qt.Edge.BottomEdge.value):
+            return Qt.CursorShape.SizeVerCursor
+        return Qt.CursorShape.ArrowCursor
+
+    def eventFilter(self, obj, event):
+        if obj != self.target or not getattr(self.target.config_mgr, "use_custom_title_bar", True):
+            return super().eventFilter(obj, event)
+
+        if self.target.isMaximized() or self.target.isFullScreen():
+            if self._resizing:
+                self._resizing = False
+                self.target.unsetCursor()
+            return super().eventFilter(obj, event)
+
+        etype = event.type()
+        if etype == QEvent.Type.MouseMove:
+            if not self._resizing:
+                edges = self._get_edges(event.pos())
+                if edges:
+                    self.target.setCursor(self._cursor_for_edges(edges))
+                else:
+                    self.target.unsetCursor()
+            else:
+                diff = event.globalPosition().toPoint() - self._drag_start_pos
+                geom = QRect(self._drag_start_geom)
+                min_w = self.target.minimumWidth() or 400
+                min_h = self.target.minimumHeight() or 300
+
+                if self._resize_edge & Qt.Edge.RightEdge.value:
+                    geom.setWidth(max(min_w, self._drag_start_geom.width() + diff.x()))
+                elif self._resize_edge & Qt.Edge.LeftEdge.value:
+                    new_w = max(min_w, self._drag_start_geom.width() - diff.x())
+                    geom.setLeft(self._drag_start_geom.right() - new_w)
+
+                if self._resize_edge & Qt.Edge.BottomEdge.value:
+                    geom.setHeight(max(min_h, self._drag_start_geom.height() + diff.y()))
+                elif self._resize_edge & Qt.Edge.TopEdge.value:
+                    new_h = max(min_h, self._drag_start_geom.height() - diff.y())
+                    geom.setTop(self._drag_start_geom.bottom() - new_h)
+
+                self.target.setGeometry(geom)
+                return True
+
+        elif etype == QEvent.Type.MouseButtonPress and event.button() == Qt.MouseButton.LeftButton:
+            edges = self._get_edges(event.pos())
+            if edges:
+                wh = self.target.windowHandle()
+                if wh and hasattr(wh, "startSystemResize"):
+                    if wh.startSystemResize(Qt.Edge(edges)):
+                        return True
+                self._resizing = True
+                self._resize_edge = edges
+                self._drag_start_pos = event.globalPosition().toPoint()
+                self._drag_start_geom = self.target.geometry()
+                return True
+
+        elif etype == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton:
+            if self._resizing:
+                self._resizing = False
+                self._resize_edge = 0
+                self.target.unsetCursor()
+                return True
+
+        return super().eventFilter(obj, event)
 
 
 class MainWindow(QMainWindow):
     def __init__(self, config_mgr: Optional[ConfigManager] = None):
         super().__init__()
+        self.config_mgr = config_mgr or ConfigManager()
         self.setWindowTitle("Kaffeine DVR & TV Guide")
         self.setWindowIcon(get_app_icon())
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        if getattr(self.config_mgr, "use_custom_title_bar", True):
+            self.setWindowFlags(self.windowFlags() | Qt.WindowType.FramelessWindowHint)
         app_inst = QApplication.instance()
         if app_inst:
-            setup_dark_theme(app_inst)
+            setup_dark_theme(app_inst, self.config_mgr.app_theme)
 
         self.settings = QSettings("KaffeineDVR", "TVGuide")
         saved_w = self.settings.value("custom_window_width", type=int)
@@ -2732,7 +3112,6 @@ class MainWindow(QMainWindow):
             else:
                 self.resize(1100, 750)
 
-        self.config_mgr = config_mgr or ConfigManager()
         self.dbus_client = KaffeineDbusClient()
         self.queue_mgr = QueueManager(data_dir=self.config_mgr.data_dir)
         self.guide_service = GuideService(data_dir=self.config_mgr.data_dir, channel_map=self.config_mgr.channel_map, config_mgr=self.config_mgr)
@@ -2767,11 +3146,20 @@ class MainWindow(QMainWindow):
 
     def init_ui(self):
         central_widget = QWidget()
+        central_widget.setObjectName("centralWidget")
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
 
         # Muted update notification badge (placed in action bar just above status bar)
         self.update_badge_widget = self._create_update_badge_widget()
+
+        # Custom Frameless Title Bar (placed at the very top above main tabs)
+        self.custom_title_bar = CustomTitleBar(self)
+        main_layout.addWidget(self.custom_title_bar)
+        use_custom = getattr(self.config_mgr, "use_custom_title_bar", True)
+        self.custom_title_bar.setVisible(use_custom)
 
         # Main Tabs
         self.tabs = QTabWidget()
@@ -2782,22 +3170,32 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.create_help_tab(), "Help and Information")
         self.tabs.currentChanged.connect(self._on_main_tab_changed)
 
-        # Top-Right Corner Clock Widget
+        # Corner Clock Widget for Tabs (used when native OS title bar is active)
         self.clock_widget = self._create_clock_widget()
         self.tabs.setCornerWidget(self.clock_widget, Qt.Corner.TopRightCorner)
         self._update_clock_display()
         main_layout.addWidget(self.tabs)
 
-        # Status Bar
+        # Status Bar (kept hidden when empty to avoid an unnecessary bottom strip)
         self.status_bar = QStatusBar()
+        self.status_bar.setSizeGripEnabled(False)
+        self.status_bar.hide()
         self.setStatusBar(self.status_bar)
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setObjectName("statusBarProgressBar")
-        self.progress_bar.setMaximumWidth(220)
-        self.progress_bar.setMinimumWidth(160)
-        self.progress_bar.setTextVisible(True)
-        self.progress_bar.setVisible(False)
-        self.status_bar.addPermanentWidget(self.progress_bar)
+
+        # Show status bar only when active messages are displayed
+        self.status_bar.messageChanged.connect(
+            lambda msg: self.status_bar.setVisible(bool(msg))
+        )
+
+        # Bottom-right corner resize grip indicator
+        self.corner_grip = CornerResizeGrip(self)
+        self.corner_grip.setObjectName("cornerResizeGrip")
+        self.corner_grip.raise_()
+
+        # Frameless edge and corner resize filter (resizes from all edges and corners)
+        self._resize_filter = FramelessResizeFilter(self)
+
+        self._update_window_frame_styling()
 
     def _create_clock_widget(self) -> QWidget:
         clock_frame = QFrame()
@@ -2815,17 +3213,28 @@ class MainWindow(QMainWindow):
         return clock_frame
 
     def _update_clock_display(self):
-        if not hasattr(self, "clock_label") or not hasattr(self, "clock_widget"):
-            return
         is_shown = getattr(self.config_mgr, "show_clock", True)
-        self.clock_widget.setVisible(is_shown)
+
+        # Always display clock in top-right corner of tabs
+        if hasattr(self, "clock_widget"):
+            self.clock_widget.setVisible(is_shown)
+
         if not is_shown:
             return
+
         now = datetime.now()
         col_hex = self.config_mgr.category_colors.get("clock", DEFAULT_CATEGORY_COLORS.get("clock", "#38bdf8"))
         font_sz = getattr(self.config_mgr, "clock_font_size", 11)
-        self.clock_label.setText(now.strftime("%a, %b %-d  %-I:%M %p"))
-        self.clock_label.setStyleSheet(f"color: {col_hex}; font-size: {font_sz}px; font-weight: bold; padding: 2px 4px;")
+        clock_str = now.strftime("%a, %b %-d  %-I:%M %p")
+        style = f"color: {col_hex}; font-size: {font_sz}px; font-weight: bold; padding: 2px 4px; background: transparent;"
+
+        if hasattr(self, "clock_label"):
+            if getattr(self, "_last_clock_style", None) != style:
+                self.clock_label.setStyleSheet(style)
+                self._last_clock_style = style
+            if getattr(self, "_last_clock_str", None) != clock_str:
+                self.clock_label.setText(clock_str)
+                self._last_clock_str = clock_str
 
     def _create_update_badge_widget(self) -> QWidget:
         widget = QWidget()
@@ -3428,6 +3837,19 @@ class MainWindow(QMainWindow):
         self.guide_status_lbl.setStyleSheet("font-size: 12px; color: #a4b0c2; font-weight: 500; padding-left: 6px;")
         btn_row.addWidget(self.guide_status_lbl)
 
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setObjectName("statusBarProgressBar")
+        self.progress_bar.setMaximumWidth(220)
+        self.progress_bar.setMinimumWidth(160)
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setVisible(False)
+        btn_row.addWidget(self.progress_bar)
+
+        self.sync_progress_lbl = QLabel("")
+        self.sync_progress_lbl.setStyleSheet("font-size: 12px; color: #52b788; font-weight: 500; padding-left: 6px;")
+        self.sync_progress_lbl.setVisible(False)
+        btn_row.addWidget(self.sync_progress_lbl)
+
         btn_row.addStretch()
         health_layout.addLayout(btn_row)
         layout.addWidget(health_box)
@@ -3608,6 +4030,42 @@ class MainWindow(QMainWindow):
         map_box = QGroupBox("Channel Importing && Renaming")
         map_layout = QVBoxLayout(map_box)
 
+        # Buttons placed directly above the channel importing & renaming box
+        btn_row = QHBoxLayout()
+        import_kaffeine_btn = QPushButton("Import Channels from Kaffeine")
+        import_kaffeine_btn.setStyleSheet(
+            "QPushButton {"
+            "  background-color: #1b4332;"
+            "  border: 1.5px solid #2d6a4f;"
+            "  color: #e8f5e9;"
+            "  font-weight: bold;"
+            "  padding: 6px 14px;"
+            "  border-radius: 5px;"
+            "}"
+            "QPushButton:hover {"
+            "  background-color: #2d6a4f;"
+            "  border-color: #40916c;"
+            "  color: #ffffff;"
+            "}"
+            "QPushButton:pressed {"
+            "  background-color: #081c15;"
+            "}"
+        )
+        import_kaffeine_btn.clicked.connect(lambda: self.import_channels_from_kaffeine(silent=False))
+        btn_row.addWidget(import_kaffeine_btn)
+
+        save_mapping_btn = QPushButton("Save Channels")
+        save_mapping_btn.setObjectName("primaryActionBtn")
+        save_mapping_btn.clicked.connect(self.save_channel_mapping)
+        btn_row.addWidget(save_mapping_btn)
+
+        reset_mapping_btn = QPushButton("Reset to Antenna Defaults")
+        reset_mapping_btn.clicked.connect(self.reset_channel_mapping_defaults)
+        btn_row.addWidget(reset_mapping_btn)
+
+        btn_row.addStretch()
+        map_layout.addLayout(btn_row)
+
         self.mapping_text = QTextEdit()
         mapping_str = "\n".join([f"{k} = {v}" for k, v in self.config_mgr.channel_map.items()])
         self.mapping_text.setPlainText(mapping_str)
@@ -3624,7 +4082,7 @@ class MainWindow(QMainWindow):
             "If you renamed them already, leave as <span style='color: #52b788;'>Fox = Fox</span>.<br><br>"
             "<i>Channels are typically imported automatically during the initial Welcome Wizard.<br>"
             "If you skipped that, or recently scanned new channels in Kaffeine, click<br>"
-            "<span style='color: #52b788;'>Import Channels from Kaffeine</span> below to load your lineup.</i>"
+            "<span style='color: #52b788;'>Import Channels from Kaffeine</span> above to load your lineup.</i>"
         )
         self.mapping_tip_lbl.setStyleSheet("color: #8a99ad; font-size: 13px; line-height: 1.5; background: transparent;")
         self.mapping_tip_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
@@ -3670,42 +4128,6 @@ class MainWindow(QMainWindow):
         order_layout.addLayout(order_ctrl_bar)
         lineup_panels.addWidget(order_box, 1)
         layout.addLayout(lineup_panels)
-
-        # Bottom Button Row
-        btn_row = QHBoxLayout()
-        import_kaffeine_btn = QPushButton("Import Channels from Kaffeine")
-        import_kaffeine_btn.setStyleSheet(
-            "QPushButton {"
-            "  background-color: #1b4332;"
-            "  border: 1.5px solid #2d6a4f;"
-            "  color: #e8f5e9;"
-            "  font-weight: bold;"
-            "  padding: 6px 14px;"
-            "  border-radius: 5px;"
-            "}"
-            "QPushButton:hover {"
-            "  background-color: #2d6a4f;"
-            "  border-color: #40916c;"
-            "  color: #ffffff;"
-            "}"
-            "QPushButton:pressed {"
-            "  background-color: #081c15;"
-            "}"
-        )
-        import_kaffeine_btn.clicked.connect(lambda: self.import_channels_from_kaffeine(silent=False))
-        btn_row.addWidget(import_kaffeine_btn)
-
-        save_mapping_btn = QPushButton("Save Channels")
-        save_mapping_btn.setObjectName("primaryActionBtn")
-        save_mapping_btn.clicked.connect(self.save_channel_mapping)
-        btn_row.addWidget(save_mapping_btn)
-
-        reset_mapping_btn = QPushButton("Reset to Antenna Defaults")
-        reset_mapping_btn.clicked.connect(self.reset_channel_mapping_defaults)
-        btn_row.addWidget(reset_mapping_btn)
-
-        btn_row.addStretch()
-        layout.addLayout(btn_row)
 
         self.refresh_channel_order_list()
         return widget
@@ -3779,6 +4201,7 @@ class MainWindow(QMainWindow):
     def create_settings_automation_tab(self) -> QWidget:
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         container = QWidget()
         main_layout = QVBoxLayout(container)
         main_layout.setContentsMargins(15, 15, 15, 15)
@@ -3927,7 +4350,7 @@ class MainWindow(QMainWindow):
         self.live_tv_mode_combo.setFixedWidth(290)
         cur_live_mode = getattr(self.config_mgr, "live_tv_watch_mode", "timeshift")
         l_idx = self.live_tv_mode_combo.findData(cur_live_mode)
-        self.live_tv_mode_combo.setCurrentIndex(l_idx if l_idx >= 0 else 0)
+        self.live_tv_mode_combo.setCurrentIndex(max(l_idx, 0))
 
         dvr_layout.addRow(
             make_setting_label(
@@ -3988,7 +4411,10 @@ class MainWindow(QMainWindow):
 
         # Recorded Video Playback Player
         self.playback_player_combo = QComboBox()
-        from kaffeine_dvr.dbus_client import SUPPORTED_PLAYERS, detect_player_installation
+        from kaffeine_dvr.dbus_client import (
+            SUPPORTED_PLAYERS,
+            detect_player_installation,
+        )
 
         cur_player = self.config_mgr.playback_player
 
@@ -4076,42 +4502,19 @@ class MainWindow(QMainWindow):
         win_size_btn_row.addStretch()
         win_layout.addLayout(win_size_btn_row)
 
+        self.custom_title_bar_check = QCheckBox("Use Modern Frameless Title Bar (Custom drag, minimize && close)")
+        self.custom_title_bar_check.setStyleSheet("color: #e2e8f0; font-size: 13px; font-weight: 500; margin-top: 4px;")
+        self.custom_title_bar_check.setChecked(getattr(self.config_mgr, "use_custom_title_bar", True))
+        self.custom_title_bar_check.toggled.connect(self._on_custom_title_bar_toggled)
+        win_layout.addWidget(self.custom_title_bar_check)
+
         left_col.addWidget(win_group)
         left_col.addStretch()
-        two_col_layout.addLayout(left_col, 50)
+        two_col_layout.addLayout(left_col, 46)
 
-        # ------------------ RIGHT COLUMN: Service & Storage ------------------
+        # ------------------ RIGHT COLUMN: Storage & Video Retention ------------------
         right_col = QVBoxLayout()
         right_col.setSpacing(15)
-
-        # Service Management Card
-        service_box = QGroupBox("Unified Background Service (kaffeine-dvr-watcher)")
-        service_layout = QVBoxLayout(service_box)
-        service_layout.setContentsMargins(15, 0, 15, 10)
-        service_layout.setSpacing(4)
-
-        self.service_status_lbl = QLabel("Checking service status...")
-        self.service_status_lbl.setStyleSheet("font-weight: bold; font-size: 13px;")
-        service_layout.addWidget(self.service_status_lbl)
-
-        svc_btn_row = QHBoxLayout()
-        svc_btn_row.setSpacing(10)
-        self.start_svc_btn = QPushButton("Start && Enable Service")
-        self.start_svc_btn.clicked.connect(self.start_background_service)
-        svc_btn_row.addWidget(self.start_svc_btn)
-
-        self.restart_svc_btn = QPushButton("Restart Service")
-        self.restart_svc_btn.clicked.connect(self.restart_background_service)
-        svc_btn_row.addWidget(self.restart_svc_btn)
-
-        self.view_svc_logs_btn = QPushButton("View Logs")
-        self.view_svc_logs_btn.clicked.connect(self.open_service_logs_dialog)
-        svc_btn_row.addWidget(self.view_svc_logs_btn)
-
-        svc_btn_row.addStretch()
-        service_layout.addLayout(svc_btn_row)
-
-        right_col.addWidget(service_box)
 
         # Storage & Auto-Cleanup Card
         storage_box = QGroupBox("Storage && Video Retention")
@@ -4212,7 +4615,14 @@ class MainWindow(QMainWindow):
 
         cur_colors = self.config_mgr.category_colors
 
-        # Column 1: Broadcast Categories
+        # Three evenly spaced columns in a clean horizontal box
+        cols_row = QHBoxLayout()
+        cols_row.setSpacing(18)
+
+        # Sub-Column 1: Broadcast Categories
+        col1_grid = QGridLayout()
+        col1_grid.setHorizontalSpacing(10)
+        col1_grid.setVerticalSpacing(8)
         for r_idx, (cat_key, cat_label) in enumerate(categories_specs):
             hex_val = cur_colors.get(cat_key, DEFAULT_CATEGORY_COLORS.get(cat_key, "#ffffff"))
 
@@ -4222,28 +4632,34 @@ class MainWindow(QMainWindow):
             swatch_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             swatch_btn.setStyleSheet(f"QPushButton.category-color-tile {{ background-color: {hex_val}; }}")
             swatch_btn.clicked.connect(lambda checked=False, k=cat_key, l=cat_label: self._choose_category_color(k, l))
-            color_grid.addWidget(swatch_btn, r_idx, 0, Qt.AlignmentFlag.AlignVCenter)
+            col1_grid.addWidget(swatch_btn, r_idx, 0, Qt.AlignmentFlag.AlignVCenter)
             self._cat_swatches[cat_key] = swatch_btn
 
             lbl_name = QLabel(f"<b>{cat_label}</b>")
             lbl_name.setStyleSheet("font-size: 13px; color: #e2e8f0;")
-            color_grid.addWidget(lbl_name, r_idx, 1, Qt.AlignmentFlag.AlignVCenter)
+            col1_grid.addWidget(lbl_name, r_idx, 1, Qt.AlignmentFlag.AlignVCenter)
+        col1_grid.setColumnStretch(1, 1)
+        cols_row.addLayout(col1_grid, 1)
 
-        # Column 2: Other Guide Elements & Live Options
-        # Row 0: Selection Highlighter
+        # Sub-Column 2: Tile Highlight & Live Options
+        col2_grid = QGridLayout()
+        col2_grid.setHorizontalSpacing(8)
+        col2_grid.setVerticalSpacing(8)
+
+        # Row 0: Tile Highlight
         hl_hex = cur_colors.get("highlight", DEFAULT_CATEGORY_COLORS.get("highlight", "#ffffff"))
         swatch_hl = QPushButton()
         swatch_hl.setProperty("class", "category-color-tile")
         swatch_hl.setFixedSize(26, 26)
         swatch_hl.setCursor(Qt.CursorShape.PointingHandCursor)
         swatch_hl.setStyleSheet(f"QPushButton.category-color-tile {{ background-color: {hl_hex}; }}")
-        swatch_hl.clicked.connect(lambda checked=False: self._choose_category_color("highlight", "Selection Highlighter"))
-        color_grid.addWidget(swatch_hl, 0, 3, Qt.AlignmentFlag.AlignVCenter)
+        swatch_hl.clicked.connect(lambda checked=False: self._choose_category_color("highlight", "Tile Highlight"))
+        col2_grid.addWidget(swatch_hl, 0, 0, Qt.AlignmentFlag.AlignVCenter)
         self._cat_swatches["highlight"] = swatch_hl
 
-        lbl_hl = QLabel("<b>Selection Highlighter</b>")
+        lbl_hl = QLabel("<b>Tile Highlight</b>")
         lbl_hl.setStyleSheet("font-size: 13px; color: #e2e8f0;")
-        color_grid.addWidget(lbl_hl, 0, 4, 1, 2, Qt.AlignmentFlag.AlignVCenter)
+        col2_grid.addWidget(lbl_hl, 0, 1, Qt.AlignmentFlag.AlignVCenter)
 
         # Row 1: Live Badge & Hide Toggle
         badge_hex = cur_colors.get("live_badge", DEFAULT_CATEGORY_COLORS.get("live_badge", "#059669"))
@@ -4253,17 +4669,17 @@ class MainWindow(QMainWindow):
         swatch_badge.setCursor(Qt.CursorShape.PointingHandCursor)
         swatch_badge.setStyleSheet(f"QPushButton.category-color-tile {{ background-color: {badge_hex}; }}")
         swatch_badge.clicked.connect(lambda checked=False: self._choose_category_color("live_badge", "Live Badge"))
-        color_grid.addWidget(swatch_badge, 1, 3, Qt.AlignmentFlag.AlignVCenter)
+        col2_grid.addWidget(swatch_badge, 1, 0, Qt.AlignmentFlag.AlignVCenter)
         self._cat_swatches["live_badge"] = swatch_badge
 
         lbl_badge = QLabel("<b>Live Badge</b>")
         lbl_badge.setStyleSheet("font-size: 13px; color: #e2e8f0;")
-        color_grid.addWidget(lbl_badge, 1, 4, Qt.AlignmentFlag.AlignVCenter)
+        col2_grid.addWidget(lbl_badge, 1, 1, Qt.AlignmentFlag.AlignVCenter)
 
         self.hide_live_badge_check = QCheckBox("Disable")
         self.hide_live_badge_check.setChecked(self.config_mgr.hide_live_badge)
         self.hide_live_badge_check.toggled.connect(self._on_hide_live_badge_toggled)
-        color_grid.addWidget(self.hide_live_badge_check, 1, 5, Qt.AlignmentFlag.AlignVCenter)
+        col2_grid.addWidget(self.hide_live_badge_check, 1, 2, Qt.AlignmentFlag.AlignVCenter)
 
         # Row 2: Live Tile Tint & Disable Toggle
         bg_hex = cur_colors.get("live_bg", DEFAULT_CATEGORY_COLORS.get("live_bg", "#132400"))
@@ -4273,17 +4689,17 @@ class MainWindow(QMainWindow):
         swatch_bg.setCursor(Qt.CursorShape.PointingHandCursor)
         swatch_bg.setStyleSheet(f"QPushButton.category-color-tile {{ background-color: {bg_hex}; }}")
         swatch_bg.clicked.connect(lambda checked=False: self._choose_category_color("live_bg", "Live Tile Tint"))
-        color_grid.addWidget(swatch_bg, 2, 3, Qt.AlignmentFlag.AlignVCenter)
+        col2_grid.addWidget(swatch_bg, 2, 0, Qt.AlignmentFlag.AlignVCenter)
         self._cat_swatches["live_bg"] = swatch_bg
 
         lbl_bg = QLabel("<b>Live Tile Tint</b>")
         lbl_bg.setStyleSheet("font-size: 13px; color: #e2e8f0;")
-        color_grid.addWidget(lbl_bg, 2, 4, Qt.AlignmentFlag.AlignVCenter)
+        col2_grid.addWidget(lbl_bg, 2, 1, Qt.AlignmentFlag.AlignVCenter)
 
         self.live_same_bg_check = QCheckBox("Disable")
         self.live_same_bg_check.setChecked(self.config_mgr.live_same_bg_as_others)
         self.live_same_bg_check.toggled.connect(self._on_live_same_bg_toggled)
-        color_grid.addWidget(self.live_same_bg_check, 2, 5, Qt.AlignmentFlag.AlignVCenter)
+        col2_grid.addWidget(self.live_same_bg_check, 2, 2, Qt.AlignmentFlag.AlignVCenter)
 
         # Row 3: Time Line Swatch & Disable Toggle
         line_hex = cur_colors.get("time_indicator", DEFAULT_CATEGORY_COLORS.get("time_indicator", "#06b6d4"))
@@ -4293,17 +4709,17 @@ class MainWindow(QMainWindow):
         swatch_line.setCursor(Qt.CursorShape.PointingHandCursor)
         swatch_line.setStyleSheet(f"QPushButton.category-color-tile {{ background-color: {line_hex}; }}")
         swatch_line.clicked.connect(lambda checked=False: self._choose_category_color("time_indicator", "Time Line"))
-        color_grid.addWidget(swatch_line, 3, 3, Qt.AlignmentFlag.AlignVCenter)
+        col2_grid.addWidget(swatch_line, 3, 0, Qt.AlignmentFlag.AlignVCenter)
         self._cat_swatches["time_indicator"] = swatch_line
 
         lbl_time_line = QLabel("<b>Time Line</b>")
         lbl_time_line.setStyleSheet("font-size: 13px; color: #e2e8f0;")
-        color_grid.addWidget(lbl_time_line, 3, 4, Qt.AlignmentFlag.AlignVCenter)
+        col2_grid.addWidget(lbl_time_line, 3, 1, Qt.AlignmentFlag.AlignVCenter)
 
         self.hide_time_line_check = QCheckBox("Disable")
         self.hide_time_line_check.setChecked(not getattr(self.config_mgr, "guide_show_time_indicator", True))
         self.hide_time_line_check.toggled.connect(self._on_hide_time_line_toggled)
-        color_grid.addWidget(self.hide_time_line_check, 3, 5, Qt.AlignmentFlag.AlignVCenter)
+        col2_grid.addWidget(self.hide_time_line_check, 3, 2, Qt.AlignmentFlag.AlignVCenter)
 
         # Row 4: Clock Swatch & Disable Toggle
         clock_hex = cur_colors.get("clock", DEFAULT_CATEGORY_COLORS.get("clock", "#38bdf8"))
@@ -4313,51 +4729,55 @@ class MainWindow(QMainWindow):
         swatch_clock.setCursor(Qt.CursorShape.PointingHandCursor)
         swatch_clock.setStyleSheet(f"QPushButton.category-color-tile {{ background-color: {clock_hex}; }}")
         swatch_clock.clicked.connect(lambda checked=False: self._choose_category_color("clock", "Clock"))
-        color_grid.addWidget(swatch_clock, 4, 3, Qt.AlignmentFlag.AlignVCenter)
+        col2_grid.addWidget(swatch_clock, 4, 0, Qt.AlignmentFlag.AlignVCenter)
         self._cat_swatches["clock"] = swatch_clock
 
         lbl_clock = QLabel("<b>Clock</b>")
         lbl_clock.setStyleSheet("font-size: 13px; color: #e2e8f0;")
-        color_grid.addWidget(lbl_clock, 4, 4, Qt.AlignmentFlag.AlignVCenter)
+        col2_grid.addWidget(lbl_clock, 4, 1, Qt.AlignmentFlag.AlignVCenter)
 
         self.hide_clock_check = QCheckBox("Disable")
         self.hide_clock_check.setChecked(not getattr(self.config_mgr, "show_clock", True))
         self.hide_clock_check.toggled.connect(self._on_hide_clock_toggled)
-        color_grid.addWidget(self.hide_clock_check, 4, 5, Qt.AlignmentFlag.AlignVCenter)
+        col2_grid.addWidget(self.hide_clock_check, 4, 2, Qt.AlignmentFlag.AlignVCenter)
 
-        # Column 3: Guide & Detail Sizing
+        col2_grid.setColumnStretch(3, 1)
+        cols_row.addLayout(col2_grid, 1)
+
+        # Sub-Column 3: Guide & Detail Sizing
+        col3_grid = QGridLayout()
+        col3_grid.setHorizontalSpacing(10)
+        col3_grid.setVerticalSpacing(8)
+
         lbl_rows = QLabel("<b>Grid Rows:</b>")
         lbl_rows.setStyleSheet("font-size: 13px; color: #e2e8f0;")
-        color_grid.addWidget(lbl_rows, 0, 7, Qt.AlignmentFlag.AlignVCenter)
+        col3_grid.addWidget(lbl_rows, 0, 0, Qt.AlignmentFlag.AlignVCenter)
 
         self.grid_rows_spin = NumberStepper()
         self.grid_rows_spin.setRange(4, 16)
         self.grid_rows_spin.setValue(self.config_mgr.grid_visible_rows)
         self.grid_rows_spin.setSuffix(" rows")
-        self.grid_rows_spin.setFixedWidth(130)
+        self.grid_rows_spin.setFixedWidth(105)
         self.grid_rows_spin.valueChanged.connect(self._on_grid_rows_changed)
-        color_grid.addWidget(self.grid_rows_spin, 0, 8, Qt.AlignmentFlag.AlignVCenter)
+        col3_grid.addWidget(self.grid_rows_spin, 0, 1, Qt.AlignmentFlag.AlignVCenter)
 
         lbl_desc_lines = QLabel("<b>Grid Box:</b>")
         lbl_desc_lines.setStyleSheet("font-size: 13px; color: #e2e8f0;")
-        color_grid.addWidget(lbl_desc_lines, 1, 7, Qt.AlignmentFlag.AlignVCenter)
+        col3_grid.addWidget(lbl_desc_lines, 1, 0, Qt.AlignmentFlag.AlignVCenter)
 
         self.guide_desc_lines_combo = CenteredComboBox()
         self.guide_desc_lines_combo.addItem("2 Lines", 2)
         self.guide_desc_lines_combo.addItem("3 Lines", 3)
-        self.guide_desc_lines_combo.setFixedWidth(130)
+        self.guide_desc_lines_combo.setFixedWidth(105)
         cur_desc_lines = getattr(self.config_mgr, "guide_detail_lines", 3)
         d_idx = self.guide_desc_lines_combo.findData(cur_desc_lines)
         self.guide_desc_lines_combo.setCurrentIndex(d_idx if d_idx >= 0 else 1)
         self.guide_desc_lines_combo.currentIndexChanged.connect(self._on_guide_desc_lines_changed)
-        color_grid.addWidget(self.guide_desc_lines_combo, 1, 8, Qt.AlignmentFlag.AlignVCenter)
+        col3_grid.addWidget(self.guide_desc_lines_combo, 1, 1, Qt.AlignmentFlag.AlignVCenter)
 
-        auto_adv_lbl = make_setting_label(
-            "<b>Auto-Advance:</b>",
-            "Automatically advances the guide forward to the next hour when the clock reaches the configured minute past the hour (default :50 min).\n\n"
-            "Safeguards prevent scrolling while actively dragging or browsing past/future time slots, and auto-advance only runs when viewing today's guide."
-        )
-        color_grid.addWidget(auto_adv_lbl, 2, 7, Qt.AlignmentFlag.AlignVCenter)
+        lbl_auto_adv = QLabel("<b>Auto-Advance:</b>")
+        lbl_auto_adv.setStyleSheet("font-size: 13px; color: #e2e8f0;")
+        col3_grid.addWidget(lbl_auto_adv, 2, 0, Qt.AlignmentFlag.AlignVCenter)
 
         auto_adv_widget = QWidget()
         auto_adv_layout = QHBoxLayout(auto_adv_widget)
@@ -4369,7 +4789,7 @@ class MainWindow(QMainWindow):
         self.guide_auto_advance_spin.setValue(getattr(self.config_mgr, "guide_auto_advance_minute", 50))
         self.guide_auto_advance_spin.setPrefix(":")
         self.guide_auto_advance_spin.setSuffix(" min")
-        self.guide_auto_advance_spin.setFixedWidth(130)
+        self.guide_auto_advance_spin.setFixedWidth(105)
         self.guide_auto_advance_spin.valueChanged.connect(self._on_guide_auto_advance_min_changed)
         auto_adv_layout.addWidget(self.guide_auto_advance_spin)
 
@@ -4380,36 +4800,60 @@ class MainWindow(QMainWindow):
         self.guide_auto_advance_spin.setEnabled(self.guide_auto_advance_check.isChecked())
         auto_adv_layout.addWidget(self.guide_auto_advance_check)
 
-        color_grid.addWidget(auto_adv_widget, 2, 8, Qt.AlignmentFlag.AlignVCenter)
+        auto_adv_badge = HelpBadge(
+            "Automatically advances the guide forward to the next hour when the clock reaches the configured minute past the hour (default :50 min).\n\n"
+            "Safeguards prevent scrolling while actively dragging or browsing past/future time slots, and auto-advance only runs when viewing today's guide."
+        )
+        auto_adv_layout.addWidget(auto_adv_badge)
+        auto_adv_layout.addStretch()
+
+        col3_grid.addWidget(auto_adv_widget, 2, 1, Qt.AlignmentFlag.AlignVCenter)
 
         lbl_clock_size = QLabel("<b>Clock Size:</b>")
         lbl_clock_size.setStyleSheet("font-size: 13px; color: #e2e8f0;")
-        color_grid.addWidget(lbl_clock_size, 3, 7, Qt.AlignmentFlag.AlignVCenter)
+        col3_grid.addWidget(lbl_clock_size, 3, 0, Qt.AlignmentFlag.AlignVCenter)
 
         self.clock_size_spin = NumberStepper()
         self.clock_size_spin.setRange(8, 24)
         self.clock_size_spin.setValue(getattr(self.config_mgr, "clock_font_size", 11))
         self.clock_size_spin.setSuffix(" pt")
-        self.clock_size_spin.setFixedWidth(130)
+        self.clock_size_spin.setFixedWidth(105)
         self.clock_size_spin.valueChanged.connect(self._on_clock_size_changed)
-        color_grid.addWidget(self.clock_size_spin, 3, 8, Qt.AlignmentFlag.AlignVCenter)
+        col3_grid.addWidget(self.clock_size_spin, 3, 1, Qt.AlignmentFlag.AlignVCenter)
+        col3_grid.setColumnStretch(1, 1)
+        cols_row.addLayout(col3_grid, 1)
 
-        color_grid.setColumnMinimumWidth(2, 24)
-        color_grid.setColumnMinimumWidth(6, 24)
-        color_grid.setColumnStretch(9, 1)
-        color_layout.addLayout(color_grid)
+        color_layout.addLayout(cols_row)
 
-        cat_btn_row = QHBoxLayout()
-        cat_btn_row.setSpacing(10)
-        self.reset_cat_colors_btn = QPushButton("Reset Defaults")
+        app_theme_row = QHBoxLayout()
+        app_theme_row.setSpacing(10)
+        lbl_app_theme = QLabel("<b>App Theme:</b>")
+        lbl_app_theme.setStyleSheet("font-size: 13px; color: #e2e8f0;")
+        lbl_app_theme.setFixedWidth(85)
+        app_theme_row.addWidget(lbl_app_theme)
+
+        self.app_theme_combo = CenteredComboBox()
+        for t_key, t_info in APP_THEMES.items():
+            self.app_theme_combo.addItem(t_info["name"], t_key)
+        self.app_theme_combo.setFixedWidth(200)
+
+        cur_app_theme = getattr(self.config_mgr, "app_theme", "midnight")
+        a_idx = self.app_theme_combo.findData(cur_app_theme)
+        self.app_theme_combo.setCurrentIndex(max(a_idx, 0))
+        self.app_theme_combo.currentIndexChanged.connect(self._on_app_theme_changed)
+        app_theme_row.addWidget(self.app_theme_combo)
+
+        app_theme_row.addSpacing(10)
+        self.reset_cat_colors_btn = QPushButton("Reset Color Defaults")
         self.reset_cat_colors_btn.clicked.connect(self._reset_category_colors)
-        cat_btn_row.addWidget(self.reset_cat_colors_btn)
-        cat_btn_row.addStretch()
-        color_layout.addLayout(cat_btn_row)
+        app_theme_row.addWidget(self.reset_cat_colors_btn)
+
+        app_theme_row.addStretch()
+        color_layout.addLayout(app_theme_row)
 
         right_col.addWidget(color_box)
         right_col.addStretch()
-        two_col_layout.addLayout(right_col, 50)
+        two_col_layout.addLayout(right_col, 54)
 
         main_layout.addLayout(two_col_layout)
 
@@ -4473,11 +4917,22 @@ class MainWindow(QMainWindow):
         svc_row_widget = QWidget()
         svc_row_layout = QHBoxLayout(svc_row_widget)
         svc_row_layout.setContentsMargins(0, 0, 0, 0)
-        svc_row_layout.setSpacing(12)
+        svc_row_layout.setSpacing(10)
         svc_row_layout.addWidget(self.updates_service_lbl)
-        self.updates_view_logs_btn = QPushButton("View Service Logs")
+
+        self.start_svc_btn = QPushButton("Start && Enable Service")
+        self.start_svc_btn.clicked.connect(self.start_background_service)
+        svc_row_layout.addWidget(self.start_svc_btn)
+
+        self.restart_svc_btn = QPushButton("Restart Service")
+        self.restart_svc_btn.clicked.connect(self.restart_background_service)
+        svc_row_layout.addWidget(self.restart_svc_btn)
+
+        self.updates_view_logs_btn = QPushButton("View Logs")
         self.updates_view_logs_btn.clicked.connect(self.open_service_logs_dialog)
         svc_row_layout.addWidget(self.updates_view_logs_btn)
+        self.view_svc_logs_btn = self.updates_view_logs_btn
+
         svc_row_layout.addStretch()
 
         env_layout.addRow("Background Watcher Service:", svc_row_widget)
@@ -4694,6 +5149,11 @@ class MainWindow(QMainWindow):
             self.delete_timeshift_check.setChecked(self.config_mgr.delete_timeshift_on_exit)
             self.delete_timeshift_check.blockSignals(False)
 
+        if hasattr(self, "custom_title_bar_check"):
+            self.custom_title_bar_check.blockSignals(True)
+            self.custom_title_bar_check.setChecked(getattr(self.config_mgr, "use_custom_title_bar", True))
+            self.custom_title_bar_check.blockSignals(False)
+
         # Grid Guide Options
         if hasattr(self, "grid_rows_spin"):
             self.grid_rows_spin.blockSignals(True)
@@ -4744,7 +5204,19 @@ class MainWindow(QMainWindow):
             self.clock_size_spin.blockSignals(False)
         self._update_clock_display()
 
-        # Color Swatches
+        # Color Swatches & Theme Presets
+        if hasattr(self, "app_theme_combo"):
+            self.app_theme_combo.blockSignals(True)
+            a_idx = self.app_theme_combo.findData(self.config_mgr.app_theme)
+            self.app_theme_combo.setCurrentIndex(max(a_idx, 0))
+            self.app_theme_combo.blockSignals(False)
+
+        if hasattr(self, "theme_preset_combo"):
+            self.theme_preset_combo.blockSignals(True)
+            p_idx = self.theme_preset_combo.findData(self.config_mgr.theme_preset)
+            self.theme_preset_combo.setCurrentIndex(max(p_idx, 0))
+            self.theme_preset_combo.blockSignals(False)
+
         colors = self.config_mgr.category_colors
         if hasattr(self, "_cat_swatches"):
             for cat_key, swatch_btn in self._cat_swatches.items():
@@ -4812,6 +5284,7 @@ class MainWindow(QMainWindow):
         if not getattr(self, "_cached_release_notes", ""):
             self._initial_notes_worker = UpdateCheckWorker()
             self._initial_notes_worker.finished.connect(self._on_initial_notes_loaded)
+            self._initial_notes_worker.finished.connect(self._initial_notes_worker.deleteLater)
             self._initial_notes_worker.start()
 
     def _on_initial_notes_loaded(self, res: dict):
@@ -4852,6 +5325,7 @@ class MainWindow(QMainWindow):
 
         self.update_check_worker = UpdateCheckWorker()
         self.update_check_worker.finished.connect(lambda res: self.on_update_check_finished(res, silent))
+        self.update_check_worker.finished.connect(self.update_check_worker.deleteLater)
         self.update_check_worker.start()
 
     def on_update_check_finished(self, res: dict, silent: bool):
@@ -4914,6 +5388,7 @@ class MainWindow(QMainWindow):
         self.update_apply_worker = UpdateApplyWorker()
         self.update_apply_worker.progress.connect(self._on_update_progress)
         self.update_apply_worker.finished.connect(self.on_update_apply_finished)
+        self.update_apply_worker.finished.connect(self.update_apply_worker.deleteLater)
         self.update_apply_worker.start()
 
     def _on_update_progress(self, msg: str):
@@ -5206,6 +5681,7 @@ class MainWindow(QMainWindow):
 
         self.health_worker = HealthCheckWorker(self.guide_service)
         self.health_worker.finished.connect(lambda res: self.on_health_check_finished(res, silent))
+        self.health_worker.finished.connect(self.health_worker.deleteLater)
         self.health_worker.start()
 
     def on_health_check_finished(self, results: Dict[str, Any], silent: bool):
@@ -5361,7 +5837,7 @@ class MainWindow(QMainWindow):
 
         # Ensure station names exist in channel_map so they immediately appear in all dropdowns
         cur_map = dict(self.config_mgr.channel_map)
-        for st_name in stations.keys():
+        for st_name in stations:
             if st_name not in cur_map:
                 cur_map[st_name] = st_name
         self.config_mgr.channel_map = cur_map
@@ -5536,13 +6012,67 @@ class MainWindow(QMainWindow):
             self.win_size_lbl.setText(self._get_window_size_label_text())
         self.flash_save_indicator("Window Size Reset (1100 × 750)")
 
+    def _update_window_frame_styling(self):
+        use_custom = getattr(self.config_mgr, "use_custom_title_bar", True)
+        is_floating = use_custom and not self.isMaximized() and not self.isFullScreen()
+        prop_val = "true" if is_floating else "false"
+
+        cw = self.centralWidget()
+        if cw:
+            cw.setProperty("frameless_rounded", prop_val)
+            cw.style().unpolish(cw)
+            cw.style().polish(cw)
+
+        if hasattr(self, "custom_title_bar") and self.custom_title_bar:
+            self.custom_title_bar.setProperty("frameless_rounded", prop_val)
+            self.custom_title_bar.style().unpolish(self.custom_title_bar)
+            self.custom_title_bar.style().polish(self.custom_title_bar)
+
+        if hasattr(self, "status_bar") and self.status_bar:
+            self.status_bar.setProperty("frameless_rounded", prop_val)
+            self.status_bar.style().unpolish(self.status_bar)
+            self.status_bar.style().polish(self.status_bar)
+
+        if hasattr(self, "corner_grip") and self.corner_grip:
+            self.corner_grip.setVisible(is_floating)
+            self._reposition_corner_grip()
+
+    def _reposition_corner_grip(self):
+        if hasattr(self, "corner_grip") and self.corner_grip:
+            grip_size = self.corner_grip.size()
+            self.corner_grip.move(self.width() - grip_size.width() - 1, self.height() - grip_size.height() - 1)
+            self.corner_grip.raise_()
+
+    def _on_custom_title_bar_toggled(self, checked: bool):
+        self.config_mgr.use_custom_title_bar = checked
+        if hasattr(self, "custom_title_bar"):
+            self.custom_title_bar.setVisible(checked)
+        flags = self.windowFlags()
+        if checked:
+            self.setWindowFlags(flags | Qt.WindowType.FramelessWindowHint)
+        else:
+            self.setWindowFlags(flags & ~Qt.WindowType.FramelessWindowHint)
+        self.show()
+        self._update_window_frame_styling()
+        self._update_clock_display()
+        self.flash_save_indicator("Title Bar preference saved")
+
+    def changeEvent(self, event):
+        if event.type() == QEvent.Type.WindowStateChange:
+            if hasattr(self, "custom_title_bar"):
+                self.custom_title_bar.update_max_button_icon()
+            self._update_window_frame_styling()
+        super().changeEvent(event)
+
     def showEvent(self, event):
         super().showEvent(event)
+        self._reposition_corner_grip()
         QTimer.singleShot(0, self._adjust_table_columns)
         QTimer.singleShot(100, self._adjust_table_columns)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        self._reposition_corner_grip()
         if hasattr(self, "win_size_lbl"):
             self.win_size_lbl.setText(self._get_window_size_label_text())
         self._adjust_table_columns()
@@ -5695,6 +6225,56 @@ class MainWindow(QMainWindow):
         self.config_mgr.clock_font_size = val
         self._update_clock_display()
 
+    def apply_app_theme(self, theme_key: str):
+        """Applies a full application shell theme dynamically to the running Qt application."""
+        if theme_key not in APP_THEMES:
+            return
+        self.config_mgr.apply_app_theme(theme_key)
+        app_inst = QApplication.instance()
+        if app_inst:
+            setup_dark_theme(app_inst, theme_key)
+        self.flash_save_indicator(f"App Theme: {APP_THEMES[theme_key]['name']}")
+
+    def _on_app_theme_changed(self, index: int):
+        if not hasattr(self, "app_theme_combo"):
+            return
+        theme_key = self.app_theme_combo.currentData()
+        if not theme_key or theme_key not in APP_THEMES:
+            return
+        self.apply_app_theme(theme_key)
+
+    def _on_theme_preset_changed(self, index: int):
+        if not hasattr(self, "theme_preset_combo"):
+            return
+        preset_key = self.theme_preset_combo.currentData()
+        if not preset_key or preset_key == "custom":
+            return
+
+        if preset_key in THEME_PRESETS:
+            self.config_mgr.apply_theme_preset(preset_key)
+
+            colors = self.config_mgr.category_colors
+            if hasattr(self, "_cat_swatches"):
+                for cat_key, swatch_btn in self._cat_swatches.items():
+                    hex_val = colors.get(cat_key, DEFAULT_CATEGORY_COLORS.get(cat_key, "#ffffff"))
+                    swatch_btn.setStyleSheet(f"QPushButton.category-color-tile {{ background-color: {hex_val}; }}")
+                    if hasattr(self, "_cat_hex_labels") and cat_key in self._cat_hex_labels:
+                        self._cat_hex_labels[cat_key].setText(hex_val.upper())
+
+            if hasattr(self, "grid_tile_delegate") and self.grid_tile_delegate:
+                self.grid_tile_delegate.refresh_category_colors()
+
+            self._apply_guide_zoom()
+            self._refresh_guide_view(keep_scroll=True)
+            if hasattr(self, "guide_grid_table") and self.guide_grid_table.horizontalHeader():
+                self.guide_grid_table.horizontalHeader().viewport().update()
+            self._update_clock_display()
+            active_prog = self._get_active_selected_program()
+            if active_prog:
+                self._display_program_details(active_prog)
+
+            self.flash_save_indicator(f"Theme Preset: {THEME_PRESETS[preset_key]['name']}")
+
     def _choose_category_color(self, category_key: str, category_label: str):
         """Open dark-themed QColorDialog to select a custom color for a guide category."""
         cur_hex = self.config_mgr.category_colors.get(
@@ -5711,6 +6291,14 @@ class MainWindow(QMainWindow):
         if chosen_color.isValid():
             new_hex = chosen_color.name()
             self.config_mgr.set_category_color(category_key, new_hex)
+
+            # Mark theme preset as custom
+            if hasattr(self, "theme_preset_combo"):
+                self.theme_preset_combo.blockSignals(True)
+                c_idx = self.theme_preset_combo.findData("custom")
+                if c_idx >= 0:
+                    self.theme_preset_combo.setCurrentIndex(c_idx)
+                self.theme_preset_combo.blockSignals(False)
 
             # Update swatch tile
             if hasattr(self, "_cat_swatches") and category_key in self._cat_swatches:
@@ -5737,6 +6325,13 @@ class MainWindow(QMainWindow):
     def _reset_category_colors(self):
         """Reset all category colors to default factory values."""
         self.config_mgr.reset_category_colors()
+
+        if hasattr(self, "theme_preset_combo"):
+            self.theme_preset_combo.blockSignals(True)
+            m_idx = self.theme_preset_combo.findData("midnight")
+            if m_idx >= 0:
+                self.theme_preset_combo.setCurrentIndex(m_idx)
+            self.theme_preset_combo.blockSignals(False)
 
         if hasattr(self, "_cat_swatches"):
             for cat_key, swatch in self._cat_swatches.items():
@@ -5855,9 +6450,18 @@ class MainWindow(QMainWindow):
                 else:
                     self.service_status_lbl.setText("Status: Inactive / Stopped")
                     self.service_status_lbl.setStyleSheet("color: #e57373; font-weight: bold; font-size: 12px;")
+            if hasattr(self, "updates_service_lbl"):
+                if active:
+                    self.updates_service_lbl.setText("Active and running")
+                    self.updates_service_lbl.setStyleSheet("color: #28a745; font-weight: bold;")
+                else:
+                    self.updates_service_lbl.setText("Inactive / Disabled")
+                    self.updates_service_lbl.setStyleSheet("color: #8c98aa;")
         except Exception:
             if hasattr(self, "service_status_lbl"):
                 self.service_status_lbl.setText("Status: Unknown")
+            if hasattr(self, "updates_service_lbl"):
+                self.updates_service_lbl.setText("Unknown")
 
     def start_background_service(self):
         try:
@@ -6205,13 +6809,18 @@ class MainWindow(QMainWindow):
         self.progress_bar.setVisible(True)
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
-        self.status_bar.showMessage("Syncing guide data...")
+        self.sync_progress_lbl.setText("Syncing guide data...")
+        self.sync_progress_lbl.setVisible(True)
 
         self.sync_worker = SyncWorker(self.guide_service, self.config_mgr.guide_days_ahead)
-        self.sync_worker.progress.connect(lambda msg: self.status_bar.showMessage(msg))
+        self.sync_worker.progress.connect(self._on_sync_progress_msg)
         self.sync_worker.progress_val.connect(self._on_sync_progress_val)
         self.sync_worker.finished.connect(self.on_sync_finished)
+        self.sync_worker.finished.connect(self.sync_worker.deleteLater)
         self.sync_worker.start()
+
+    def _on_sync_progress_msg(self, msg: str):
+        self.sync_progress_lbl.setText(msg)
 
     def _on_sync_progress_val(self, val: int):
         self.progress_bar.setValue(max(self.progress_bar.value(), val))
@@ -6221,16 +6830,20 @@ class MainWindow(QMainWindow):
         self.sync_guide_btn.setEnabled(True)
         QTimer.singleShot(600, lambda: self.progress_bar.setVisible(False))
         if error:
+            self.sync_progress_lbl.setText("Sync failed.")
+            QTimer.singleShot(4000, lambda: self.sync_progress_lbl.setVisible(False))
             QMessageBox.critical(self, "Guide Sync Error", f"Failed to sync guide: {error}")
-            self.status_bar.showMessage("Guide sync failed.")
         else:
-            self.status_bar.showMessage(f"Guide synced: {count} programs cached.", 5000)
+            self.sync_progress_lbl.setText(f"Complete ({count} shows cached)")
+            QTimer.singleShot(4000, lambda: self.sync_progress_lbl.setVisible(False))
             self.refresh_date_dropdown()
             self.update_status_badges()
             self.refresh_channel_dropdowns()
             self.filter_guide()
             self.run_rules(silent=True)
             self.test_all_sources_health(silent=True)
+            import gc
+            gc.collect()
 
     def refresh_recordings(self):
         # Update queue statuses (archives finished recordings to history)
@@ -6874,7 +7487,7 @@ class MainWindow(QMainWindow):
             # Circular arc centered in 22x22 box
             arc_rect = QRectF(3.5, 3.5, 15.0, 15.0)
             # Span from 45 degrees for 280 degrees clockwise
-            p.drawArc(arc_rect, int(45 * 16), int(280 * 16))
+            p.drawArc(arc_rect, 45 * 16, 280 * 16)
 
             # Arrow head pointing clockwise at top-right
             arrow_pen = QPen(QColor(color), 2.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.MiterJoin)
@@ -6914,7 +7527,7 @@ class MainWindow(QMainWindow):
             # Arc bounding box centered in bottom-left
             arc_rect = QRectF(2.0, 6.0, 14.0, 14.0)
             # Start at 40 degrees, span 270 degrees
-            p.drawArc(arc_rect, int(40 * 16), int(270 * 16))
+            p.drawArc(arc_rect, 40 * 16, 270 * 16)
 
             # Reset Arrow head at start of arc (top-right of the circle)
             arrow_pen = QPen(QColor(color), 2.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.MiterJoin)
@@ -7144,7 +7757,6 @@ class MainWindow(QMainWindow):
             is_today = (btn_date_str == today_str)
             is_selected = (btn_date_str == selected_date_str)
 
-            full_label = f"{day_name}, {short_date}"
             if is_today and is_selected:
                 btn.setStyleSheet(self._day_style_today_selected)
             elif is_today:
@@ -7379,8 +7991,7 @@ class MainWindow(QMainWindow):
                 end_dt = dt + dur
 
                 start_col = int((dt - base_dt).total_seconds() // 1800)
-                if start_col < current_col:
-                    start_col = current_col
+                start_col = max(start_col, current_col)
                 if start_col >= total_cols:
                     break
 
@@ -7401,7 +8012,6 @@ class MainWindow(QMainWindow):
 
                 # Format time range and categorize
                 show_title = p.get("show_title", "")
-                ep_title = p.get("episode_title", "")
                 start_fmt = dt.strftime("%I:%M %p").lstrip("0")
                 end_fmt = end_dt.strftime("%I:%M %p").lstrip("0")
                 time_range = f"{start_fmt} - {end_fmt}"
@@ -7546,8 +8156,6 @@ class MainWindow(QMainWindow):
         self._display_program_details(prog)
 
     def _display_program_details(self, prog: Dict[str, Any]):
-        title = prog.get("show_title", "")
-        ep = prog.get("episode_title", "")
         channel = prog.get("kaffeine_channel", "")
         start = prog.get("start_time_local", "")
         season = prog.get("season")
@@ -7633,9 +8241,7 @@ class MainWindow(QMainWindow):
         if hasattr(self, "alt_watch_guide_btn"):
             if state == "live":
                 self.alt_watch_guide_btn.setVisible(True)
-                if is_live_rec and rec_file:
-                    self.alt_watch_guide_btn.setText("Watch in Kaffeine")
-                elif live_mode == "timeshift":
+                if is_live_rec and rec_file or live_mode == "timeshift":
                     self.alt_watch_guide_btn.setText("Watch in Kaffeine")
                 else:
                     self.alt_watch_guide_btn.setText(f"Timeshift in {player_disp}")
@@ -8048,7 +8654,7 @@ class MainWindow(QMainWindow):
             return
 
         if retries_left > 0:
-            self.status_bar.showMessage(f"Buffering stream data...", 1000)
+            self.status_bar.showMessage("Buffering stream data...", 1000)
             QTimer.singleShot(
                 600,
                 lambda: self._on_timeshift_buffer_ready(
@@ -8248,13 +8854,10 @@ class MainWindow(QMainWindow):
         is_sports = (classify_guide_category(prog) == "sports")
         if is_sports and self.config_mgr.auto_buffer_sports:
             buf_mins = self.config_mgr.sports_buffer_mins
-            buf_note = f"\nEnd Buffer: +{buf_mins} minutes (Sports Auto-Extend)"
         elif self.config_mgr.end_buffer_mins > 0:
             buf_mins = self.config_mgr.end_buffer_mins
-            buf_note = f"\nEnd Buffer: +{buf_mins} minutes (Default Buffer)"
         else:
             buf_mins = 0
-            buf_note = ""
 
         try:
             lead = self.config_mgr.lead_time_mins
@@ -8383,6 +8986,7 @@ class MainWindow(QMainWindow):
         self.rules_worker = RulesWorker(self.rules_engine)
         self.rules_worker.progress.connect(lambda msg: self.status_bar.showMessage(msg))
         self.rules_worker.finished.connect(lambda scheduled, err: self.on_rules_finished(scheduled, err, silent))
+        self.rules_worker.finished.connect(self.rules_worker.deleteLater)
         self.rules_worker.start()
 
     def on_rules_finished(self, scheduled: list, error: str, silent: bool):
@@ -8426,6 +9030,31 @@ class MainWindow(QMainWindow):
                 self._clock_timer.stop()
             if hasattr(self, "_guide_realtime_timer") and self._guide_realtime_timer.isActive():
                 self._guide_realtime_timer.stop()
+            if hasattr(self, "_save_indicator_timer") and self._save_indicator_timer and self._save_indicator_timer.isActive():
+                self._save_indicator_timer.stop()
+
+            # Cleanly disconnect and terminate all active background workers
+            worker_names = (
+                "_initial_notes_worker",
+                "health_worker",
+                "sync_worker",
+                "rules_worker",
+                "update_check_worker",
+                "update_apply_worker",
+            )
+            for w_name in worker_names:
+                w = getattr(self, w_name, None)
+                if w and hasattr(w, "isRunning") and w.isRunning():
+                    try:
+                        w.disconnect()
+                    except Exception:
+                        pass
+                    try:
+                        w.quit()
+                        w.wait(200)
+                    except Exception:
+                        pass
+
             if getattr(self, "_active_timeshift", None):
                 self.stop_timeshift_session(user_initiated=False)
         except Exception:
@@ -8436,9 +9065,9 @@ class MainWindow(QMainWindow):
 def ensure_desktop_launcher():
     """Ensure kaffeine-dvr.desktop exists in user applications directory."""
     try:
-        from pathlib import Path
         import shutil
         import subprocess
+        from pathlib import Path
 
         xdg_data = os.environ.get("XDG_DATA_HOME")
         apps_dir = (Path(xdg_data) if xdg_data else Path.home() / ".local" / "share") / "applications"
@@ -8514,8 +9143,8 @@ def resolve_systemd_exec_start() -> str:
 def ensure_systemd_service(force: bool = False) -> bool:
     """Ensure kaffeine-dvr-watcher.service unit file exists in user systemd directory."""
     try:
-        from pathlib import Path
         import subprocess
+        from pathlib import Path
 
         xdg_config = os.environ.get("XDG_CONFIG_HOME")
         base = Path(xdg_config) if xdg_config else Path.home() / ".config"

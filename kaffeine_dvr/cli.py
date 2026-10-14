@@ -1,5 +1,12 @@
-import os
+"""
+Command-line interface for Kaffeine DVR & TV Guide.
+
+Provides CLI entry points for starting the GUI, background watcher daemon,
+manual guide synchronization, rule evaluation, and queue status listing.
+"""
+
 import argparse
+import os
 
 try:
     from .config import ConfigManager
@@ -89,7 +96,7 @@ def main():
         print(f"Rule evaluation completed: {len(newly)} new shows scheduled.")
 
     if args.list:
-        from datetime import datetime, date
+        from datetime import date, datetime
         today = date.today()
         queue = queue_mgr.list_queue(include_completed=True)
         print(f"DVR Planned Queue ({len(queue)} items):")

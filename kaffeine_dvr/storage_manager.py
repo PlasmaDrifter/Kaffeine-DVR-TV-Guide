@@ -1,10 +1,18 @@
+"""
+Storage and retention management for Kaffeine DVR recordings.
+
+Monitors disk usage on the target storage volume, calculates free space,
+and handles automated age-based and threshold-based recording retention pruning.
+"""
+
 import os
 import re
 import shutil
 import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
+
 
 class StorageManager:
     """

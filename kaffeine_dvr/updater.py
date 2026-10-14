@@ -6,13 +6,12 @@ and restarting the application.
 
 import json
 import os
-from pathlib import Path
 import re
-import shutil
 import subprocess
 import sys
 import urllib.request
-from typing import Dict, Any, Tuple, Optional, Callable
+from pathlib import Path
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from kaffeine_dvr import __version__
 
@@ -92,6 +91,14 @@ def get_pip_flags() -> list:
 
 
 EMBEDDED_RELEASE_NOTES: Dict[str, str] = {
+    "0.8.11": (
+        "## What's Changed in v0.8.11\n\n"
+        "• **Idle CPU Optimization**: Eliminated redundant 1-second stylesheet parsing and canvas invalidation on the top-corner clock, bringing idle CPU consumption down to flat 0.00%.\n"
+        "• **Grid Options Box Checkbox Alignment**: Repositioned the 'Disable' checkboxes in Sub-Column 2 immediately adjacent to their items (Live Badge, Live Tile Tint, Time Line, Clock), and moved the Auto-Advance HelpBadge to the right of its checkbox.\n"
+        "• **Guide Sync & Channel Import UI Reorganization**: Relocated the Guide Sync progress bar and real-time status text to Settings > Guide Sources and Health directly next to the 'Sync Guide Now' button. Moved channel import and reset buttons above the channel mapping box.\n"
+        "• **Resource Lifecycle & Memory Hardening**: Connected `deleteLater` to all background QThread workers on task completion and added explicit post-sync garbage collection.\n"
+        "• **Codebase Organization & Documentation**: Cleaned, sorted, and formatted imports according to PEP 8 standards, eliminated dead code and unused symbols, and added PEP 257 docstrings across all modules."
+    ),
     "0.8.10": (
         "## What's Changed in v0.8.10\n\n"
         "• **Channel Importing & Renaming Setup**: Clarified the channel lineup and renaming section in Settings to focus on guide display names (`Guide Name = Tuned Channel`), using `Fox = KSAZ-HD` as an example, with guidance on Welcome Wizard imports and re-importing.\n"
@@ -394,4 +401,4 @@ def apply_update(progress_cb: Optional[Callable[[str], None]] = None) -> Tuple[b
         err = e.stderr if e.stderr else str(e)
         return False, f"Update command failed: {err}"
     except Exception as e:
-        return False, f"Failed to apply update: {str(e)}"
+        return False, f"Failed to apply update: {e!s}"

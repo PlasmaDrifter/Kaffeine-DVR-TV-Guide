@@ -58,9 +58,10 @@ def test_main_window_reset_defaults_ui(qtbot, isolated_config):
 
 
 def test_program_tile_delegate_paint(qtbot, isolated_config):
-    from PyQt6.QtWidgets import QTableWidget, QTableWidgetItem, QStyleOptionViewItem
-    from PyQt6.QtGui import QPixmap, QPainter, QFont
     from PyQt6.QtCore import QRect
+    from PyQt6.QtGui import QFont, QPainter, QPixmap
+    from PyQt6.QtWidgets import QStyleOptionViewItem, QTableWidget, QTableWidgetItem
+
     from kaffeine_dvr.gui import ProgramTileDelegate
 
     table = QTableWidget(2, 2)

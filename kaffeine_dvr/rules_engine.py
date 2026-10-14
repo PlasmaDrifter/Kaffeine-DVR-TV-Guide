@@ -1,9 +1,18 @@
+"""
+Automated series recording and rule evaluation engine for Kaffeine DVR.
+
+Matches user-configured recording rules against cached TV Guide schedules,
+detects sports broadcasts for automatic buffer extension, and dispatches to queue.
+"""
+
 import uuid
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
+
+from .config import ConfigManager
 from .dbus_client import KaffeineDbusClient
 from .guide_service import GuideService
-from .config import ConfigManager
 from .queue_manager import QueueManager
+
 
 def is_sports_program(prog: Dict[str, Any]) -> bool:
     title = (prog.get("show_title") or "").strip().lower()

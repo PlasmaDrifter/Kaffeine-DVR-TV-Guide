@@ -1,16 +1,23 @@
+"""
+TV Guide aggregation and caching service for Kaffeine DVR.
+
+Fetches broadcast schedules from TVMaze, TV Passport, XMLTV, and custom web sources,
+stores program metadata in a local WAL-mode SQLite cache, and provides fast search queries.
+"""
+
+import hashlib
+import html
 import json
+import os
+import re
 import sqlite3
 import time
-import os
-import hashlib
-import urllib.request
 import urllib.error
+import urllib.request
 import xml.etree.ElementTree as ET
-import re
-import html
-from datetime import datetime, date, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Callable, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 try:
     from .config import ConfigManager
@@ -936,7 +943,6 @@ class GuideService:
             today_str = now_dt.strftime("%Y-%m-%d")
             filtered = []
             for r in rows:
-                p_airdate = r.get("airdate")
                 # If querying a specific future date, don't trim
                 if airdate and airdate != today_str and airdate > today_str:
                     filtered.append(r)

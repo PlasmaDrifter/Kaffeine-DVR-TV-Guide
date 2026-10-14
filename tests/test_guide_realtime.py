@@ -1,9 +1,9 @@
-from datetime import datetime, date, timedelta
+from datetime import date, datetime, timedelta
+
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QTableWidgetItem
-from PyQt6.QtGui import QColor
 
-from kaffeine_dvr.gui import MainWindow, GuideGridTable, GuideGridHeader
+from kaffeine_dvr.gui import GuideGridHeader, GuideGridTable, MainWindow
 
 
 def test_config_guide_realtime_settings(isolated_config):
@@ -58,6 +58,7 @@ def test_is_viewing_today(qtbot, isolated_config):
     tomorrow_str = (date.today() + timedelta(days=1)).strftime("%Y-%m-%d")
 
     # Item 1 is Today
+    assert win.guide_date_combo.itemData(1) == today_str
     win.guide_date_combo.setCurrentIndex(1)
     assert win.is_viewing_today() is True
 
@@ -237,8 +238,8 @@ def test_guide_grid_unhighlight_toggle_and_empty(qtbot, isolated_config):
 
 
 def test_guide_grid_unhighlight_escape(qtbot, isolated_config):
-    from PyQt6.QtGui import QKeyEvent
     from PyQt6.QtCore import QEvent
+    from PyQt6.QtGui import QKeyEvent
 
     win = MainWindow(config_mgr=isolated_config)
     qtbot.addWidget(win)
@@ -273,8 +274,8 @@ def test_guide_grid_unhighlight_escape(qtbot, isolated_config):
 
 
 def test_guide_list_unhighlight_toggle_and_escape(qtbot, isolated_config):
-    from PyQt6.QtGui import QKeyEvent
     from PyQt6.QtCore import QEvent
+    from PyQt6.QtGui import QKeyEvent
 
     win = MainWindow(config_mgr=isolated_config)
     qtbot.addWidget(win)
