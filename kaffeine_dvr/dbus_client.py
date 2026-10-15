@@ -6,6 +6,8 @@ channel tuning, recording scheduling, and media player dispatching.
 """
 
 import os
+import shlex
+import shutil
 import sqlite3
 import subprocess
 from pathlib import Path
@@ -75,6 +77,63 @@ def detect_player_installation(player_key: str) -> str:
             return "flatpak"
 
     return ""
+
+
+def resolve_system_default_player_command(file_path: str) -> Optional[List[str]]:
+    """
+    Resolve the actual binary and arguments for the user's default desktop media player
+    via xdg-mime and .desktop files, rather than calling the transient xdg-open wrapper.
+    """
+    import shlex
+    import shutil
+
+    desktop_dirs = [
+        Path.home() / ".local" / "share" / "applications",
+        Path("/usr/local/share/applications"),
+        Path("/usr/share/applications"),
+        Path("/var/lib/flatpak/exports/share/applications"),
+    ]
+    desktop_file = None
+    for mime in ("video/mp2t", "video/vnd.dlna.mpeg-tts", "video/mp4", "video/x-matroska", "video/quicktime"):
+        try:
+            out = subprocess.check_output(
+                ["xdg-mime", "query", "default", mime],
+                text=True,
+                stderr=subprocess.DEVNULL
+            ).strip()
+            if out and out.endswith(".desktop"):
+                desktop_file = out
+                break
+        except Exception:
+            pass
+
+    if not desktop_file:
+        return None
+
+    for d in desktop_dirs:
+        p = d / desktop_file
+        if p.exists():
+            try:
+                with open(p, "r", encoding="utf-8", errors="ignore") as f:
+                    for line in f:
+                        if line.startswith("Exec="):
+                            exec_line = line.split("=", 1)[1].strip()
+                            parts = shlex.split(exec_line)
+                            filtered = []
+                            has_field = False
+                            for part in parts:
+                                if part in ("%f", "%F", "%u", "%U"):
+                                    filtered.append(str(file_path))
+                                    has_field = True
+                                elif not part.startswith("%"):
+                                    filtered.append(part)
+                            if not has_field:
+                                filtered.append(str(file_path))
+                            if filtered and (shutil.which(filtered[0]) or filtered[0] == "flatpak"):
+                                return filtered
+            except Exception:
+                pass
+    return None
 
 
 class KaffeineDbusClient:
@@ -600,16 +659,43 @@ class KaffeineDbusClient:
                 cmd = ["flatpak", "run", "--file-forwarding", flatpak_id] + extra_args + ["@@", str(file_path), "@@"]
 
         if not cmd:
-            # Default or fallback to system default / xdg-open
+            # When player_mode is 'system' or unresolved, resolve the real binary from desktop environment
+            resolved_cmd = resolve_system_default_player_command(file_path)
+            if resolved_cmd:
+                cmd = resolved_cmd
+                # If resolved command is smplayer and standalone is True, inject standalone profile
+                if standalone and cmd and os.path.basename(cmd[0]).lower() == "smplayer":
+                    sm_profile = self._prepare_standalone_smplayer_profile()
+                    cmd = [cmd[0], "-config-path", str(sm_profile)] + cmd[1:]
+            else:
+                # If desktop association resolution fails, check for common native media players
+                for candidate in ("smplayer", "mpv", "vlc", "celluloid", "haruna"):
+                    if shutil.which(candidate):
+                        extra_args = []
+                        if standalone and candidate == "smplayer":
+                            sm_profile = self._prepare_standalone_smplayer_profile()
+                            extra_args = ["-config-path", str(sm_profile)]
+                        elif standalone and candidate == "vlc":
+                            extra_args = ["--no-one-instance"]
+                        cmd = [candidate] + extra_args + [str(file_path)]
+                        break
+
+        is_xdg = False
+        if not cmd:
+            # Fallback to system default / xdg-open
             cmd = ["xdg-open", str(file_path)]
+            is_xdg = True
 
         try:
             proc = subprocess.Popen(cmd, env=env)
+            if is_xdg:
+                setattr(proc, "_is_xdg_open", True)
             return proc
         except Exception as e:
             print(f"Error launching player ({cmd}): {e}")
             try:
                 proc = subprocess.Popen(["xdg-open", str(file_path)], env=env)
+                setattr(proc, "_is_xdg_open", True)
                 return proc
             except Exception as e2:
                 print(f"Fallback to xdg-open failed for {file_path}: {e2}")

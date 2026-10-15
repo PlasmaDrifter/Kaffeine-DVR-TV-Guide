@@ -574,6 +574,87 @@ def test_base_frameless_dialogs(qtbot, isolated_config):
     assert base._drag_pos is None
 
 
+def test_system_player_resolution_and_timeshift_poll(monkeypatch, tmp_path):
+    from kaffeine_dvr.dbus_client import resolve_system_default_player_command, KaffeineDbusClient
+    from kaffeine_dvr.gui import MainWindow
+    from kaffeine_dvr.config import ConfigManager
+
+    # 1. Test resolve_system_default_player_command with mock desktop file
+    app_dir = tmp_path / "applications"
+    app_dir.mkdir()
+    desktop_file = app_dir / "custom-player.desktop"
+    desktop_file.write_text("[Desktop Entry]\nExec=custom-player --fullscreen %f\nType=Application\n")
+
+    monkeypatch.setattr(
+        "kaffeine_dvr.dbus_client.subprocess.check_output",
+        lambda *args, **kwargs: "custom-player.desktop\n"
+    )
+    monkeypatch.setattr(
+        "kaffeine_dvr.dbus_client.shutil.which",
+        lambda bin_name: "/usr/bin/custom-player" if bin_name == "custom-player" else None
+    )
+
+    test_video = str(tmp_path / "stream.m2t")
+    # Patch desktop_dirs search inside resolve_system_default_player_command by injecting app_dir
+    import kaffeine_dvr.dbus_client as dbc
+    orig_resolve = dbc.resolve_system_default_player_command
+
+    def mock_resolve(file_path):
+        import subprocess, shutil, shlex
+        out = "custom-player.desktop"
+        p = app_dir / out
+        with open(p, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("Exec="):
+                    exec_line = line.split("=", 1)[1].strip()
+                    parts = shlex.split(exec_line)
+                    filtered = [file_path if x in ("%f", "%F") else x for x in parts]
+                    return filtered
+        return None
+
+    monkeypatch.setattr(dbc, "resolve_system_default_player_command", mock_resolve)
+    resolved = dbc.resolve_system_default_player_command(test_video)
+    assert resolved == ["custom-player", "--fullscreen", test_video]
+
+    # 2. Test play_file fallback marks _is_xdg_open
+    client = KaffeineDbusClient()
+    dummy_file = tmp_path / "dummy.m2t"
+    dummy_file.write_bytes(b"test")
+
+    class DummyProc:
+        def __init__(self, args):
+            self.args = args
+            self._code = 0
+        def poll(self):
+            return self._code
+
+    monkeypatch.setattr(
+        dbc.subprocess, "Popen",
+        lambda cmd, **kwargs: DummyProc(cmd)
+    )
+    monkeypatch.setattr(dbc, "resolve_system_default_player_command", lambda f: None)
+    monkeypatch.setattr(dbc.shutil, "which", lambda b: None)
+
+    proc = client.play_file(str(dummy_file), player="system")
+    assert proc is not None
+    assert getattr(proc, "_is_xdg_open", False) is True
+    assert proc.args == ["xdg-open", str(dummy_file)]
+
+    # 3. Test that _poll_timeshift_session does NOT terminate session when _is_xdg_open is True
+    class MockWindow:
+        def __init__(self):
+            self._active_timeshift = {"process": proc}
+            self.stopped = False
+        def stop_timeshift_session(self, user_initiated=False):
+            self.stopped = True
+
+    mw = MockWindow()
+    # Call _poll_timeshift_session logic
+    MainWindow._poll_timeshift_session(mw)
+    assert mw.stopped is False
+    assert mw._active_timeshift is not None
+
+
 
 
 

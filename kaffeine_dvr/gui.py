@@ -11239,6 +11239,11 @@ class MainWindow(QMainWindow):
             return
 
         proc = self._active_timeshift.get("process")
+        # xdg-open exits immediately upon delegating to the desktop environment;
+        # do not treat immediate xdg-open exit as player closure.
+        if getattr(proc, "_is_xdg_open", False) or (proc and getattr(proc, "args", None) and "xdg-open" in str(proc.args[0])):
+            return
+
         if proc is not None and proc.poll() is not None:
             # Process has exited!
             if hasattr(self, "_timeshift_poll_timer"):
