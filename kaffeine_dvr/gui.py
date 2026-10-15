@@ -4845,6 +4845,11 @@ class MainWindow(QMainWindow):
         self._save_indicator_timer = None
         self._grid_scroll_anim = None
 
+        from .web import KaffeineWebServer
+        self.web_server = KaffeineWebServer(self.config_mgr, self.queue_mgr, self.guide_service, self.storage_mgr)
+        if self.config_mgr.web_server_enabled:
+            self.web_server.start()
+
         self.init_ui()
         self.setup_timers()
         self.refresh_all(on_startup=True)
@@ -6422,6 +6427,64 @@ class MainWindow(QMainWindow):
         storage_layout.addLayout(storage_btn_row)
 
         left_col.addWidget(storage_box)
+
+        # Web Companion & Remote Tailscale Access Card
+        web_box = QGroupBox("Remote Web Access (Tailscale / LAN)")
+        web_layout = QVBoxLayout(web_box)
+        web_layout.setContentsMargins(15, 15, 15, 15)
+        web_layout.setSpacing(10)
+
+        web_form = QFormLayout()
+        web_form.setSpacing(10)
+
+        self.web_enable_check = QCheckBox("Enable Local / Tailscale Web Companion")
+        self.web_enable_check.setChecked(self.config_mgr.web_server_enabled)
+        web_form.addRow(
+            make_setting_label("Web Access:", "Run a secure web companion server to browse the TV guide, schedule shows, and stream videos from your phone, tablet, or remote PC over Tailscale/LAN."),
+            self.web_enable_check
+        )
+
+        web_port_row = QHBoxLayout()
+        web_port_row.setContentsMargins(0, 0, 0, 0)
+        self.web_port_spin = NumberStepper()
+        self.web_port_spin.setRange(1024, 65535)
+        self.web_port_spin.setValue(self.config_mgr.web_server_port)
+        self.web_port_spin.setFixedWidth(160)
+        web_port_row.addWidget(self.web_port_spin)
+        web_port_row.addStretch()
+        web_form.addRow(
+            make_setting_label("Port Number:", "TCP port for the web interface (default: 8088)."),
+            web_port_row
+        )
+
+        web_pass_row = QHBoxLayout()
+        web_pass_row.setContentsMargins(0, 0, 0, 0)
+        self.web_pass_edit = QLineEdit()
+        self.web_pass_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.web_pass_edit.setPlaceholderText("Set or change access password" if not self.config_mgr.has_web_password else "•••••••• (Password protected)")
+        self.web_pass_edit.setFixedWidth(200)
+        web_pass_row.addWidget(self.web_pass_edit)
+
+        self.set_web_pass_btn = QPushButton("Save Password")
+        self.set_web_pass_btn.clicked.connect(self._save_web_companion_password)
+        web_pass_row.addWidget(self.set_web_pass_btn)
+        web_pass_row.addStretch()
+        web_form.addRow(
+            make_setting_label("Access Password:", "Password required to access the web companion. Strongly recommended for Tailscale and network access."),
+            web_pass_row
+        )
+
+        web_layout.addLayout(web_form)
+
+        self.web_status_lbl = QLabel()
+        self._update_web_status_label()
+        web_layout.addWidget(self.web_status_lbl)
+
+        self.web_enable_check.toggled.connect(self._on_web_enable_toggled)
+        self.web_port_spin.valueChanged.connect(self._auto_save_automation_settings)
+
+        left_col.addWidget(web_box)
+
         left_col.addStretch()
         two_col_layout.addLayout(left_col, 40)
 
@@ -8386,8 +8449,62 @@ class MainWindow(QMainWindow):
         self.config_mgr.min_free_disk_gb = self.min_free_spin.value()
         self.config_mgr.custom_recording_folder = self.custom_folder_input.text().strip()
 
+        # Web Companion settings
+        if hasattr(self, "web_enable_check"):
+            self.config_mgr.web_server_enabled = self.web_enable_check.isChecked()
+        if hasattr(self, "web_port_spin"):
+            self.config_mgr.web_server_port = self.web_port_spin.value()
+
         self.update_storage_status_ui()
+        self._update_web_status_label()
         self.flash_save_indicator("Settings Saved")
+
+    def _on_web_enable_toggled(self, checked: bool):
+        self.config_mgr.web_server_enabled = checked
+        if hasattr(self, "web_server") and self.web_server:
+            if checked:
+                self.web_server.start()
+            else:
+                self.web_server.stop()
+        self._auto_save_automation_settings()
+
+    def _save_web_companion_password(self):
+        if not hasattr(self, "web_pass_edit"):
+            return
+        new_pass = self.web_pass_edit.text()
+        self.config_mgr.set_web_password(new_pass)
+        self.web_pass_edit.clear()
+        self.web_pass_edit.setPlaceholderText("•••••••• (Password protected)" if self.config_mgr.has_web_password else "Set access password")
+        self._update_web_status_label()
+        self.flash_save_indicator("Password Saved")
+
+    def _update_web_status_label(self):
+        if not hasattr(self, "web_status_lbl"):
+            return
+        if not getattr(self.config_mgr, "web_server_enabled", False):
+            self.web_status_lbl.setText("Status: Web companion is disabled.")
+            self.web_status_lbl.setStyleSheet("color: #94a3b8; font-size: 12px;")
+            return
+
+        port = self.config_mgr.web_server_port
+        has_pw = self.config_mgr.has_web_password
+        auth_str = "Password Protected" if has_pw else "Warning: No password set"
+        auth_color = "#38bdf8" if has_pw else "#f59e0b"
+
+        # Determine best display IP (Tailscale or local hostname)
+        import socket
+        try:
+            hostname = socket.gethostname()
+        except Exception:
+            hostname = "localhost"
+
+        text = (
+            f"<b>Active:</b> Listening on port {port} • <span style='color: {auth_color};'>{auth_str}</span><br>"
+            f"Local LAN: <a href='http://localhost:{port}' style='color: #38bdf8;'>http://{hostname}:{port}/</a>"
+        )
+        self.web_status_lbl.setText(text)
+        self.web_status_lbl.setStyleSheet("color: #e2e8f0; font-size: 12px; margin-top: 4px;")
+        self.web_status_lbl.setOpenExternalLinks(True)
 
     def _update_guide_detail_box_height(self):
         """Size description box to fit 2 or 3 lines of text based on user setting."""
@@ -12763,6 +12880,8 @@ class MainWindow(QMainWindow):
                         self._grid_scroll_anim.stop()
                 except Exception:
                     pass
+            if hasattr(self, "web_server") and self.web_server:
+                self.web_server.stop()
 
             if hasattr(self, "rec_table") and hasattr(self, "rec_table_toggle_filter"):
                 try:

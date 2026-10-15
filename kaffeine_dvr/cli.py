@@ -29,13 +29,15 @@ def main():
     parser.add_argument("--rules", action="store_true", help="Evaluate auto-record rules against cached guide")
     parser.add_argument("--watch", action="store_true", help="Run background watcher daemon to arm recordings before start")
     parser.add_argument("--interval", type=int, default=None, help="Watcher check interval in seconds (default: 120)")
+    parser.add_argument("--web", action="store_true", help="Run headless remote web companion server")
+    parser.add_argument("--port", type=int, default=None, help="Port for remote web companion server (default: 8088)")
     parser.add_argument("--list", action="store_true", help="List scheduled and queued recordings")
     parser.add_argument("--status", action="store_true", help="Show TV guide and Kaffeine connection status")
 
     args = parser.parse_args()
 
     # Launch GUI when explicitly requested or by default when invoked without CLI flags in a graphical session
-    no_cli_flags = not any([args.sync, args.rules, args.watch, args.list, args.status])
+    no_cli_flags = not any([args.sync, args.rules, args.watch, args.web, args.list, args.status])
     if args.gui or no_cli_flags:
         has_display = bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
         if has_display or args.gui:
@@ -128,6 +130,22 @@ def main():
             state = "RECORDING" if r.get("is_running") else "Scheduled"
             print(f"- {r.get('name')} | {r.get('channel')} | {r.get('begin')} | Duration: {r.get('duration')} | {state}")
 
+    if args.web:
+        from .storage_manager import StorageManager
+        from .web import KaffeineWebServer
+        if args.port:
+            cfg.web_server_port = args.port
+        storage_mgr = StorageManager(cfg, queue_mgr)
+        web_server = KaffeineWebServer(cfg, queue_mgr, guide, storage_mgr)
+        print(f"Starting Kaffeine DVR Web Companion on port {cfg.web_server_port}...")
+        if web_server.start():
+            import time
+            try:
+                while True:
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                web_server.stop()
+                print("\nWeb companion stopped.")
 
 
 if __name__ == "__main__":

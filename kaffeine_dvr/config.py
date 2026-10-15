@@ -630,7 +630,12 @@ class ConfigManager:
             "app_theme": "midnight",
             "theme_preset": "midnight",
             "custom_theme_presets": {},
-            "category_colors": dict(DEFAULT_CATEGORY_COLORS)
+            "category_colors": dict(DEFAULT_CATEGORY_COLORS),
+            "web_server_enabled": False,
+            "web_server_port": 8088,
+            "web_server_bind": "0.0.0.0",
+            "web_server_password_hash": "",
+            "web_server_salt": ""
         }
 
     def reset_to_defaults(self, keep_channels_and_rules: bool = True):
@@ -1328,5 +1333,61 @@ class ConfigManager:
     def guide_single_click_play(self, val: bool):
         self.data["guide_single_click_play"] = bool(val)
         self.save()
+
+    @property
+    def web_server_enabled(self) -> bool:
+        return bool(self.data.get("web_server_enabled", False))
+
+    @web_server_enabled.setter
+    def web_server_enabled(self, val: bool):
+        self.data["web_server_enabled"] = bool(val)
+        self.save()
+
+    @property
+    def web_server_port(self) -> int:
+        return int(self.data.get("web_server_port", 8088))
+
+    @web_server_port.setter
+    def web_server_port(self, val: int):
+        self.data["web_server_port"] = max(1024, min(65535, int(val)))
+        self.save()
+
+    @property
+    def web_server_bind(self) -> str:
+        return str(self.data.get("web_server_bind", "0.0.0.0"))
+
+    @web_server_bind.setter
+    def web_server_bind(self, val: str):
+        self.data["web_server_bind"] = str(val).strip() or "0.0.0.0"
+        self.save()
+
+    @property
+    def has_web_password(self) -> bool:
+        return bool(self.data.get("web_server_password_hash"))
+
+    def set_web_password(self, password: str):
+        """Hashes and stores the web access password with a secure cryptographic salt."""
+        import hashlib
+        import secrets
+        if not password:
+            self.data["web_server_password_hash"] = ""
+            self.data["web_server_salt"] = ""
+        else:
+            salt = secrets.token_hex(16)
+            h = hashlib.sha256((salt + password).encode("utf-8")).hexdigest()
+            self.data["web_server_salt"] = salt
+            self.data["web_server_password_hash"] = h
+        self.save()
+
+    def verify_web_password(self, password: str) -> bool:
+        """Verifies candidate password against stored salt and hash."""
+        stored_hash = self.data.get("web_server_password_hash", "")
+        if not stored_hash:
+            return True
+        import hashlib
+        import hmac
+        salt = self.data.get("web_server_salt", "")
+        cand_hash = hashlib.sha256((salt + password).encode("utf-8")).hexdigest()
+        return hmac.compare_digest(stored_hash, cand_hash)
 
 
