@@ -555,7 +555,8 @@ class SchedulesDirectProvider:
         # Schedules Direct JSON protocol explicitly requires the authentication token
         # request payload to submit a lowercase hex SHA1 hash of the account password.
         # codeql[py/weak-sensitive-data-hashing]
-        pw_hash = hashlib.sha1(password_raw.encode("utf-8")).hexdigest()  # nosemgrep: python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1
+        # Schedules Direct API requires a lowercase SHA1 password digest
+        pw_hash = hashlib.sha1(password_raw.encode("utf-8")).hexdigest()  # nosec B324 # nosemgrep: python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1
         post_data = json.dumps({"username": username, "password": pw_hash}).encode("utf-8")
         req = urllib.request.Request(
             f"{cls.API_URL}/token",

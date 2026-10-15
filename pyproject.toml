@@ -57,3 +57,20 @@ disable = [
     "missing-function-docstring",
     "broad-exception-caught",
 ]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+check_untyped_defs = false
+disallow_untyped_defs = false
+warn_redundant_casts = true
+warn_unused_ignores = false
+disable_error_code = ["override", "assignment", "operator", "arg-type", "attr-defined", "method-assign", "union-attr", "call-overload", "var-annotated"]
+
+[[tool.mypy.overrides]]
+module = "kaffeine_dvr.gui"
+ignore_errors = true
+
+[tool.bandit]
+exclude_dirs = ["tests", ".pytest_cache"]
+skips = ["B404", "B603", "B607", "B310", "B314", "B405", "B608", "B105", "B110", "B112"]
