@@ -67,7 +67,11 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
     .grid-table td { padding: 12px 14px; border-bottom: 1px solid #232b38; font-size: 0.9rem; vertical-align: middle; }
     .grid-table tr:hover { background: #202836; }
 
-    /* EPG Grid Styles */
+    /* Compact List View Table */
+    .compact-table th { padding: 6px 10px; font-size: 0.74rem; }
+    .compact-table td { padding: 5px 10px; font-size: 0.82rem; line-height: 1.25; }
+
+    /* EPG Grid Styles with Grab / Pan */
     .epg-wrapper {
       position: relative;
       width: 100%;
@@ -78,6 +82,16 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
       background: var(--card-bg);
       border: 1px solid var(--card-border);
       border-radius: 8px;
+      cursor: grab;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .epg-wrapper.grabbing {
+      cursor: grabbing;
+    }
+    .epg-wrapper.grabbing * {
+      cursor: grabbing !important;
+      user-select: none;
     }
     .epg-header {
       display: flex;
@@ -306,7 +320,7 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
 
       <!-- List View Container -->
       <div id="guideListContainer" style="display: none;">
-        <table class="grid-table">
+        <table class="grid-table compact-table">
           <thead>
             <tr>
               <th>Time</th>
@@ -397,6 +411,53 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
     const SLOT_WIDTH = 150;
     const TOTAL_SLOTS = 56;
     const TRACK_WIDTH = TOTAL_SLOTS * SLOT_WIDTH;
+
+    let isPanning = false;
+    let panStartX = 0;
+    let panStartY = 0;
+    let panScrollLeft = 0;
+    let panScrollTop = 0;
+    let hasDragged = false;
+
+    function initEPGPan() {
+      const wrapper = document.getElementById("epgGridWrapper");
+      if (!wrapper) return;
+
+      wrapper.addEventListener("mousedown", (e) => {
+        if (e.button !== 0) return;
+        isPanning = true;
+        hasDragged = false;
+        panStartX = e.pageX - wrapper.offsetLeft;
+        panStartY = e.pageY - wrapper.offsetTop;
+        panScrollLeft = wrapper.scrollLeft;
+        panScrollTop = wrapper.scrollTop;
+      });
+
+      window.addEventListener("mousemove", (e) => {
+        if (!isPanning) return;
+        const x = e.pageX - wrapper.offsetLeft;
+        const y = e.pageY - wrapper.offsetTop;
+        const walkX = x - panStartX;
+        const walkY = y - panStartY;
+
+        if (Math.abs(walkX) > 4 || Math.abs(walkY) > 4) {
+          hasDragged = true;
+          wrapper.classList.add("grabbing");
+        }
+
+        wrapper.scrollLeft = panScrollLeft - walkX;
+        wrapper.scrollTop = panScrollTop - walkY;
+      });
+
+      window.addEventListener("mouseup", () => {
+        if (!isPanning) return;
+        isPanning = false;
+        wrapper.classList.remove("grabbing");
+        setTimeout(() => {
+          hasDragged = false;
+        }, 80);
+      });
+    }
 
     function setGuideViewMode(mode) {
       currentGuideViewMode = mode;
@@ -586,29 +647,26 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
       window.filteredGuideList = displayItems;
 
       tbody.innerHTML = displayItems.map((p, idx) => {
-        const startDt = p.start_iso ? new Date(p.start_iso) : null;
-        const durMins = p.runtime_mins || 30;
-        const endDt = startDt ? new Date(startDt.getTime() + durMins * 60000) : null;
-        const isNow = startDt && endDt && (startDt <= now && now < endDt);
         const startStr = p.start_iso ? p.start_iso.substring(11, 16) : "--:--";
-
-        const timeCell = `<span style="font-weight: 600; color: var(--accent);">${escapeHtml(startStr)}</span>`;
+        const timeCell = `<span style="font-weight: 600; color: var(--accent); font-size: 0.82rem;">${escapeHtml(startStr)}</span>`;
 
         const isScheduled = !!p.is_scheduled;
         const btnHtml = isScheduled
-          ? `<span class="badge badge-armed">Scheduled</span>`
-          : `<button class="btn btn-sm" onclick="scheduleShowByIndex(${idx})">Record</button>`;
+          ? `<span class="badge badge-armed" style="padding: 2px 6px; font-size: 0.7rem;">Scheduled</span>`
+          : `<button class="btn btn-sm" style="padding: 2px 8px; font-size: 0.75rem;" onclick="scheduleShowByIndex(${idx})">Record</button>`;
 
-        let titleHtml = `<b>${escapeHtml(p.title || "Untitled")}</b>`;
+        let titleHtml = `<span style="font-weight: 600;">${escapeHtml(p.title || "Untitled")}</span>`;
         if (p.episode_title) {
-          titleHtml += `<div style="font-size:0.8rem; color:var(--text-muted);">${escapeHtml(p.episode_title)}</div>`;
+          titleHtml += ` <span style="font-size: 0.76rem; color: var(--text-muted); font-weight: normal;">(${escapeHtml(p.episode_title)})</span>`;
         }
+
+        const durStr = p.duration_iso ? p.duration_iso.substring(0, 5) : "00:30";
 
         return `<tr>
           <td>${timeCell}</td>
           <td><b>${escapeHtml(p.channel || "")}</b></td>
           <td>${titleHtml}</td>
-          <td>${escapeHtml(p.duration_iso || "00:30:00")}</td>
+          <td style="color: var(--text-muted); font-size: 0.8rem;">${escapeHtml(durStr)}</td>
           <td style="text-align: right;">${btnHtml}</td>
         </tr>`;
       }).join("");
@@ -725,6 +783,7 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
     }
 
     function openProgramModal(idx) {
+      if (hasDragged) return;
       const p = (guideItems || [])[idx];
       if (!p) return;
       selectedProgForModal = p;
@@ -910,6 +969,7 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
     function initApp() {
       populateDateDropdown();
       updateGuideViewControls();
+      initEPGPan();
       checkStatus();
       loadGuide();
       setInterval(checkStatus, 15000);
