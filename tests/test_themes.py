@@ -281,3 +281,47 @@ def test_delegate_past_show_theming_sync(qtbot, isolated_config):
     assert delegate.color_past_bg.name().lower() == "#13101c"
     assert delegate.color_past_title.name().lower() == "#8e82a8"
 
+
+def test_guide_grid_themes_alphabetical_order(qtbot, isolated_config):
+    from kaffeine_dvr.config import THEME_PRESETS
+    from kaffeine_dvr.gui import MainWindow, ThemeChip
+
+    # 1. Check THEME_PRESETS definition in config is alphabetical
+    names = [p["name"] for p in THEME_PRESETS.values()]
+    assert names == sorted(names, key=lambda s: s.lower())
+
+    # 2. Check MainWindow theme_preset_combo and guide_theme_grid chips
+    win = MainWindow(config_mgr=isolated_config)
+    qtbot.addWidget(win)
+
+    # Built-in items in combo (before Custom (Manual))
+    combo_names = [win.theme_preset_combo.itemText(i) for i in range(len(THEME_PRESETS))]
+    assert combo_names == sorted(combo_names, key=lambda s: s.lower())
+
+    # Chips in guide_theme_grid
+    chips = []
+    for i in range(win.guide_theme_grid.count()):
+        item = win.guide_theme_grid.itemAt(i)
+        w = item.widget()
+        if isinstance(w, ThemeChip):
+            chips.append(w.display_name)
+    assert len(chips) == len(THEME_PRESETS)
+    assert chips == sorted(chips, key=lambda s: s.lower())
+    win.close()
+
+
+def test_single_click_help_badge_and_abilities(qtbot, isolated_config):
+    from kaffeine_dvr.gui import HelpBadge, MainWindow
+
+    win = MainWindow(config_mgr=isolated_config)
+    qtbot.addWidget(win)
+
+    assert hasattr(win, "single_click_badge")
+    assert isinstance(win.single_click_badge, HelpBadge)
+    tooltip = win.single_click_badge._tooltip_text
+    assert "Single-Click Play" in tooltip
+    assert "Select for Details" in tooltip or "select" in tooltip.lower()
+    assert "description" in tooltip.lower()
+    assert "Right-Click" in tooltip
+    win.close()
+

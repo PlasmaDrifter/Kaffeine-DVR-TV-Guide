@@ -6552,11 +6552,32 @@ class MainWindow(QMainWindow):
         lbl_single_click.setStyleSheet("font-size: 13px; color: #e2e8f0;")
         col3_grid.addWidget(lbl_single_click, 4, 0, Qt.AlignmentFlag.AlignVCenter)
 
+        single_click_widget = QWidget()
+        single_click_layout = QHBoxLayout(single_click_widget)
+        single_click_layout.setContentsMargins(0, 0, 0, 0)
+        single_click_layout.setSpacing(6)
+
         self.single_click_play_check = QCheckBox("Enable")
-        self.single_click_play_check.setToolTip("Play live/recordings or open schedule options on a single click instead of requiring a double-click")
+        self.single_click_play_check.setToolTip("Play live/recordings or open schedule options on a single click instead of requiring a double-click (click '?' for full details)")
         self.single_click_play_check.setChecked(getattr(self.config_mgr, "guide_single_click_play", True))
         self.single_click_play_check.toggled.connect(self._on_single_click_play_toggled)
-        col3_grid.addWidget(self.single_click_play_check, 4, 1, Qt.AlignmentFlag.AlignVCenter)
+        single_click_layout.addWidget(self.single_click_play_check)
+
+        single_click_help = (
+            "Single-Click Play vs Select for Details:\n\n"
+            "• Single-Click Play (Enabled):\n"
+            "  A single click immediately tunes live TV, plays recordings, or prompts to schedule upcoming airings.\n\n"
+            "• Select for Details (Disabled):\n"
+            "  A single click selects the show to view its full description and metadata in the bottom panel without starting playback. Double-click to play or schedule.\n\n"
+            "• Right-Click Quick Actions:\n"
+            "  Right-clicking any show opens the quick action popup menu with program details and instant Watch, Record, and Record Series pill buttons without playing the show or expanding the bottom box."
+        )
+        self.single_click_badge = HelpBadge(single_click_help)
+        self.single_click_badge.setToolTip("Click for details on single-click, select, and right-click actions")
+        single_click_layout.addWidget(self.single_click_badge)
+        single_click_layout.addStretch()
+
+        col3_grid.addWidget(single_click_widget, 4, 1, Qt.AlignmentFlag.AlignVCenter)
 
         col3_grid.setColumnStretch(1, 1)
         cols_row.addLayout(col3_grid, 1)
@@ -8444,8 +8465,9 @@ class MainWindow(QMainWindow):
         chip_w = 165
         num_cols = 2
 
-        # 1. Built-in presets in guide_theme_grid
-        for slot_idx, (p_key, p_info) in enumerate(THEME_PRESETS.items()):
+        # 1. Built-in presets in guide_theme_grid (alphabetical order by display name)
+        built_in_sorted = sorted(THEME_PRESETS.items(), key=lambda x: x[1]["name"].lower())
+        for slot_idx, (p_key, p_info) in enumerate(built_in_sorted):
             self.theme_preset_combo.addItem(p_info["name"], p_key)
             dot_color = p_info["colors"].get("sports", "#38bdf8")
             chip = ThemeChip(p_key, p_info["name"], dot_color, parent=self, fixed_width=chip_w)
@@ -8465,8 +8487,9 @@ class MainWindow(QMainWindow):
 
         # 3. Saved custom presets listed starting at slot 1, preserving Custom anchor at (0, 0)
         custom_presets = self.config_mgr.custom_theme_presets if self.config_mgr else {}
+        custom_sorted = sorted(custom_presets.items(), key=lambda x: x[1]["name"].lower())
         c_slot = 1
-        for p_key, p_info in custom_presets.items():
+        for p_key, p_info in custom_sorted:
             self.theme_preset_combo.addItem(p_info["name"], p_key)
             dot_color = p_info["colors"].get("sports", "#38bdf8")
             chip = ThemeChip(p_key, p_info["name"], dot_color, parent=self, fixed_width=chip_w)
