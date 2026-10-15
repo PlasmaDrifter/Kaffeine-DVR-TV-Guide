@@ -2860,6 +2860,21 @@ class GuideGridVerticalHeader(QHeaderView):
         self.setSectionsClickable(True)
         self.setHighlightSections(False)
         self.viewport().setCursor(Qt.CursorShape.PointingHandCursor)
+        self.viewport().setMouseTracking(True)
+        self._hovered_section = -1
+
+    def mouseMoveEvent(self, event):
+        super().mouseMoveEvent(event)
+        sec = self.logicalIndexAt(event.position().toPoint())
+        if sec != self._hovered_section:
+            self._hovered_section = sec
+            self.viewport().update()
+
+    def leaveEvent(self, event):
+        super().leaveEvent(event)
+        if self._hovered_section != -1:
+            self._hovered_section = -1
+            self.viewport().update()
 
     def sizeHint(self):
         sz = super().sizeHint()
@@ -2896,27 +2911,28 @@ class GuideGridVerticalHeader(QHeaderView):
             channel_name = str(mw.grid_channels[logical_index]).strip()
 
         is_playing = bool(active_ch and channel_name and active_ch == channel_name.lower())
+        is_hovered = (logical_index == getattr(self, "_hovered_section", -1))
+        live_green = QColor("#66bb6a")
 
         # Card geometry with 2px margin around each channel square for clear separation
         card_rect = rect.adjusted(3, 3, -3, -3)
 
         if is_playing:
-            # Active playing channel: harmonized with theme's live_badge or accent color
-            live_color_hex = cat_colors.get("live_badge") or cat_colors.get("live_title") or "#22c55e"
-            border_color = QColor(live_color_hex)
-            # Tinted background based on live color
-            bg_color = QColor(border_color.red() // 4, border_color.green() // 4, border_color.blue() // 4)
+            # Active playing channel: uses exact live green #66bb6a for border and channel title
+            border_color = live_green
+            # Subtle dark live background tone harmonized with theme
+            bg_color = QColor(19, 36, 0)
             border_width = 2
-            text_color = QColor("#ffffff")
-            badge_color = border_color
+            text_color = live_green
         else:
             # Follow application & guide theme
             base_header_color = QColor(header_bg_hex)
             is_alt = (logical_index % 2 == 1)
             bg_color = compute_alternating_shade(base_header_color) if is_alt else base_header_color
-            border_color = QColor(border_hex)
+            border_color = live_green if is_hovered else QColor(border_hex)
             border_width = 1
-            text_color = QColor(text_primary_hex)
+            # Channel name turns live green #66bb6a when hovering
+            text_color = live_green if is_hovered else QColor(text_primary_hex)
 
         # Fill background card
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
@@ -2929,34 +2945,11 @@ class GuideGridVerticalHeader(QHeaderView):
         base_font.setBold(True)
         base_font.setPointSize(max(10, min(14, base_font.pointSize() or 11)))
 
-        if is_playing:
-            # Reserve space for "PLAYING" badge at the bottom of the square
-            badge_h = 14
-            badge_w = min(card_rect.width() - 8, 56)
-            title_rect = QRect(card_rect.left() + 2, card_rect.top() + 4, card_rect.width() - 4, max(12, card_rect.height() - badge_h - 9))
-            painter.setFont(base_font)
-            painter.setPen(text_color)
-            painter.drawText(title_rect, Qt.AlignmentFlag.AlignCenter, channel_name)
-
-            # Draw "PLAYING" badge
-            badge_x = card_rect.left() + (card_rect.width() - badge_w) // 2
-            badge_rect = QRect(badge_x, card_rect.bottom() - badge_h - 4, badge_w, badge_h)
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(badge_color)
-            painter.drawRoundedRect(badge_rect, 3, 3)
-
-            badge_font = QFont(base_font)
-            badge_font.setPointSize(max(7, base_font.pointSize() - 3))
-            badge_font.setBold(True)
-            painter.setFont(badge_font)
-            painter.setPen(QColor("#ffffff"))
-            painter.drawText(badge_rect, Qt.AlignmentFlag.AlignCenter, "PLAYING")
-        else:
-            # Centered channel title
-            painter.setFont(base_font)
-            painter.setPen(text_color)
-            text_rect = card_rect.adjusted(2, 2, -2, -2)
-            painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, channel_name)
+        # Clean centered channel title across the entire square
+        painter.setFont(base_font)
+        painter.setPen(text_color)
+        text_rect = card_rect.adjusted(2, 2, -2, -2)
+        painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, channel_name)
 
         painter.restore()
 
