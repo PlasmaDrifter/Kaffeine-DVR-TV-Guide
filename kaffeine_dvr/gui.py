@@ -11018,6 +11018,8 @@ class MainWindow(QMainWindow):
         prog = self._get_active_selected_program()
         if prog:
             self._display_program_details(prog)
+        else:
+            self.clear_guide_selection()
 
     def on_grid_cell_double_clicked(self, row: int, col: int):
         item = self.guide_grid_table.item(row, col)
