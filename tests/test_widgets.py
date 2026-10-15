@@ -421,6 +421,72 @@ def test_grid_immediate_highlight_on_show_switch_and_toggle(qtbot, isolated_conf
     assert win.selected_grid_program["show_title"] == "First Show"
 
 
+def test_themed_combo_box(qtbot):
+    from PyQt6.QtGui import QPainter, QPixmap
+    from kaffeine_dvr.gui import ThemedComboBox
+
+    combo = ThemedComboBox()
+    combo.addItems(["Alpha", "Beta", "Gamma"])
+    combo.setCurrentIndex(1)
+    qtbot.addWidget(combo)
+    combo.resize(160, 30)
+
+    # Verify paintEvent executes cleanly
+    pixmap = QPixmap(160, 30)
+    painter = QPainter(pixmap)
+    combo.render(painter)
+    painter.end()
+    assert combo.currentText() == "Beta"
+
+
+def test_settings_dropdowns_are_themed(qtbot, isolated_config):
+    from kaffeine_dvr.gui import MainWindow, ThemedComboBox
+
+    win = MainWindow(config_mgr=isolated_config)
+    qtbot.addWidget(win)
+
+    assert isinstance(win.provider_combo, ThemedComboBox)
+    assert isinstance(win.launch_mode_combo, ThemedComboBox)
+    assert isinstance(win.live_tv_mode_combo, ThemedComboBox)
+    assert isinstance(win.playback_player_combo, ThemedComboBox)
+    assert isinstance(win.update_freq_combo, ThemedComboBox)
+
+
+def test_number_stepper_focus_event(qtbot):
+    from PyQt6.QtCore import QEvent
+    from kaffeine_dvr.gui import NumberStepper
+
+    stepper = NumberStepper()
+    qtbot.addWidget(stepper)
+
+    assert stepper.property("focused") is None or stepper.property("focused") == "false"
+
+    # Send FocusIn event to spinbox lineEdit
+    line_edit = stepper._spin.lineEdit()
+    assert line_edit is not None
+    focus_in = QEvent(QEvent.Type.FocusIn)
+    stepper.eventFilter(line_edit, focus_in)
+    assert stepper.property("focused") == "true"
+
+    # Send FocusOut event
+    focus_out = QEvent(QEvent.Type.FocusOut)
+    stepper.eventFilter(line_edit, focus_out)
+    assert stepper.property("focused") == "false"
+
+
+def test_build_app_stylesheet_number_stepper_and_combobox():
+    from kaffeine_dvr.gui import APP_THEMES, build_app_stylesheet
+
+    for theme_key, tokens in APP_THEMES.items():
+        css = build_app_stylesheet(theme_key)
+        assert "QFrame#numberStepper {" in css
+        assert f"background-color: {tokens['bg_input']};" in css
+        assert f"border: 1px solid {tokens['border_color']};" in css
+        assert "QFrame#numberStepper[focused=\"true\"] {" in css
+        assert f"border-color: {tokens['accent_primary']};" in css
+
+
+
 
 
 

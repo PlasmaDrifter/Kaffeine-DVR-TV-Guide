@@ -325,6 +325,104 @@ class ServiceLogsWorker(QThread):
             self.finished.emit(f"Failed to fetch journal logs: {e}", False)
 
 
+class ThemedComboBox(QComboBox):
+    """
+    QComboBox that renders a clean modern flat frame and an antialiased chevron vector arrow,
+    eliminating raw 3D platform beveled buttons while matching the active theme.
+    """
+    def __init__(self, parent=None, centered: bool = False):
+        super().__init__(parent)
+        self.centered = centered
+
+    def enterEvent(self, event):
+        super().enterEvent(event)
+        self.update()
+
+    def leaveEvent(self, event):
+        super().leaveEvent(event)
+        self.update()
+
+    def focusInEvent(self, event):
+        super().focusInEvent(event)
+        self.update()
+
+    def focusOutEvent(self, event):
+        super().focusOutEvent(event)
+        self.update()
+
+    def paintEvent(self, event):
+        style_painter = QStylePainter(self)
+        opt = QStyleOptionComboBox()
+        self.initStyleOption(opt)
+        opt.currentText = ""  # Prevent default left-aligned text rendering
+        # Draw frame only, not the native arrow button
+        opt.subControls = QStyle.SubControl.SC_ComboBoxFrame
+        style_painter.drawComplexControl(QStyle.ComplexControl.CC_ComboBox, opt)
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        w = self.width()
+        h = self.height()
+        arrow_area_width = 24
+
+        # Draw clean chevron arrow on the right with interactive hover/focus accent
+        is_active = self.underMouse() or self.hasFocus() or (self.view() and self.view().isVisible())
+        if not self.isEnabled():
+            arrow_color = self.palette().color(QPalette.ColorRole.PlaceholderText)
+            arrow_color.setAlpha(100)
+        elif is_active:
+            arrow_color = self.palette().color(QPalette.ColorRole.Highlight)
+        else:
+            arrow_color = self.palette().color(QPalette.ColorRole.Text)
+            arrow_color.setAlpha(200)
+
+        pen = QPen(arrow_color, 2.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+        painter.setPen(pen)
+
+        ax = w - 14
+        ay = h // 2 - 2
+        painter.drawLine(ax - 4, ay, ax, ay + 4)
+        painter.drawLine(ax, ay + 4, ax + 4, ay)
+
+        # Draw text
+        text = self.itemText(self.currentIndex())
+        painter.setPen(self.palette().color(QPalette.ColorRole.Text))
+        if self.centered:
+            text_rect = QRect(0, 0, w, h)
+            style_painter.drawItemText(text_rect, Qt.AlignmentFlag.AlignCenter, self.palette(), self.isEnabled(), text, QPalette.ColorRole.Text)
+        else:
+            text_rect = QRect(8, 0, max(0, w - arrow_area_width - 8), h)
+            style_painter.drawItemText(text_rect, int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft), self.palette(), self.isEnabled(), text, QPalette.ColorRole.Text)
+
+
+class CenteredComboBox(ThemedComboBox):
+    """
+    QComboBox that displays its selected text and dropdown menu items centered.
+    """
+    def __init__(self, parent=None):
+        super().__init__(parent, centered=True)
+
+    def addItem(self, text: str, userData: Any = None):
+        if userData is not None:
+            super().addItem(text, userData)
+        else:
+            super().addItem(text)
+        self.setItemData(self.count() - 1, Qt.AlignmentFlag.AlignCenter, Qt.ItemDataRole.TextAlignmentRole)
+
+    def addItems(self, texts):
+        super().addItems(texts)
+        for i in range(self.count()):
+            self.setItemData(i, Qt.AlignmentFlag.AlignCenter, Qt.ItemDataRole.TextAlignmentRole)
+
+    def insertItem(self, index: int, text: str, userData: Any = None):
+        if userData is not None:
+            super().insertItem(index, text, userData)
+        else:
+            super().insertItem(index, text)
+        self.setItemData(index, Qt.AlignmentFlag.AlignCenter, Qt.ItemDataRole.TextAlignmentRole)
+
+
 class ServiceLogsDialog(QDialog):
     """
     Log viewer dialog displaying recent journalctl entries for kaffeine-dvr-watcher.service.
@@ -358,7 +456,7 @@ class ServiceLogsDialog(QDialog):
         ctrl_row.setSpacing(10)
 
         ctrl_row.addWidget(QLabel("Lines:"))
-        self.lines_combo = QComboBox()
+        self.lines_combo = ThemedComboBox()
         self.lines_combo.addItems(["50", "100", "250", "500", "1000"])
         self.lines_combo.setCurrentText("100")
         self.lines_combo.currentIndexChanged.connect(self.refresh_logs)
@@ -567,7 +665,7 @@ class ManualRecordDialog(QDialog):
         layout = QFormLayout(self)
 
         self.title_input = QLineEdit()
-        self.channel_combo = QComboBox()
+        self.channel_combo = ThemedComboBox()
         self.channel_combo.addItems(channels)
         
         now = datetime.now()
@@ -604,7 +702,7 @@ class AddRuleDialog(QDialog):
         layout = QFormLayout(self)
 
         self.keyword_input = QLineEdit(default_title)
-        self.channel_combo = QComboBox()
+        self.channel_combo = ThemedComboBox()
         self.channel_combo.addItem("All")
         self.channel_combo.addItems(channels)
 
@@ -638,7 +736,7 @@ class EditRuleDialog(QDialog):
 
         self.rule_id_lbl = QLabel(f"<b>{rule_id}</b>")
         self.keyword_input = QLineEdit(keyword)
-        self.channel_combo = QComboBox()
+        self.channel_combo = ThemedComboBox()
         self.channel_combo.addItem("All")
         self.channel_combo.addItems(channels)
         idx = self.channel_combo.findText(channel)
@@ -1423,12 +1521,6 @@ class NumberStepper(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("numberStepper")
-        self.setStyleSheet(
-            "QFrame#numberStepper { "
-            "border: 1px solid #3c465d; border-radius: 6px; "
-            "background-color: #12141d; min-height: 28px; max-height: 28px; } "
-            "QFrame#numberStepper:hover { border-color: #4f5d7e; }"
-        )
         layout = QHBoxLayout(self)
         layout.setContentsMargins(2, 2, 2, 2)
         layout.setSpacing(0)
@@ -1438,37 +1530,16 @@ class NumberStepper(QFrame):
         self._btn_minus.setAutoRepeat(True)
         self._btn_minus.setAutoRepeatDelay(400)
         self._btn_minus.setAutoRepeatInterval(80)
-        self._btn_minus.setStyleSheet(
-            "QPushButton { "
-            "min-width: 24px; max-width: 24px; min-height: 24px; max-height: 24px; "
-            "font-size: 14px; font-weight: bold; border: none; border-radius: 4px; "
-            "background-color: transparent; color: #94a3b8; padding: 0px; } "
-            "QPushButton:hover { background-color: #242c3d; color: #ffffff; } "
-            "QPushButton:pressed { background-color: #1a202c; }"
-        )
 
         self._spin = QSpinBox()
         self._spin.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
         self._spin.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._spin.setStyleSheet(
-            "QSpinBox { "
-            "border: none; background: transparent; "
-            "color: #e4e9f0; min-height: 24px; max-height: 24px; font-size: 13px; padding: 0px 4px; } "
-        )
 
         self._btn_plus = QPushButton("+")
         self._btn_plus.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self._btn_plus.setAutoRepeat(True)
         self._btn_plus.setAutoRepeatDelay(400)
         self._btn_plus.setAutoRepeatInterval(80)
-        self._btn_plus.setStyleSheet(
-            "QPushButton { "
-            "min-width: 24px; max-width: 24px; min-height: 24px; max-height: 24px; "
-            "font-size: 14px; font-weight: bold; border: none; border-radius: 4px; "
-            "background-color: transparent; color: #94a3b8; padding: 0px; } "
-            "QPushButton:hover { background-color: #242c3d; color: #ffffff; } "
-            "QPushButton:pressed { background-color: #1a202c; }"
-        )
 
         layout.addWidget(self._btn_minus)
         layout.addWidget(self._spin, 1)
@@ -1477,6 +1548,23 @@ class NumberStepper(QFrame):
         self._btn_minus.clicked.connect(self._step_down)
         self._btn_plus.clicked.connect(self._step_up)
         self._spin.valueChanged.connect(self.valueChanged.emit)
+
+        self._spin.installEventFilter(self)
+        line_edit = self._spin.lineEdit()
+        if line_edit:
+            line_edit.installEventFilter(self)
+
+    def eventFilter(self, watched, event):
+        if watched is self._spin or (self._spin.lineEdit() and watched is self._spin.lineEdit()):
+            if event.type() == QEvent.Type.FocusIn:
+                self.setProperty("focused", "true")
+                self.style().unpolish(self)
+                self.style().polish(self)
+            elif event.type() == QEvent.Type.FocusOut:
+                self.setProperty("focused", "false")
+                self.style().unpolish(self)
+                self.style().polish(self)
+        return super().eventFilter(watched, event)
 
     def _step_down(self):
         self._spin.stepDown()
@@ -1526,90 +1614,6 @@ class NumberStepper(QFrame):
 
     def spinBox(self) -> QSpinBox:
         return self._spin
-
-
-class ThemedComboBox(QComboBox):
-    """
-    QComboBox that renders a clean modern flat frame and an antialiased chevron vector arrow,
-    eliminating raw 3D platform beveled buttons while matching the active theme.
-    """
-    def __init__(self, parent=None, centered: bool = False):
-        super().__init__(parent)
-        self.centered = centered
-
-    def enterEvent(self, event):
-        super().enterEvent(event)
-        self.update()
-
-    def leaveEvent(self, event):
-        super().leaveEvent(event)
-        self.update()
-
-    def paintEvent(self, event):
-        style_painter = QStylePainter(self)
-        opt = QStyleOptionComboBox()
-        self.initStyleOption(opt)
-        opt.currentText = ""  # Prevent default left-aligned text rendering
-        # Draw frame only, not the native arrow button
-        opt.subControls = QStyle.SubControl.SC_ComboBoxFrame
-        style_painter.drawComplexControl(QStyle.ComplexControl.CC_ComboBox, opt)
-
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-        w = self.width()
-        h = self.height()
-        arrow_area_width = 24
-
-        # Draw clean chevron arrow on the right with interactive hover/focus accent
-        if self.underMouse() or self.hasFocus():
-            arrow_color = self.palette().color(QPalette.ColorRole.Highlight)
-        else:
-            arrow_color = self.palette().color(QPalette.ColorRole.PlaceholderText)
-        pen = QPen(arrow_color, 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
-        painter.setPen(pen)
-
-        ax = w - 14
-        ay = h // 2 - 2
-        painter.drawLine(ax - 4, ay, ax, ay + 4)
-        painter.drawLine(ax, ay + 4, ax + 4, ay)
-
-        # Draw text
-        text = self.itemText(self.currentIndex())
-        painter.setPen(self.palette().color(QPalette.ColorRole.Text))
-        if self.centered:
-            text_rect = QRect(0, 0, w, h)
-            style_painter.drawItemText(text_rect, Qt.AlignmentFlag.AlignCenter, self.palette(), self.isEnabled(), text, QPalette.ColorRole.Text)
-        else:
-            text_rect = QRect(8, 0, max(0, w - arrow_area_width - 8), h)
-            style_painter.drawItemText(text_rect, int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft), self.palette(), self.isEnabled(), text, QPalette.ColorRole.Text)
-
-
-class CenteredComboBox(ThemedComboBox):
-    """
-    QComboBox that displays its selected text and dropdown menu items centered.
-    """
-    def __init__(self, parent=None):
-        super().__init__(parent, centered=True)
-
-    def addItem(self, text: str, userData: Any = None):
-        if userData is not None:
-            super().addItem(text, userData)
-        else:
-            super().addItem(text)
-        self.setItemData(self.count() - 1, Qt.AlignmentFlag.AlignCenter, Qt.ItemDataRole.TextAlignmentRole)
-
-    def addItems(self, texts):
-        super().addItems(texts)
-        for i in range(self.count()):
-            self.setItemData(i, Qt.AlignmentFlag.AlignCenter, Qt.ItemDataRole.TextAlignmentRole)
-
-    def insertItem(self, index: int, text: str, userData: Any = None):
-        if userData is not None:
-            super().insertItem(index, text, userData)
-        else:
-            super().insertItem(index, text)
-        self.setItemData(index, Qt.AlignmentFlag.AlignCenter, Qt.ItemDataRole.TextAlignmentRole)
 
 
 def get_theme_chip_fixed_width(font: Optional[QFont] = None) -> int:
@@ -2978,6 +2982,50 @@ QComboBox QAbstractItemView::item {{
 }}
 QComboBox QAbstractItemView::item:hover {{
     background-color: {tokens["bg_button_hover"]};
+}}
+
+/* NumberStepper Controls */
+QFrame#numberStepper {{
+    background-color: {tokens["bg_input"]};
+    border: 1px solid {tokens["border_color"]};
+    border-radius: 4px;
+    min-height: 28px;
+    max-height: 28px;
+}}
+QFrame#numberStepper:hover {{
+    border-color: {tokens["border_light"]};
+}}
+QFrame#numberStepper[focused="true"] {{
+    border-color: {tokens["accent_primary"]};
+}}
+QFrame#numberStepper QSpinBox {{
+    border: none;
+    background: transparent;
+    color: {tokens["text_primary"]};
+    min-height: 24px;
+    max-height: 24px;
+    font-size: 13px;
+    padding: 0px 4px;
+}}
+QFrame#numberStepper QPushButton {{
+    min-width: 24px;
+    max-width: 24px;
+    min-height: 24px;
+    max-height: 24px;
+    font-size: 14px;
+    font-weight: bold;
+    border: none;
+    border-radius: 3px;
+    background-color: transparent;
+    color: {tokens["text_secondary"]};
+    padding: 0px;
+}}
+QFrame#numberStepper QPushButton:hover {{
+    background-color: rgba(255, 255, 255, 0.08);
+    color: {tokens["text_primary"]};
+}}
+QFrame#numberStepper QPushButton:pressed {{
+    background-color: rgba(0, 0, 0, 0.15);
 }}
 
 /* Buttons */
@@ -4461,7 +4509,7 @@ class MainWindow(QMainWindow):
         prov_layout = QHBoxLayout(prov_box)
         prov_layout.addWidget(QLabel("Primary Guide Engine:"))
 
-        self.provider_combo = QComboBox()
+        self.provider_combo = ThemedComboBox()
         self.provider_combo.addItem("Free Hybrid (TVMaze National + TV Passport Regional)", "hybrid")
         self.provider_combo.addItem("TV Passport (Web Station Directory)", "tvpassport")
         self.provider_combo.addItem("Custom XMLTV Feed (Local File or Remote URL)", "xmltv")
@@ -5021,7 +5069,7 @@ class MainWindow(QMainWindow):
             notify_row
         )
 
-        self.launch_mode_combo = QComboBox()
+        self.launch_mode_combo = ThemedComboBox()
         self.launch_mode_combo.addItem("Minimized to Taskbar (Panel)", "taskbar")
         self.launch_mode_combo.addItem("Minimize to System Tray (-m minimal)", "tray")
         self.launch_mode_combo.addItem("Normal Window (Visible desktop)", "normal")
@@ -5042,7 +5090,7 @@ class MainWindow(QMainWindow):
         )
 
         # Live TV Playback Player
-        self.live_tv_mode_combo = QComboBox()
+        self.live_tv_mode_combo = ThemedComboBox()
         from kaffeine_dvr.dbus_client import (
             SUPPORTED_PLAYERS,
             detect_player_installation,
@@ -5126,7 +5174,7 @@ class MainWindow(QMainWindow):
         )
 
         # Recorded Video Playback Player
-        self.playback_player_combo = QComboBox()
+        self.playback_player_combo = ThemedComboBox()
         from kaffeine_dvr.dbus_client import (
             SUPPORTED_PLAYERS,
             detect_player_installation,
@@ -5814,7 +5862,7 @@ class MainWindow(QMainWindow):
         self.auto_check_updates_cb.toggled.connect(self._on_auto_check_updates_toggled)
         freq_row.addWidget(self.auto_check_updates_cb)
 
-        self.update_freq_combo = QComboBox()
+        self.update_freq_combo = ThemedComboBox()
         self.update_freq_combo.addItems(["Weekly", "Monthly"])
         current_freq = self.config_mgr.update_check_frequency.capitalize()
         self.update_freq_combo.setCurrentText(current_freq if current_freq in ("Weekly", "Monthly") else "Weekly")
