@@ -976,8 +976,8 @@ class ConfigManager:
             import sqlite3
             conn = sqlite3.connect(str(self.kaffeine_db_path))
             cur = conn.cursor()
-            cur.execute("SELECT Id, Name, Number FROM Channels ORDER BY Number ASC, Name ASC")
-            channels = [{"id": r[0], "name": r[1], "number": r[2]} for r in cur.fetchall()]
+            cur.execute("SELECT Id, Name, Number, Transponder FROM Channels ORDER BY Number ASC, Name ASC")
+            channels = [{"id": r[0], "name": r[1], "number": r[2], "transponder": r[3] or ""} for r in cur.fetchall()]
             conn.close()
             return channels
         except Exception as e:
@@ -1021,6 +1021,15 @@ class ConfigManager:
             if not is_national and not is_in_passport:
                 unconfigured.append(name)
         return unconfigured
+
+    @property
+    def channel_health(self) -> Dict[str, Dict[str, Any]]:
+        return self.data.get("channel_health", {})
+
+    @channel_health.setter
+    def channel_health(self, val: Dict[str, Dict[str, Any]]):
+        self.data["channel_health"] = val
+        self.save()
 
     @property
     def auto_check_updates(self) -> bool:

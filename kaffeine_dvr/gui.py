@@ -105,6 +105,7 @@ try:
     from .guide_service import GuideService
     from .queue_manager import QueueManager
     from .rules_engine import RulesEngine
+    from .signal_scanner import ChannelSignalScanWorker, DvbSignalReader
     from .storage_manager import StorageManager
     from .watcher import Watcher
 except (ImportError, ValueError):
@@ -118,6 +119,7 @@ except (ImportError, ValueError):
     from kaffeine_dvr.guide_service import GuideService
     from kaffeine_dvr.queue_manager import QueueManager
     from kaffeine_dvr.rules_engine import RulesEngine
+    from kaffeine_dvr.signal_scanner import ChannelSignalScanWorker, DvbSignalReader
     from kaffeine_dvr.storage_manager import StorageManager
     from kaffeine_dvr.watcher import Watcher
 
@@ -769,6 +771,275 @@ class EditRuleDialog(QDialog):
         btn_box.addWidget(self.ok_btn)
         btn_box.addWidget(self.cancel_btn)
         layout.addRow(btn_box)
+
+
+class ChannelSignalHealthDialog(QDialog):
+    """
+    Channel Signal Health & Reception Monitor dialog.
+    Sequentially tests the digital TV lineup against live DVB frontend hardware,
+    measuring digital carrier lock, signal strength %, SNR, and bit error status.
+    """
+    def __init__(self, channels: List[Dict[str, Any]], config_mgr: Optional[ConfigManager] = None, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Channel Signal Health & Reception Monitor")
+        self.resize(880, 520)
+        self.channels = channels or []
+        self.config_mgr = config_mgr
+        self._worker: Optional[ChannelSignalScanWorker] = None
+        self._results: Dict[str, Dict[str, Any]] = dict(self.config_mgr.channel_health) if self.config_mgr else {}
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(10)
+
+        # Header description
+        desc_lbl = QLabel(
+            "<b>Channel Signal Health & Reception Monitor</b><br>"
+            "<span style='color: #8c98aa;'>Tests your digital TV lineup against physical DVB/ATSC tuner hardware, "
+            "verifying digital carrier lock, reception signal strength, and SNR.</span>"
+        )
+        desc_lbl.setTextFormat(Qt.TextFormat.RichText)
+        layout.addWidget(desc_lbl)
+
+        # Status & Progress row
+        status_box = QHBoxLayout()
+        self.status_lbl = QLabel("Ready to scan.")
+        self.status_lbl.setStyleSheet("font-size: 12px; color: #cbd5e1;")
+        status_box.addWidget(self.status_lbl, 1)
+
+        self.summary_badge = QLabel("")
+        self.summary_badge.setStyleSheet("font-size: 12px; font-weight: bold;")
+        status_box.addWidget(self.summary_badge)
+        layout.addLayout(status_box)
+
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setFixedHeight(8)
+        self.progress_bar.setTextVisible(False)
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        layout.addWidget(self.progress_bar)
+
+        # Table
+        self.table = QTableWidget(len(self.channels), 6)
+        self.table.setHorizontalHeaderLabels([
+            "Channel Name", "Ch #", "Transponder / Frequency", "Lock Status", "Signal Strength", "SNR / Quality"
+        ])
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
+        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Interactive)
+        self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
+        self.table.setColumnWidth(0, 180)
+        self.table.setColumnWidth(2, 210)
+        self.table.setColumnWidth(4, 150)
+        self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.table.verticalHeader().setVisible(False)
+        self.table.itemDoubleClicked.connect(lambda item: self.test_selected_channel())
+        layout.addWidget(self.table, 1)
+
+        self._populate_table()
+        self._update_summary_badge()
+
+        # Action bar
+        btn_bar = QHBoxLayout()
+        self.scan_all_btn = QPushButton("Scan All Channels")
+        self.scan_all_btn.setObjectName("primaryActionBtn")
+        self.scan_all_btn.clicked.connect(self.scan_all_channels)
+        btn_bar.addWidget(self.scan_all_btn)
+
+        self.test_single_btn = QPushButton("Test Selected Channel")
+        self.test_single_btn.clicked.connect(self.test_selected_channel)
+        btn_bar.addWidget(self.test_single_btn)
+
+        self.stop_btn = QPushButton("Stop Scan")
+        self.stop_btn.setEnabled(False)
+        self.stop_btn.clicked.connect(self.stop_scan)
+        btn_bar.addWidget(self.stop_btn)
+
+        btn_bar.addStretch()
+
+        self.close_btn = QPushButton("Close")
+        self.close_btn.clicked.connect(self.close)
+        btn_bar.addWidget(self.close_btn)
+
+        layout.addLayout(btn_bar)
+
+    def _populate_table(self):
+        for row, ch in enumerate(self.channels):
+            name = ch.get("name", "").strip()
+            num = str(ch.get("number") or "")
+            tp = ch.get("transponder", "")
+            if tp.startswith("A "):
+                # Format ATSC frequency e.g. A 189028615 8VSB -> 189.0 MHz (8VSB)
+                parts = tp.split()
+                if len(parts) >= 3:
+                    try:
+                        freq_mhz = round(int(parts[1]) / 1000000.0, 1)
+                        tp_fmt = f"{freq_mhz} MHz ({parts[2]})"
+                    except Exception:
+                        tp_fmt = tp
+                else:
+                    tp_fmt = tp
+            else:
+                tp_fmt = tp
+
+            item_name = QTableWidgetItem(name)
+            item_name.setData(Qt.ItemDataRole.UserRole, ch)
+            item_num = QTableWidgetItem(num)
+            item_num.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            item_tp = QTableWidgetItem(tp_fmt)
+
+            self.table.setItem(row, 0, item_name)
+            self.table.setItem(row, 1, item_num)
+            self.table.setItem(row, 2, item_tp)
+
+            # Check if previous metrics exist
+            metrics = self._results.get(name)
+            self._update_row_metrics(row, metrics)
+
+    def _update_row_metrics(self, row: int, metrics: Optional[Dict[str, Any]]):
+        if not metrics:
+            item_status = QTableWidgetItem("Untested")
+            item_status.setForeground(QColor("#94a3b8"))
+            item_strength = QTableWidgetItem("--")
+            item_quality = QTableWidgetItem("--")
+        else:
+            locked = metrics.get("locked", False)
+            has_sig = metrics.get("has_signal", False) or metrics.get("has_carrier", False)
+            pct = metrics.get("strength_pct", 0.0)
+            snr = metrics.get("snr_db", 0.0)
+            status_hex = metrics.get("status_hex", "")
+            quality = metrics.get("quality_label", "No Signal")
+
+            if locked:
+                item_status = QTableWidgetItem(f"Locked ({status_hex})" if status_hex else "Locked")
+                item_status.setForeground(QColor("#4ade80"))
+                item_strength = QTableWidgetItem(f"{pct:.1f}%")
+                item_strength.setForeground(QColor("#4ade80") if pct >= 40.0 else QColor("#facc15"))
+                item_quality = QTableWidgetItem(f"{snr:.1f} dB SNR - {quality}")
+                item_quality.setForeground(QColor("#4ade80") if quality in ("Excellent", "Good") else QColor("#facc15"))
+            elif has_sig:
+                item_status = QTableWidgetItem("Carrier (No Lock)")
+                item_status.setForeground(QColor("#facc15"))
+                item_strength = QTableWidgetItem(f"{pct:.1f}%")
+                item_quality = QTableWidgetItem(f"{quality}")
+                item_quality.setForeground(QColor("#facc15"))
+            else:
+                item_status = QTableWidgetItem("No Signal")
+                item_status.setForeground(QColor("#f87171"))
+                item_strength = QTableWidgetItem("0.0%")
+                item_strength.setForeground(QColor("#f87171"))
+                item_quality = QTableWidgetItem("Offline")
+                item_quality.setForeground(QColor("#f87171"))
+
+        item_status.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        item_strength.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.table.setItem(row, 3, item_status)
+        self.table.setItem(row, 4, item_strength)
+        self.table.setItem(row, 5, item_quality)
+
+    def _update_summary_badge(self):
+        total = len(self.channels)
+        locked_cnt = sum(1 for m in self._results.values() if m.get("locked"))
+        dead_cnt = sum(1 for m in self._results.values() if not m.get("locked") and not m.get("has_signal"))
+        if self._results:
+            self.summary_badge.setText(
+                f"<span style='color: #4ade80;'>Locked: {locked_cnt}</span>  |  "
+                f"<span style='color: #f87171;'>No Signal: {dead_cnt}</span>  |  "
+                f"<span style='color: #94a3b8;'>Total: {total}</span>"
+            )
+        else:
+            self.summary_badge.setText(f"<span style='color: #94a3b8;'>Total: {total} channels</span>")
+
+    def scan_all_channels(self):
+        if self._worker and self._worker.isRunning():
+            return
+        self._start_scan(self.channels)
+
+    def test_selected_channel(self):
+        if self._worker and self._worker.isRunning():
+            return
+        row = self.table.currentRow()
+        if row < 0 or row >= len(self.channels):
+            return
+        ch = self.channels[row]
+        self._start_scan([ch])
+
+    def _start_scan(self, channels_to_scan: List[Dict[str, Any]]):
+        self.scan_all_btn.setEnabled(False)
+        self.test_single_btn.setEnabled(False)
+        self.stop_btn.setEnabled(True)
+        self.progress_bar.setRange(0, len(channels_to_scan))
+        self.progress_bar.setValue(0)
+
+        self._worker = ChannelSignalScanWorker(channels_to_scan, parent=self)
+        self._worker.channel_started.connect(self._on_channel_started)
+        self._worker.channel_result.connect(self._on_channel_result)
+        self._worker.scan_progress.connect(self._on_scan_progress)
+        self._worker.scan_finished.connect(self._on_scan_finished)
+        self._worker.scan_error.connect(self._on_scan_error)
+        self._worker.start()
+
+    def _on_channel_started(self, ch_name: str, current: int, total: int):
+        self.status_lbl.setText(f"Tuning and measuring {ch_name} ({current} of {total})...")
+
+    def _on_channel_result(self, ch_name: str, metrics: Dict[str, Any]):
+        self._results[ch_name] = metrics
+        # Find row in table
+        for row, ch in enumerate(self.channels):
+            if ch.get("name", "").strip() == ch_name:
+                self._update_row_metrics(row, metrics)
+                break
+        self._update_summary_badge()
+        if self.config_mgr:
+            self.config_mgr.channel_health = self._results
+
+    def _on_scan_progress(self, current: int, total: int):
+        self.progress_bar.setValue(current)
+
+    def _on_scan_finished(self, results: Dict[str, Any]):
+        self.status_lbl.setText("Scan completed. All background playback stopped.")
+        self.progress_bar.setValue(self.progress_bar.maximum())
+        self.scan_all_btn.setEnabled(True)
+        self.test_single_btn.setEnabled(True)
+        self.stop_btn.setEnabled(False)
+        self._stop_kaffeine_playback()
+        self._worker = None
+
+    def _on_scan_error(self, err_msg: str):
+        self.status_lbl.setText(f"Scanner notice: {err_msg}")
+
+    def stop_scan(self):
+        if self._worker and self._worker.isRunning():
+            self.status_lbl.setText("Stopping scan...")
+            self._worker.request_stop()
+            self._worker.wait(1500)
+            self._stop_kaffeine_playback()
+            self.scan_all_btn.setEnabled(True)
+            self.test_single_btn.setEnabled(True)
+            self.stop_btn.setEnabled(False)
+
+    def _stop_kaffeine_playback(self):
+        try:
+            import dbus
+            bus = dbus.SessionBus()
+            proxy = bus.get_object("org.mpris.kaffeine", "/Player")
+            iface = dbus.Interface(proxy, "org.freedesktop.MediaPlayer")
+            iface.Stop()
+        except Exception:
+            pass
+
+    def closeEvent(self, event):
+        self.stop_scan()
+        self._stop_kaffeine_playback()
+        super().closeEvent(event)
+
+    def reject(self):
+        self.stop_scan()
+        self._stop_kaffeine_playback()
+        super().reject()
 
 
 class RetentionCleanupDialog(QDialog):
@@ -4809,6 +5080,10 @@ class MainWindow(QMainWindow):
         reset_mapping_btn.clicked.connect(self.reset_channel_mapping_defaults)
         btn_row.addWidget(reset_mapping_btn)
 
+        health_btn = QPushButton("Check Channel Health")
+        health_btn.clicked.connect(self.open_channel_health_dialog)
+        btn_row.addWidget(health_btn)
+
         btn_row.addStretch()
         map_layout.addLayout(btn_row)
 
@@ -4878,15 +5153,46 @@ class MainWindow(QMainWindow):
         self.refresh_channel_order_list()
         return widget
 
+    def open_channel_health_dialog(self):
+        channels = self.config_mgr.get_scanned_kaffeine_channels()
+        if not channels:
+            # Fallback to configured channel_map channels if Kaffeine DB has no scanned entries
+            channels = [
+                {"id": idx, "name": ch_name, "number": "", "transponder": ""}
+                for idx, ch_name in enumerate(self.config_mgr.channel_map.values(), 1)
+            ]
+        if not channels:
+            QMessageBox.information(
+                self,
+                "No Channels Available",
+                "No digital TV channels were found to test.\n"
+                "Please scan channels in Kaffeine or import channels first."
+            )
+            return
+        dlg = ChannelSignalHealthDialog(channels, config_mgr=self.config_mgr, parent=self)
+        dlg.exec()
+        self.refresh_channel_order_list()
+
     def refresh_channel_order_list(self):
         if not hasattr(self, "channel_order_list"):
             return
         self.channel_order_list.blockSignals(True)
         self.channel_order_list.clear()
         ordered = self.config_mgr.get_ordered_channels()
+        health_data = self.config_mgr.channel_health
         for idx, ch in enumerate(ordered, 1):
             item = QListWidgetItem(f"{idx}.  {ch}")
             item.setData(Qt.ItemDataRole.UserRole, ch)
+            h = health_data.get(ch)
+            if h:
+                locked = h.get("locked")
+                pct = h.get("strength_pct", 0.0)
+                snr = h.get("snr_db", 0.0)
+                quality = h.get("quality_label", "")
+                if locked:
+                    item.setToolTip(f"{ch}: Locked ({pct:.1f}% Signal, {snr:.1f} dB SNR - {quality})")
+                else:
+                    item.setToolTip(f"{ch}: No Signal / Unlocked")
             self.channel_order_list.addItem(item)
         self.channel_order_list.blockSignals(False)
 
