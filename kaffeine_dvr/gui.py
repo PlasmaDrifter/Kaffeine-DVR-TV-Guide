@@ -219,6 +219,19 @@ def _get_app_icon_asset_path() -> str:
     return ""
 
 
+def make_status_dot_icon(color_hex: str, size: int = 12) -> QIcon:
+    """Generate a crisp, anti-aliased circular indicator icon with a subtle dark border."""
+    pix = QPixmap(size, size)
+    pix.fill(Qt.GlobalColor.transparent)
+    p = QPainter(pix)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    p.setBrush(QColor(color_hex))
+    p.setPen(QPen(QColor(0, 0, 0, 100), 1.0))
+    p.drawEllipse(1, 1, size - 2, size - 2)
+    p.end()
+    return QIcon(pix)
+
+
 class SyncWorker(QThread):
     progress = pyqtSignal(str)
     progress_val = pyqtSignal(int)
@@ -782,7 +795,7 @@ class ChannelSignalHealthDialog(QDialog):
     def __init__(self, channels: List[Dict[str, Any]], config_mgr: Optional[ConfigManager] = None, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Channel Signal Health & Reception Monitor")
-        self.resize(880, 520)
+        self.resize(880, 580)
         self.channels = channels or []
         self.config_mgr = config_mgr
         self._worker: Optional[ChannelSignalScanWorker] = None
@@ -799,6 +812,37 @@ class ChannelSignalHealthDialog(QDialog):
         )
         desc_lbl.setTextFormat(Qt.TextFormat.RichText)
         layout.addWidget(desc_lbl)
+
+        # Signal Reception Explanation Card
+        explainer_box = QFrame()
+        explainer_box.setObjectName("signalExplainerBox")
+        explainer_box.setStyleSheet(
+            "QFrame#signalExplainerBox {"
+            "  background-color: rgba(255, 255, 255, 0.03);"
+            "  border: 1px solid rgba(255, 255, 255, 0.08);"
+            "  border-radius: 6px;"
+            "  padding: 6px 10px;"
+            "}"
+        )
+        explainer_layout = QVBoxLayout(explainer_box)
+        explainer_layout.setContentsMargins(8, 6, 8, 6)
+        explainer_layout.setSpacing(3)
+
+        explainer_title = QLabel("<b>Signal Reception Guide:</b>")
+        explainer_title.setStyleSheet("font-size: 11px; color: #cbd5e1;")
+        explainer_layout.addWidget(explainer_title)
+
+        explainer_text = QLabel(
+            "<span style='font-size: 11px; color: #94a3b8; line-height: 1.45;'>"
+            "<span style='color: #4ade80; font-weight: bold;'>● Locked</span>: Full digital lock. Picture and sound decode cleanly for live viewing and DVR recordings.<br>"
+            "<span style='color: #facc15; font-weight: bold;'>● Carrier (No Lock)</span>: Tower broadcast is detected, but the signal is too weak, noisy, or distorted to decode video packets. Re-aiming or boosting your antenna may turn this into a locked channel.<br>"
+            "<span style='color: #f87171; font-weight: bold;'>● No Signal</span>: Zero broadcast transmission detected on this frequency (station out of range, obstructed, or off-air)."
+            "</span>"
+        )
+        explainer_text.setTextFormat(Qt.TextFormat.RichText)
+        explainer_text.setWordWrap(True)
+        explainer_layout.addWidget(explainer_text)
+        layout.addWidget(explainer_box)
 
         # Status & Progress row
         status_box = QHBoxLayout()
@@ -901,6 +945,7 @@ class ChannelSignalHealthDialog(QDialog):
     def _update_row_metrics(self, row: int, metrics: Optional[Dict[str, Any]]):
         if not metrics:
             item_status = QTableWidgetItem("Untested")
+            item_status.setToolTip("Channel has not been scanned yet. Click 'Scan All Channels' or 'Test Selected Channel'.")
             item_status.setForeground(QColor("#94a3b8"))
             item_strength = QTableWidgetItem("--")
             item_quality = QTableWidgetItem("--")
@@ -914,6 +959,7 @@ class ChannelSignalHealthDialog(QDialog):
 
             if locked:
                 item_status = QTableWidgetItem(f"Locked ({status_hex})" if status_hex else "Locked")
+                item_status.setToolTip("Full digital lock acquired. Transport stream decodes cleanly with video and audio.")
                 item_status.setForeground(QColor("#4ade80"))
                 item_strength = QTableWidgetItem(f"{pct:.1f}%")
                 item_strength.setForeground(QColor("#4ade80") if pct >= 40.0 else QColor("#facc15"))
@@ -921,12 +967,14 @@ class ChannelSignalHealthDialog(QDialog):
                 item_quality.setForeground(QColor("#4ade80") if quality in ("Excellent", "Good") else QColor("#facc15"))
             elif has_sig:
                 item_status = QTableWidgetItem("Carrier (No Lock)")
+                item_status.setToolTip("Broadcast transmission detected from tower, but signal is too weak/noisy to decode video. Antenna re-aiming may help.")
                 item_status.setForeground(QColor("#facc15"))
                 item_strength = QTableWidgetItem(f"{pct:.1f}%")
                 item_quality = QTableWidgetItem(f"{quality}")
                 item_quality.setForeground(QColor("#facc15"))
             else:
                 item_status = QTableWidgetItem("No Signal")
+                item_status.setToolTip("No broadcast transmission detected on this frequency (tower out of range, obstructed, or off-air).")
                 item_status.setForeground(QColor("#f87171"))
                 item_strength = QTableWidgetItem("0.0%")
                 item_strength.setForeground(QColor("#f87171"))
@@ -943,11 +991,13 @@ class ChannelSignalHealthDialog(QDialog):
     def _update_summary_badge(self):
         total = len(self.channels)
         locked_cnt = sum(1 for m in self._results.values() if m.get("locked"))
-        dead_cnt = sum(1 for m in self._results.values() if not m.get("locked") and not m.get("has_signal"))
+        carrier_cnt = sum(1 for m in self._results.values() if not m.get("locked") and (m.get("has_signal") or m.get("has_carrier")))
+        dead_cnt = sum(1 for m in self._results.values() if not m.get("locked") and not m.get("has_signal") and not m.get("has_carrier"))
         if self._results:
             self.summary_badge.setText(
-                f"<span style='color: #4ade80;'>Locked: {locked_cnt}</span>  |  "
-                f"<span style='color: #f87171;'>No Signal: {dead_cnt}</span>  |  "
+                f"<span style='color: #4ade80;'>● {locked_cnt} Locked</span>  |  "
+                f"<span style='color: #facc15;'>● {carrier_cnt} Weak</span>  |  "
+                f"<span style='color: #f87171;'>● {dead_cnt} No Signal</span>  |  "
                 f"<span style='color: #94a3b8;'>Total: {total}</span>"
             )
         else:
@@ -5076,16 +5126,24 @@ class MainWindow(QMainWindow):
         save_mapping_btn.clicked.connect(self.save_channel_mapping)
         btn_row.addWidget(save_mapping_btn)
 
-        reset_mapping_btn = QPushButton("Reset to Antenna Defaults")
+        reset_mapping_btn = QPushButton("Reset Defaults")
+        reset_mapping_btn.setToolTip("Reset to standard over-the-air antenna channel names")
         reset_mapping_btn.clicked.connect(self.reset_channel_mapping_defaults)
         btn_row.addWidget(reset_mapping_btn)
 
-        health_btn = QPushButton("Check Channel Health")
-        health_btn.clicked.connect(self.open_channel_health_dialog)
-        btn_row.addWidget(health_btn)
-
         btn_row.addStretch()
         map_layout.addLayout(btn_row)
+
+        health_row = QHBoxLayout()
+        health_btn = QPushButton("Check Channel Health")
+        health_btn.clicked.connect(self.open_channel_health_dialog)
+        health_row.addWidget(health_btn)
+
+        self.channel_health_badge = QLabel("")
+        self.channel_health_badge.setStyleSheet("font-size: 11px; padding-left: 6px;")
+        health_row.addWidget(self.channel_health_badge)
+        health_row.addStretch()
+        map_layout.addLayout(health_row)
 
         self.mapping_text = QTextEdit()
         mapping_str = "\n".join([f"{k} = {v}" for k, v in self.config_mgr.channel_map.items()])
@@ -5126,6 +5184,18 @@ class MainWindow(QMainWindow):
         desc.setStyleSheet("color: #8a99ad; font-size: 11px;")
         order_layout.addWidget(desc)
 
+        order_legend = QLabel(
+            "<span style='color: #8a99ad; font-size: 10px;'>"
+            "Signal: "
+            "<span style='color: #4ade80; font-weight: bold;'>● Locked</span> &nbsp; "
+            "<span style='color: #facc15; font-weight: bold;'>● Weak</span> &nbsp; "
+            "<span style='color: #f87171; font-weight: bold;'>● No Signal</span> &nbsp; "
+            "<span style='color: #64748b;'>● Untested</span>"
+            "</span>"
+        )
+        order_legend.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        order_layout.addWidget(order_legend)
+
         self.channel_order_list = QListWidget()
         self.channel_order_list.setObjectName("channelOrderList")
         self.channel_order_list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
@@ -5151,7 +5221,47 @@ class MainWindow(QMainWindow):
         layout.addLayout(lineup_panels)
 
         self.refresh_channel_order_list()
+        self.refresh_channel_health_badge()
         return widget
+
+    def refresh_channel_health_badge(self):
+        if not hasattr(self, "channel_health_badge"):
+            return
+        health_data = self.config_mgr.channel_health
+        if not health_data:
+            self.channel_health_badge.setText("<span style='color: #8c98aa;'>Signal health not yet scanned</span>")
+            return
+
+        channels = self.config_mgr.get_ordered_channels()
+        if not channels:
+            channels = list(self.config_mgr.channel_map.keys())
+
+        locked_cnt = 0
+        carrier_cnt = 0
+        nosig_cnt = 0
+        for ch in channels:
+            kaffeine_name = self.config_mgr.channel_map.get(ch, ch)
+            h = health_data.get(ch) or health_data.get(kaffeine_name)
+            if h:
+                if h.get("locked"):
+                    locked_cnt += 1
+                elif h.get("has_signal") or h.get("has_carrier"):
+                    carrier_cnt += 1
+                else:
+                    nosig_cnt += 1
+
+        parts = []
+        if locked_cnt:
+            parts.append(f"<span style='color: #4ade80; font-weight: bold;'>● {locked_cnt} Locked</span>")
+        if carrier_cnt:
+            parts.append(f"<span style='color: #facc15; font-weight: bold;'>● {carrier_cnt} Weak</span>")
+        if nosig_cnt:
+            parts.append(f"<span style='color: #f87171; font-weight: bold;'>● {nosig_cnt} No Signal</span>")
+
+        if parts:
+            self.channel_health_badge.setText("  |  ".join(parts))
+        else:
+            self.channel_health_badge.setText("<span style='color: #8c98aa;'>Signal health not yet scanned</span>")
 
     def open_channel_health_dialog(self):
         channels = self.config_mgr.get_scanned_kaffeine_channels()
@@ -5183,18 +5293,29 @@ class MainWindow(QMainWindow):
         for idx, ch in enumerate(ordered, 1):
             item = QListWidgetItem(f"{idx}.  {ch}")
             item.setData(Qt.ItemDataRole.UserRole, ch)
-            h = health_data.get(ch)
+            kaffeine_name = self.config_mgr.channel_map.get(ch, ch)
+            h = health_data.get(ch) or health_data.get(kaffeine_name)
             if h:
                 locked = h.get("locked")
+                has_sig = h.get("has_signal") or h.get("has_carrier")
                 pct = h.get("strength_pct", 0.0)
                 snr = h.get("snr_db", 0.0)
                 quality = h.get("quality_label", "")
                 if locked:
+                    item.setIcon(make_status_dot_icon("#4ade80"))
                     item.setToolTip(f"{ch}: Locked ({pct:.1f}% Signal, {snr:.1f} dB SNR - {quality})")
+                elif has_sig:
+                    item.setIcon(make_status_dot_icon("#facc15"))
+                    item.setToolTip(f"{ch}: Carrier Detected ({pct:.1f}% Signal - Weak / No Lock. Antenna re-aiming may help)")
                 else:
-                    item.setToolTip(f"{ch}: No Signal / Unlocked")
+                    item.setIcon(make_status_dot_icon("#f87171"))
+                    item.setToolTip(f"{ch}: No Signal (Zero broadcast transmission detected)")
+            else:
+                item.setIcon(make_status_dot_icon("#64748b"))
+                item.setToolTip(f"{ch}: Untested (Click 'Check Channel Health' to test signal reception)")
             self.channel_order_list.addItem(item)
         self.channel_order_list.blockSignals(False)
+        self.refresh_channel_health_badge()
 
     def _get_current_list_channels(self) -> List[str]:
         channels = []

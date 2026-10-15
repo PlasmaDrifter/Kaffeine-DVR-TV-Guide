@@ -3,6 +3,7 @@ import struct
 from unittest.mock import MagicMock, patch
 import pytest
 from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QFrame
 
 from kaffeine_dvr.signal_scanner import (
     DvbSignalReader,
@@ -200,6 +201,10 @@ def test_channel_signal_health_dialog(qtbot, isolated_config):
         dlg = ChannelSignalHealthDialog(channels, config_mgr=isolated_config)
         qtbot.addWidget(dlg)
 
+        # Verify explanation box exists
+        explainer = dlg.findChild(QFrame, "signalExplainerBox")
+        assert explainer is not None
+
         assert dlg.table.rowCount() == 2
         assert dlg.table.item(0, 0).text() == "2.1 KATU"
         assert dlg.table.item(0, 1).text() == "2.1"
@@ -216,6 +221,7 @@ def test_channel_signal_health_dialog(qtbot, isolated_config):
         })
 
         assert dlg.table.item(0, 3).text() == "Locked"
+        assert "lock" in dlg.table.item(0, 3).toolTip().lower()
         assert "58.4%" in dlg.table.item(0, 4).text()
         assert "23.2 dB" in dlg.table.item(0, 5).text()
 
@@ -225,3 +231,56 @@ def test_channel_signal_health_dialog(qtbot, isolated_config):
         # Close dialog and verify cleanup stops playback
         dlg.close()
         assert mock_player_iface.Stop.called
+
+
+def test_channel_order_signal_icons_and_badge(qtbot, isolated_config):
+    from kaffeine_dvr.gui import MainWindow, make_status_dot_icon
+
+    # Test make_status_dot_icon
+    icon = make_status_dot_icon("#4ade80", size=14)
+    assert not icon.isNull()
+
+    isolated_config.channel_map = {
+        "ABC": "2.1 KATU",
+        "NBC": "6.1 KOIN",
+        "CBS": "8.1 KGW",
+        "FOX": "12.1 KPTV"
+    }
+    isolated_config.channel_order = ["ABC", "NBC", "CBS", "FOX"]
+    isolated_config.channel_health = {
+        "2.1 KATU": {"locked": True, "strength_pct": 65.0, "snr_db": 22.0, "quality_label": "Good"},
+        "6.1 KOIN": {"locked": False, "has_carrier": True, "strength_pct": 30.0},
+        "8.1 KGW": {"locked": False, "has_signal": False},
+        # 12.1 KPTV left untested
+    }
+
+    win = MainWindow(config_mgr=isolated_config)
+    qtbot.addWidget(win)
+
+    win.refresh_channel_order_list()
+    assert win.channel_order_list.count() == 4
+
+    item_abc = win.channel_order_list.item(0)
+    assert not item_abc.icon().isNull()
+    assert "Locked" in item_abc.toolTip()
+
+    item_nbc = win.channel_order_list.item(1)
+    assert not item_nbc.icon().isNull()
+    assert "Carrier" in item_nbc.toolTip()
+
+    item_cbs = win.channel_order_list.item(2)
+    assert not item_cbs.icon().isNull()
+    assert "No Signal" in item_cbs.toolTip()
+
+    item_fox = win.channel_order_list.item(3)
+    assert not item_fox.icon().isNull()
+    assert "Untested" in item_fox.toolTip()
+
+    # Check summary badge
+    badge_text = win.channel_health_badge.text()
+    assert "1 Locked" in badge_text
+    assert "1 Weak" in badge_text
+    assert "1 No Signal" in badge_text
+
+    win.close()
+
