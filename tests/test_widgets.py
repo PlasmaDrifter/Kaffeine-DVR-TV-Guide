@@ -1001,6 +1001,84 @@ def test_guide_list_single_click_and_double_click_actions(qtbot, isolated_config
     win.close()
 
 
+def test_kaffeine_launch_mode_label(qtbot, isolated_config):
+    win = MainWindow(config_mgr=isolated_config)
+    qtbot.addWidget(win)
+    win.show()
+
+    # Find the label in DVR settings
+    labels = [lbl.text() for lbl in win.findChildren(QLabel)]
+    assert any("Kaffeine Launch Mode:" in l for l in labels)
+    assert not any("Recording Launch Mode:" in l for l in labels)
+    win.close()
+
+
+def test_live_badge_text_contrast(qtbot, isolated_config):
+    from PyQt6.QtCore import QRect
+    from PyQt6.QtGui import QColor, QFont, QPainter, QPixmap
+    from PyQt6.QtWidgets import QStyleOptionViewItem, QTableWidget, QTableWidgetItem
+
+    from kaffeine_dvr.gui import ProgramTileDelegate
+
+    table = QTableWidget(1, 1)
+    qtbot.addWidget(table)
+    delegate = ProgramTileDelegate(table, config_mgr=isolated_config)
+
+    prog_live = {
+        "show_title": "Live Broadcast",
+        "_primary_title": "Live Broadcast",
+        "_secondary_sub": "",
+        "_time_range": "9:00 AM - 10:00 AM",
+        "_category": "news",
+        "_timing_state": "live",
+    }
+    item = QTableWidgetItem()
+    item.setData(Qt.ItemDataRole.UserRole, prog_live)
+    table.setItem(0, 0, item)
+
+    opt = QStyleOptionViewItem()
+    opt.rect = QRect(0, 0, 250, 70)
+    opt.font = QFont("Sans Serif", 10)
+
+    # 1. Dark badge color (#059669 emerald, lum ~101.5) -> white text (#ffffff)
+    captured_pens = []
+    class MockPainter(QPainter):
+        def setPen(self, pen):
+            captured_pens.append(pen if isinstance(pen, QColor) else getattr(pen, "color", lambda: None)())
+            super().setPen(pen)
+
+    isolated_config.set_category_color("live_badge", "#059669")
+    delegate.refresh_category_colors()
+    pix = QPixmap(250, 70)
+    p = MockPainter(pix)
+    delegate.paint(p, opt, table.model().index(0, 0))
+    p.end()
+    assert any(c and c.name().lower() == "#ffffff" for c in captured_pens)
+
+    # 2. Bright badge color (#00ff66 neon green, lum ~161.3) -> black text (#000000)
+    captured_pens.clear()
+    isolated_config.set_category_color("live_badge", "#00ff66")
+    delegate.refresh_category_colors()
+    pix2 = QPixmap(250, 70)
+    p2 = MockPainter(pix2)
+    delegate.paint(p2, opt, table.model().index(0, 0))
+    p2.end()
+    assert any(c and c.name().lower() == "#000000" for c in captured_pens)
+
+
+def test_updates_tab_contact_row(qtbot, isolated_config):
+    win = MainWindow(config_mgr=isolated_config)
+    qtbot.addWidget(win)
+    win.show()
+
+    tab = win.create_settings_updates_tab()
+    labels = [lbl.text() for lbl in tab.findChildren(QLabel)]
+    assert any("Contact:" in l for l in labels)
+    assert any("plasmadrifter121@gmail.com" in l for l in labels)
+    assert any("email about bugs" in l for l in labels)
+    win.close()
+
+
 
 
 

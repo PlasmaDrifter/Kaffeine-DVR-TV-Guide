@@ -2841,7 +2841,10 @@ class ProgramTileDelegate(QStyledItemDelegate):
             painter.setBrush(badge_color)
             painter.drawRoundedRect(badge_rect, 2, 2)
 
-            painter.setPen(QColor("#ffffff"))
+            # Perceived luminance (ITU-R BT.601 standard): black text on bright background, white on dark
+            lum = 0.299 * badge_color.red() + 0.587 * badge_color.green() + 0.114 * badge_color.blue()
+            text_color = QColor("#000000") if lum >= 135 else QColor("#ffffff")
+            painter.setPen(text_color)
             painter.setFont(badge_font)
             painter.drawText(badge_rect, Qt.AlignmentFlag.AlignCenter, "LIVE")
 
@@ -6108,7 +6111,7 @@ class MainWindow(QMainWindow):
             self.launch_mode_combo.setCurrentIndex(mode_idx)
         dvr_layout.addRow(
             make_setting_label(
-                "Recording Launch Mode:",
+                "Kaffeine Launch Mode:",
                 "Controls how Kaffeine starts when armed for recording:\n"
                 "• Minimized to Taskbar: Quietly minimizes to your panel taskbar without touching tray.\n"
                 "• Minimize to System Tray: Starts with -m minimal mode and docks into tray.\n"
@@ -6842,6 +6845,23 @@ class MainWindow(QMainWindow):
         svc_row_layout.addStretch()
 
         env_layout.addRow("Background Watcher Service:", svc_row_widget)
+
+        # 4th row: Contact
+        contact_widget = QWidget()
+        contact_layout = QHBoxLayout(contact_widget)
+        contact_layout.setContentsMargins(0, 0, 0, 0)
+        contact_layout.setSpacing(10)
+
+        self.contact_email_lbl = QLabel('<a href="mailto:plasmadrifter121@gmail.com" style="color: #38bdf8; text-decoration: none; font-weight: bold;">plasmadrifter121@gmail.com</a>')
+        self.contact_email_lbl.setOpenExternalLinks(True)
+        contact_layout.addWidget(self.contact_email_lbl)
+
+        self.contact_desc_lbl = QLabel("— you can email about bugs, features, or comments")
+        self.contact_desc_lbl.setStyleSheet("color: #8c98aa; font-size: 12px;")
+        contact_layout.addWidget(self.contact_desc_lbl)
+        contact_layout.addStretch()
+
+        env_layout.addRow("Contact:", contact_widget)
 
         main_layout.addWidget(env_box)
 
