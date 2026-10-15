@@ -6961,6 +6961,7 @@ class MainWindow(QMainWindow):
         self.help_subtabs = QTabWidget()
         self.help_subtabs.setObjectName("helpSubTabs")
         self.help_subtabs.addTab(self.create_help_setup_guide_tab(), "Quick Setup Guide")
+        self.help_subtabs.addTab(self.create_help_grid_guide_tab(), "Grid Guide Usage && Capabilities")
         self.help_subtabs.addTab(self.create_help_reference_tab(), "System Architecture && Reference")
         layout.addWidget(self.help_subtabs)
 
@@ -7187,6 +7188,136 @@ class MainWindow(QMainWindow):
         services_text.setStyleSheet(body_style)
         services_layout.addWidget(services_text)
         layout.addWidget(services_box)
+
+        layout.addStretch()
+        scroll.setWidget(container)
+        return scroll
+
+    def create_help_grid_guide_tab(self) -> QWidget:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setSpacing(14)
+
+        # Header Title
+        title_box = QWidget()
+        title_layout = QVBoxLayout(title_box)
+        title_layout.setContentsMargins(0, 0, 0, 0)
+        h1 = QLabel("<b>TV Guide Grid Usage &amp; Capabilities</b>")
+        h1.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        h1.setStyleSheet("font-size: 20px; font-weight: bold; color: #ffffff;")
+        title_layout.addWidget(h1)
+        sub1 = QLabel("Master navigation, continuous live channel playback, recording scheduling, and visual customization.")
+        sub1.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        sub1.setStyleSheet("font-size: 13px; color: #94a3b8;")
+        title_layout.addWidget(sub1)
+        layout.addWidget(title_box)
+
+        # Base style helpers
+        make_group_style = lambda color: (
+            "QGroupBox { font-size: 15px; font-weight: bold; margin-top: 14px; padding-top: 18px; } "
+            f"QGroupBox::title {{ subcontrol-origin: margin; subcontrol-position: top center; padding: 0 6px; color: {color}; }}"
+        )
+        body_style = "color: #d8e2ee; font-size: 14px; line-height: 1.6;"
+
+        # Section 1: Navigation & Interactive Controls
+        nav_box = QGroupBox("1. Fluid Navigation && Grid Controls")
+        nav_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        nav_box.setStyleSheet(make_group_style("#38bdf8"))
+        nav_layout = QVBoxLayout(nav_box)
+        nav_layout.setContentsMargins(15, 15, 15, 15)
+        nav_text = QLabel(
+            "• <b style='color: #38bdf8;'>Smooth Hand-Grab Panning:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Click and drag anywhere across the guide grid to pan smoothly in any direction (both horizontal time and vertical channels).<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Traditional vertical and horizontal scrollbars are also fully active at all times.<br><br>"
+            "• <b style='color: #38bdf8;'>Quick Time Navigation (Header Bar):</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– <b>Day Selector:</b> Jump between any of the 7 scheduled days instantly.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– <b>Now / Current Time:</b> Instantly scrolls the grid directly to the current broadcast hour with the real-time indicator line in view.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– <b>Prime Time:</b> Jump straight to 8:00 PM evening programming in one click.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– <b>Noon:</b> Jump straight to 12:00 PM midday programming in one click.<br><br>"
+            "• <b style='color: #38bdf8;'>Auto-Advance Past the Hour:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– By default, when viewing today's guide, the grid automatically scrolls forward to the next hour when reaching your configured minute (default :50 past the hour).<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Built-in safeguards automatically pause auto-advance while you are actively dragging or browsing past/future time slots.<br><br>"
+            "• <b style='color: #38bdf8;'>Zoom & View Controls:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– <b>Zoom In (+) / Zoom Out (−):</b> Adjust grid tile dimensions and font sizes dynamically from compact to large.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– <b>Maximize Grid:</b> Expands the EPG grid to full-screen view. Press <b>Escape</b> anytime to restore standard view.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– <b>View Toggle:</b> Switch between the visual <b>Grid Guide</b> and the filterable <b>List Guide</b>."
+        )
+        nav_text.setWordWrap(True)
+        nav_text.setStyleSheet(body_style)
+        nav_layout.addWidget(nav_text)
+        layout.addWidget(nav_box)
+
+        # Section 2: Continuous Channel Streaming & Single-Click Play
+        play_box = QGroupBox("2. Continuous Live Streaming && Playback Modes")
+        play_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        play_box.setStyleSheet(make_group_style("#4ade80"))
+        play_lay = QVBoxLayout(play_box)
+        play_lay.setContentsMargins(15, 15, 15, 15)
+        play_text = QLabel(
+            "• <b style='color: #4ade80;'>Continuous Channel Streaming (Click Channel Square):</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Click any <b>Channel Square</b> on the far left column (e.g. ABC, NBC, CBS, FOX).<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Launches continuous live TV playback that keeps streaming across show transitions uninterrupted without stopping when individual shows end.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– The active channel square highlights in bright live green (<code>#66bb6a</code>) and responds to mouse hover with an interactive glowing outline.<br><br>"
+            "• <b style='color: #4ade80;'>Single-Click Play:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Enabled by default in <b>Settings &gt; Grid Guide Options &gt; Single-Click Play</b>.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Clicking any show tile immediately plays live TV, launches recorded playback for past shows, or prompts the scheduler for upcoming shows without requiring a second click.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– When disabled, clicking highlights and displays show details in the bottom panel, and double-clicking triggers playback.<br><br>"
+            "• <b style='color: #4ade80;'>Live Timeshift vs. Direct Tuning:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– <b>Live Timeshift (Default):</b> Streams the live broadcast into your configured external media player (e.g. mpv or VLC) with pause, instant replay, and rewind controls.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– <b>Native Kaffeine Window:</b> Direct tuning brings the native Kaffeine DVB viewer window to the foreground."
+        )
+        play_text.setWordWrap(True)
+        play_text.setStyleSheet(body_style)
+        play_lay.addWidget(play_text)
+        layout.addWidget(play_box)
+
+        # Section 3: Show Selection, Details & Recording Workflows
+        rec_box = QGroupBox("3. Program Details, Recording && Series Scheduling")
+        rec_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        rec_box.setStyleSheet(make_group_style("#f59e0b"))
+        rec_lay = QVBoxLayout(rec_box)
+        rec_lay.setContentsMargins(15, 15, 15, 15)
+        rec_text = QLabel(
+            "• <b style='color: #f59e0b;'>Bottom Program Detail Panel:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Displays complete program metadata: show title, episode name, season &amp; episode numbers, airtime range, broadcast duration, and full plot summary.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Displays live recording status indicators (e.g. <code>[● QUEUED]</code> or <code>[● RECORDING]</code>).<br><br>"
+            "• <b style='color: #f59e0b;'>Smart Action Buttons:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– <b>Watch Live / Watch Channel:</b> Tune or stream the selected channel instantly.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– <b>Record Program:</b> Schedule a one-off recording for upcoming broadcasts.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– <b>Auto-Record This Series:</b> Creates keyword recording rules that automatically record all future episodes matching your criteria.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– <b>Cancel Recording / Adjust Buffers:</b> Easily adjust lead-in / lead-out minutes or remove scheduled timers directly from the guide.<br><br>"
+            "• <b style='color: #f59e0b;'>Unhighlight & Deselect:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Click the currently highlighted program tile again, click empty grid space, or press <b>Escape</b> to unhighlight and reset the bottom action panel."
+        )
+        rec_text.setWordWrap(True)
+        rec_text.setStyleSheet(body_style)
+        rec_lay.addWidget(rec_text)
+        layout.addWidget(rec_box)
+
+        # Section 4: Visual Themes & Customization
+        theme_box = QGroupBox("4. Themes, Colors && Visual Personalization")
+        theme_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        theme_box.setStyleSheet(make_group_style("#c084fc"))
+        theme_lay = QVBoxLayout(theme_box)
+        theme_lay.setContentsMargins(15, 15, 15, 15)
+        theme_text = QLabel(
+            "• <b style='color: #c084fc;'>Guide Grid Presets & App Themes (Settings > Grid Guide Options):</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Switch between built-in curated color palettes including <b>Midnight</b>, <b>Charcoal</b>, <b>Deep Blue</b>, <b>Slate</b>, and <b>High Contrast</b>.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Channel squares and grid headers dynamically match your active theme colors automatically.<br><br>"
+            "• <b style='color: #c084fc;'>Genre & Category Color Coding:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Customize color swatches for <b>Sports</b>, <b>News</b>, <b>Movies</b>, and <b>TV Shows / Series</b>.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Shows are subtly color-coded by category for effortless scanning across prime-time lineups.<br><br>"
+            "• <b style='color: #c084fc;'>Real-Time Indicator Line & Clock:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– <b>Time Line:</b> Displays a vertical cyan indicator line showing the exact current minute across all channels, with adjustable opacity.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– <b>Header Clock:</b> Live digital clock in the corner of the grid header with customizable font size and toggleable visibility.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– <b>Live Badge & Tint:</b> Toggle or customize the compact green 'LIVE' badge and background tint on active broadcasts."
+        )
+        theme_text.setWordWrap(True)
+        theme_text.setStyleSheet(body_style)
+        theme_lay.addWidget(theme_text)
+        layout.addWidget(theme_box)
 
         layout.addStretch()
         scroll.setWidget(container)
