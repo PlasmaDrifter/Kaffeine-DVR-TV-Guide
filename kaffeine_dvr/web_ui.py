@@ -205,20 +205,9 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
       bottom: 0;
       width: 2px;
       background: #ef4444;
+      opacity: 0.3;
       z-index: 20;
       pointer-events: none;
-    }
-    .epg-now-line::before {
-      content: "NOW";
-      position: absolute;
-      top: 2px;
-      left: -13px;
-      background: #ef4444;
-      color: #fff;
-      font-size: 0.62rem;
-      font-weight: bold;
-      padding: 1px 3px;
-      border-radius: 3px;
     }
 
     .badge { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 0.72rem; font-weight: bold; text-transform: uppercase; }
@@ -603,10 +592,7 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
         const isNow = startDt && endDt && (startDt <= now && now < endDt);
         const startStr = p.start_iso ? p.start_iso.substring(11, 16) : "--:--";
 
-        let timeCell = `<span style="font-weight: 600; color: var(--accent);">${escapeHtml(startStr)}</span>`;
-        if (isNow) {
-          timeCell += ` <span class="badge" style="background:#0284c7; color:#fff; font-size:0.68rem; margin-left:4px;">On Now</span>`;
-        }
+        const timeCell = `<span style="font-weight: 600; color: var(--accent);">${escapeHtml(startStr)}</span>`;
 
         const isScheduled = !!p.is_scheduled;
         const btnHtml = isScheduled
