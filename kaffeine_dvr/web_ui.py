@@ -283,16 +283,21 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
     }
 
     async function loadGuide() {
-      const selDate = document.getElementById("guideDateSelect").value;
+      const dateElem = document.getElementById("guideDateSelect");
+      const selDate = dateElem ? dateElem.value : "";
       const tbody = document.getElementById("guideTableBody");
-      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding: 25px; color: var(--text-muted);">Fetching schedule for ${selDate}...</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding: 25px; color: var(--text-muted);">Fetching schedule for ${selDate || "today"}...</td></tr>`;
       try {
-        const resp = await apiFetch(`/api/guide?date=${selDate}`);
-        if (!resp.ok) return;
+        const resp = await apiFetch(`/api/guide?date=${encodeURIComponent(selDate)}`);
+        if (!resp.ok) {
+          const errData = await resp.json().catch(() => ({}));
+          tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding: 25px; color: #ef4444;">Error ${resp.status}: ${escapeHtml(errData.error || "Failed to load TV guide.")}</td></tr>`;
+          return;
+        }
         guideItems = await resp.json();
         renderGuideTable(guideItems);
       } catch (e) {
-        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding: 25px; color: #ef4444;">Failed to load TV guide.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding: 25px; color: #ef4444;">${escapeHtml(e.message || "Failed to load TV guide.")}</td></tr>`;
       }
     }
 

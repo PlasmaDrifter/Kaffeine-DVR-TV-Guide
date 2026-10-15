@@ -193,20 +193,26 @@ class KaffeineWebRequestHandler(http.server.BaseHTTPRequestHandler):
             try:
                 qs = urllib.parse.parse_qs(parsed.query)
                 target_date = qs.get("date", [""])[0] or time.strftime("%Y-%m-%d")
-                programs = self.server_obj.guide_svc.get_programs_for_date(target_date)
+                programs = self.server_obj.guide_svc.search_programs(
+                    airdate=target_date,
+                    trim_ended=False,
+                    include_overhang=True
+                )
 
                 # Cross-reference with scheduled map
                 scheduled_map = self.server_obj.queue_mgr.get_active_scheduled_map()
 
                 out = []
                 for p in programs:
-                    ch_key = (p.get("kaffeine_channel") or "").strip().lower()
+                    ch_name = p.get("kaffeine_channel") or p.get("channel") or ""
+                    ch_key = ch_name.strip().lower()
                     iso_key = (p.get("start_iso") or "")[:16]
                     is_sched = (ch_key, iso_key) in scheduled_map
                     out.append({
                         "id": p.get("id"),
-                        "title": p.get("title"),
-                        "channel": p.get("kaffeine_channel"),
+                        "title": p.get("show_title") or p.get("title") or "Untitled",
+                        "episode_title": p.get("episode_title") or "",
+                        "channel": ch_name,
                         "start_iso": p.get("start_iso"),
                         "duration_iso": p.get("duration_iso"),
                         "category": p.get("_category") or "",
