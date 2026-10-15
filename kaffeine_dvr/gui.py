@@ -938,12 +938,17 @@ class ChannelSignalHealthDialog(BaseFramelessDialog):
         explainer_layout.setContentsMargins(8, 6, 8, 6)
         explainer_layout.setSpacing(3)
 
-        explainer_title = QLabel("<b>Signal Reception Guide:</b>")
+        explainer_title = QLabel("<b>Signal Reception & Tuner Guide:</b>")
         explainer_title.setStyleSheet("font-size: 11px; color: #cbd5e1;")
         explainer_layout.addWidget(explainer_title)
 
         explainer_text = QLabel(
             "<span style='font-size: 11px; color: #94a3b8; line-height: 1.45;'>"
+            "<span style='color: #38bdf8; font-weight: bold;'>● Kaffeine Requirement</span>: "
+            "Kaffeine must be running to command the tuner hardware to switch frequencies. "
+            "If Kaffeine is not running when scanning begins, it will automatically launch. "
+            "You can choose whether Kaffeine runs hidden in the taskbar/tray or visible in DVR Settings ('Kaffeine Launch Mode'). "
+            "If you close Kaffeine after scanning, DVR recordings will automatically restart it hidden.<br>"
             "<span style='color: #4ade80; font-weight: bold;'>● Locked</span>: Full digital lock. Picture and sound decode cleanly for live viewing and DVR recordings.<br>"
             "<span style='color: #facc15; font-weight: bold;'>● Carrier (No Lock)</span>: Tower broadcast is detected, but the signal is too weak, noisy, or distorted to decode video packets. Re-aiming or boosting your antenna may turn this into a locked channel.<br>"
             "<span style='color: #f87171; font-weight: bold;'>● No Signal</span>: Zero broadcast transmission detected on this frequency (station out of range, obstructed, or off-air)."
@@ -1010,6 +1015,11 @@ class ChannelSignalHealthDialog(BaseFramelessDialog):
         self.stop_btn.setEnabled(False)
         self.stop_btn.clicked.connect(self.stop_scan)
         btn_bar.addWidget(self.stop_btn)
+
+        self.quit_kaffeine_btn = QPushButton("Close Kaffeine")
+        self.quit_kaffeine_btn.setToolTip("Close the background Kaffeine process now. It will automatically restart hidden whenever needed for DVR recordings.")
+        self.quit_kaffeine_btn.clicked.connect(self._close_kaffeine_app)
+        btn_bar.addWidget(self.quit_kaffeine_btn)
 
         btn_bar.addStretch()
 
@@ -1190,6 +1200,25 @@ class ChannelSignalHealthDialog(BaseFramelessDialog):
             iface.Stop()
         except Exception:
             pass
+
+    def _close_kaffeine_app(self):
+        """Close the running Kaffeine application process."""
+        self.stop_scan()
+        self._stop_kaffeine_playback()
+        try:
+            import dbus
+            bus = dbus.SessionBus()
+            app_proxy = bus.get_object("org.kde.kaffeine", "/")
+            app_iface = dbus.Interface(app_proxy, "org.freedesktop.MediaPlayer")
+            app_iface.Quit()
+            self.status_lbl.setText("Kaffeine closed. It will automatically restart hidden when needed.")
+        except Exception:
+            try:
+                import subprocess
+                subprocess.run(["pkill", "-x", "kaffeine"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                self.status_lbl.setText("Kaffeine closed. It will automatically restart hidden when needed.")
+            except Exception as e:
+                self.status_lbl.setText(f"Could not close Kaffeine: {e}")
 
     def closeEvent(self, event):
         self.stop_scan()

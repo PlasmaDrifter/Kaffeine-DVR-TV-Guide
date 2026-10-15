@@ -224,7 +224,20 @@ class ChannelSignalScanWorker(QThread):
         all_results: Dict[str, Dict[str, Any]] = {}
         total = len(self.channels)
 
-        # Connect to Kaffeine D-Bus interfaces
+        # 1. Ensure Kaffeine is running to tune physical tuner frequencies
+        from .dbus_client import KaffeineDbusClient
+        client = KaffeineDbusClient()
+        if not client.is_running():
+            launch_mode = "taskbar"
+            try:
+                from .config import ConfigManager
+                cfg = ConfigManager()
+                launch_mode = cfg.launch_mode
+            except Exception:
+                pass
+            client.launch_kaffeine(mode=launch_mode)
+
+        # 2. Connect to Kaffeine D-Bus interfaces
         television_iface = None
         player_iface = None
         try:
@@ -236,6 +249,12 @@ class ChannelSignalScanWorker(QThread):
             player_iface = dbus.Interface(player_proxy, "org.freedesktop.MediaPlayer")
         except Exception as e:
             self.scan_error.emit(f"Could not connect to Kaffeine D-Bus service: {e}")
+
+        if not television_iface:
+            # Cannot tune without Kaffeine D-Bus interface
+            self.scan_error.emit("Kaffeine must be running to tune channels. Please start Kaffeine and try again.")
+            self.scan_finished.emit({})
+            return
 
         try:
             for idx, ch_info in enumerate(self.channels, 1):

@@ -3,7 +3,7 @@ import struct
 from unittest.mock import MagicMock, patch
 import pytest
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QFrame
+from PyQt6.QtWidgets import QFrame, QLabel
 
 from kaffeine_dvr.signal_scanner import (
     DvbSignalReader,
@@ -201,9 +201,17 @@ def test_channel_signal_health_dialog(qtbot, isolated_config):
         dlg = ChannelSignalHealthDialog(channels, config_mgr=isolated_config)
         qtbot.addWidget(dlg)
 
-        # Verify explanation box exists
+        # Verify explanation box exists and contains Kaffeine and launch mode guidance
         explainer = dlg.findChild(QFrame, "signalExplainerBox")
         assert explainer is not None
+        explainer_lbls = explainer.findChildren(QLabel)
+        guide_text = " ".join(lbl.text() for lbl in explainer_lbls)
+        assert "Kaffeine Requirement" in guide_text
+        assert "DVR Settings" in guide_text
+        assert "restart it hidden" in guide_text
+
+        assert dlg.quit_kaffeine_btn is not None
+        assert dlg.quit_kaffeine_btn.text() == "Close Kaffeine"
 
         assert dlg.table.rowCount() == 2
         assert dlg.table.item(0, 0).text() == "2.1 KATU"
@@ -228,9 +236,15 @@ def test_channel_signal_health_dialog(qtbot, isolated_config):
         # Check config persisted health
         assert isolated_config.channel_health["2.1 KATU"]["locked"] is True
 
+        # Test Close Kaffeine button triggers Quit on app proxy
+        mock_iface = MagicMock()
+        mock_dbus.Interface.return_value = mock_iface
+        dlg._close_kaffeine_app()
+        assert mock_iface.Quit.called
+
         # Close dialog and verify cleanup stops playback
         dlg.close()
-        assert mock_player_iface.Stop.called
+        assert mock_iface.Stop.called
 
 
 def test_channel_order_signal_icons_and_badge(qtbot, isolated_config):
