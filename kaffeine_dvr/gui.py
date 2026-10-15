@@ -948,7 +948,7 @@ class ChannelSignalHealthDialog(BaseFramelessDialog):
             "Kaffeine must be running to command the tuner hardware to switch frequencies. "
             "If Kaffeine is not running when scanning begins, it will automatically launch. "
             "You can choose whether Kaffeine runs hidden in the taskbar/tray or visible in DVR Settings ('Kaffeine Launch Mode'). "
-            "If you close Kaffeine after scanning, DVR recordings will automatically restart it hidden.<br>"
+            "If you close Kaffeine after scanning, DVR recordings will automatically restart it hidden if the option is set to hidden.<br>"
             "<span style='color: #4ade80; font-weight: bold;'>● Locked</span>: Full digital lock. Picture and sound decode cleanly for live viewing and DVR recordings.<br>"
             "<span style='color: #facc15; font-weight: bold;'>● Carrier (No Lock)</span>: Tower broadcast is detected, but the signal is too weak, noisy, or distorted to decode video packets. Re-aiming or boosting your antenna may turn this into a locked channel.<br>"
             "<span style='color: #f87171; font-weight: bold;'>● No Signal</span>: Zero broadcast transmission detected on this frequency (station out of range, obstructed, or off-air)."
@@ -1017,7 +1017,7 @@ class ChannelSignalHealthDialog(BaseFramelessDialog):
         btn_bar.addWidget(self.stop_btn)
 
         self.quit_kaffeine_btn = QPushButton("Close Kaffeine")
-        self.quit_kaffeine_btn.setToolTip("Close the background Kaffeine process now. It will automatically restart hidden whenever needed for DVR recordings.")
+        self.quit_kaffeine_btn.setToolTip("Close the background Kaffeine process now. It will automatically restart hidden if the option is set to hidden in DVR Settings.")
         self.quit_kaffeine_btn.clicked.connect(self._close_kaffeine_app)
         btn_bar.addWidget(self.quit_kaffeine_btn)
 
@@ -1211,12 +1211,12 @@ class ChannelSignalHealthDialog(BaseFramelessDialog):
             app_proxy = bus.get_object("org.kde.kaffeine", "/")
             app_iface = dbus.Interface(app_proxy, "org.freedesktop.MediaPlayer")
             app_iface.Quit()
-            self.status_lbl.setText("Kaffeine closed. It will automatically restart hidden when needed.")
+            self.status_lbl.setText("Kaffeine closed. It will automatically restart hidden if the option is set to hidden.")
         except Exception:
             try:
                 import subprocess
                 subprocess.run(["pkill", "-x", "kaffeine"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                self.status_lbl.setText("Kaffeine closed. It will automatically restart hidden when needed.")
+                self.status_lbl.setText("Kaffeine closed. It will automatically restart hidden if the option is set to hidden.")
             except Exception as e:
                 self.status_lbl.setText(f"Could not close Kaffeine: {e}")
 

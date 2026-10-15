@@ -208,7 +208,7 @@ def test_channel_signal_health_dialog(qtbot, isolated_config):
         guide_text = " ".join(lbl.text() for lbl in explainer_lbls)
         assert "Kaffeine Requirement" in guide_text
         assert "DVR Settings" in guide_text
-        assert "restart it hidden" in guide_text
+        assert "restart it hidden if the option is set to hidden" in guide_text
 
         assert dlg.quit_kaffeine_btn is not None
         assert dlg.quit_kaffeine_btn.text() == "Close Kaffeine"
