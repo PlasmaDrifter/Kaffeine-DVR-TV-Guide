@@ -4949,9 +4949,9 @@ class MainWindow(QMainWindow):
 
         # Active Schedule Table
         self.rec_table = QTableWidget()
-        self.rec_table.setColumnCount(6)
-        self.rec_table.setHorizontalHeaderLabels(["Title", "Schedule", "Channel", "Duration", "Status", "Retain"])
-        for i in range(6):
+        self.rec_table.setColumnCount(7)
+        self.rec_table.setHorizontalHeaderLabels(["Title", "Watch", "Schedule", "Channel", "Duration", "Status", "Retain"])
+        for i in range(7):
             self.rec_table.horizontalHeader().setSectionResizeMode(i, QHeaderView.ResizeMode.Interactive)
         self.rec_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.rec_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -4999,12 +4999,13 @@ class MainWindow(QMainWindow):
 
         # History Table
         self.history_table = QTableWidget()
-        self.history_table.setColumnCount(4)
-        self.history_table.setHorizontalHeaderLabels(["Title", "Date / Time", "Channel", "Runtime"])
-        for i in range(4):
+        self.history_table.setColumnCount(5)
+        self.history_table.setHorizontalHeaderLabels(["Title", "Watch", "Date / Time", "Channel", "Runtime"])
+        for i in range(5):
             self.history_table.horizontalHeader().setSectionResizeMode(i, QHeaderView.ResizeMode.Interactive)
         self.history_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.history_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.history_table.itemDoubleClicked.connect(self._on_history_table_double_clicked)
         history_layout.addWidget(self.history_table)
         self.history_table_resize_filter = TableViewportResizeFilter(self._adjust_table_columns, self)
         self.history_table.viewport().installEventFilter(self.history_table_resize_filter)
@@ -8178,9 +8179,9 @@ class MainWindow(QMainWindow):
         if hasattr(self, "rec_table"):
             rec_w = self.rec_table.viewport().width()
             if rec_w > 100:
-                # Title, Schedule, Channel, Duration, Status, Retain
-                min_widths = [200, 130, 65, 115, 170, 55]
-                shares = [0.36, 0.17, 0.08, 0.13, 0.20, 0.06]
+                # Title, Watch, Schedule, Channel, Duration, Status, Retain
+                min_widths = [190, 75, 130, 65, 110, 160, 55]
+                shares = [0.32, 0.08, 0.16, 0.07, 0.12, 0.19, 0.06]
                 allocated = [max(mw, int(rec_w * s)) for mw, s in zip(min_widths, shares)]
                 diff = rec_w - sum(allocated)
                 if diff > 0:
@@ -8193,9 +8194,9 @@ class MainWindow(QMainWindow):
         if hasattr(self, "history_table"):
             hist_w = self.history_table.viewport().width()
             if hist_w > 100:
-                # Title, Date / Time, Channel, Runtime
-                min_widths = [220, 160, 80, 90]
-                shares = [0.44, 0.26, 0.15, 0.15]
+                # Title, Watch, Date / Time, Channel, Runtime
+                min_widths = [210, 75, 160, 80, 90]
+                shares = [0.38, 0.08, 0.25, 0.14, 0.15]
                 allocated = [max(mw, int(hist_w * s)) for mw, s in zip(min_widths, shares)]
                 diff = hist_w - sum(allocated)
                 if diff > 0:
@@ -9411,13 +9412,39 @@ class MainWindow(QMainWindow):
 
             title_item = QTableWidgetItem(title)
             title_item.setData(Qt.ItemDataRole.UserRole, qid)
+            self.rec_table.setItem(row, 0, title_item)
+
+            if status in ("RECORDING", "COMPLETED"):
+                watch_btn = QPushButton("▶ Watch")
+                watch_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                watch_btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: #1e3a5f;
+                        color: #38bdf8;
+                        border: 1px solid #0284c7;
+                        border-radius: 4px;
+                        padding: 2px 4px;
+                        font-size: 11px;
+                        font-weight: bold;
+                    }
+                    QPushButton:hover {
+                        background-color: #0284c7;
+                        color: #ffffff;
+                    }
+                """)
+                rec_copy = dict(rec)
+                watch_btn.clicked.connect(lambda checked=False, r=rec_copy: self.play_recording_item(r))
+                self.rec_table.setCellWidget(row, 1, watch_btn)
+            else:
+                self.rec_table.removeCellWidget(row, 1)
+                empty_it = QTableWidgetItem("")
+                self.rec_table.setItem(row, 1, empty_it)
 
             sched_item = QTableWidgetItem(schedule_text)
             sched_item.setFont(QFont("", -1, QFont.Weight.Bold))
+            self.rec_table.setItem(row, 2, sched_item)
 
-            self.rec_table.setItem(row, 0, title_item)
-            self.rec_table.setItem(row, 1, sched_item)
-            self.rec_table.setItem(row, 2, QTableWidgetItem(channel))
+            self.rec_table.setItem(row, 3, QTableWidgetItem(channel))
 
             buf_val = rec.get("buffer_mins", 0) or 0
             if buf_val > 0:
@@ -9425,7 +9452,7 @@ class MainWindow(QMainWindow):
             else:
                 duration_display = duration
             dur_item = QTableWidgetItem(duration_display)
-            self.rec_table.setItem(row, 3, dur_item)
+            self.rec_table.setItem(row, 4, dur_item)
 
             status_display = status
             color = "#007bff"
@@ -9448,7 +9475,7 @@ class MainWindow(QMainWindow):
 
             status_item = QTableWidgetItem(status_display)
             status_item.setForeground(QColor(color))
-            self.rec_table.setItem(row, 4, status_item)
+            self.rec_table.setItem(row, 5, status_item)
 
             is_prot = bool(rec.get("protected", 0))
             prot_item = QTableWidgetItem("Protected" if is_prot else "Auto")
@@ -9458,7 +9485,7 @@ class MainWindow(QMainWindow):
                 prot_item.setFont(QFont("", -1, QFont.Weight.Bold))
             else:
                 prot_item.setForeground(QColor("#a0aec0"))
-            self.rec_table.setItem(row, 5, prot_item)
+            self.rec_table.setItem(row, 6, prot_item)
 
         if restored_row >= 0:
             self.rec_table.setCurrentCell(restored_row, 0)
@@ -9513,16 +9540,37 @@ class MainWindow(QMainWindow):
 
             title_item = QTableWidgetItem(title)
             title_item.setData(Qt.ItemDataRole.UserRole, hid)
+            self.history_table.setItem(row, 0, title_item)
+
+            watch_btn = QPushButton("▶ Watch")
+            watch_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            watch_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #1e3a5f;
+                    color: #38bdf8;
+                    border: 1px solid #0284c7;
+                    border-radius: 4px;
+                    padding: 2px 4px;
+                    font-size: 11px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background-color: #0284c7;
+                    color: #ffffff;
+                }
+            """)
+            hist_copy = dict(item)
+            hist_copy["status"] = "COMPLETED"
+            watch_btn.clicked.connect(lambda checked=False, r=hist_copy: self.play_recording_item(r))
+            self.history_table.setCellWidget(row, 1, watch_btn)
 
             dt_item = QTableWidgetItem(date_time_str)
-
             chan_item = QTableWidgetItem(channel)
             dur_item = QTableWidgetItem(duration)
 
-            self.history_table.setItem(row, 0, title_item)
-            self.history_table.setItem(row, 1, dt_item)
-            self.history_table.setItem(row, 2, chan_item)
-            self.history_table.setItem(row, 3, dur_item)
+            self.history_table.setItem(row, 2, dt_item)
+            self.history_table.setItem(row, 3, chan_item)
+            self.history_table.setItem(row, 4, dur_item)
 
         if restored_row >= 0:
             self.history_table.setCurrentCell(restored_row, 0)
@@ -9563,10 +9611,103 @@ class MainWindow(QMainWindow):
 
     def _on_rec_table_double_clicked(self, item):
         col = item.column()
-        if col == 3:  # Duration column
+        if col == 4:  # Duration column
             self.adjust_selected_buffer()
-        elif col == 5:  # Retain / Protect column
+        elif col == 6:  # Retain / Protect column
             self.toggle_protect_selected_recording()
+        else:
+            row = item.row()
+            title_it = self.rec_table.item(row, 0)
+            if not title_it:
+                return
+            qid = title_it.data(Qt.ItemDataRole.UserRole)
+            if qid is not None:
+                all_recs = self.queue_mgr.list_queue(include_completed=True)
+                rec = next((r for r in all_recs if r.get("id") == int(qid)), None)
+                if rec and rec.get("status") in ("RECORDING", "COMPLETED"):
+                    self.play_recording_item(rec)
+
+    def _on_history_table_double_clicked(self, item):
+        row = item.row()
+        title_it = self.history_table.item(row, 0)
+        if not title_it:
+            return
+        hid = title_it.data(Qt.ItemDataRole.UserRole)
+        if hid is not None:
+            hist_list = self.queue_mgr.list_history()
+            h_rec = next((h for h in hist_list if h.get("id") == int(hid)), None)
+            if h_rec:
+                h_copy = dict(h_rec)
+                h_copy["status"] = "COMPLETED"
+                self.play_recording_item(h_copy)
+
+    def play_recording_item(self, rec: Dict[str, Any]):
+        """
+        Plays a recorded show or in-progress recording in the user's configured player.
+        Resolves recorded video file from recording record, storage manager, or recording folder.
+        """
+        if not rec:
+            return
+        status = rec.get("status")
+        title = rec.get("title") or rec.get("show_title") or "Recording"
+        ch = rec.get("channel") or rec.get("kaffeine_channel") or ""
+
+        if status in ("QUEUED", "ARMED"):
+            return
+
+        rec_file = rec.get("file_path")
+        if not rec_file or not os.path.exists(rec_file):
+            try:
+                cand = self.storage_mgr.find_active_or_recent_recording_file(title)
+                if cand and cand.exists():
+                    rec_file = str(cand)
+            except Exception:
+                pass
+
+        if not rec_file or not os.path.exists(rec_file):
+            try:
+                rec_folder = self.storage_mgr.get_recording_folder()
+                if rec_folder and rec_folder.exists():
+                    safe_title_words = [w.lower() for w in re.findall(r"\w+", title) if len(w) > 3]
+                    start_iso = rec.get("start_iso", "")
+                    date_str = start_iso[:10] if start_iso else ""
+                    for ext in StorageManager.VIDEO_EXTENSIONS:
+                        for vf in rec_folder.glob(f"*{ext}"):
+                            vf_name_lower = vf.name.lower()
+                            if (date_str and date_str in vf_name_lower and any(w in vf_name_lower for w in safe_title_words)) or (safe_title_words and all(w in vf_name_lower for w in safe_title_words)):
+                                rec_file = str(vf)
+                                break
+                        if rec_file:
+                            break
+            except Exception:
+                pass
+
+        if rec_file and os.path.exists(rec_file):
+            player = self.config_mgr.live_tv_watch_mode if status == "RECORDING" else self.config_mgr.playback_player
+            custom_cmd = self.config_mgr.custom_live_tv_player_cmd if status == "RECORDING" else self.config_mgr.custom_playback_player_cmd
+            self.dbus_client.play_file(rec_file, player=player, custom_cmd=custom_cmd)
+            self.status_bar.showMessage(f"Playing recording: {os.path.basename(rec_file)}", 4000)
+            return
+
+        # If currently recording and file has not appeared on disk yet, fall back to timeshifting live channel
+        if status == "RECORDING" and ch:
+            live_prog = self._find_live_program_for_channel(ch) or {
+                "show_title": title,
+                "title": title,
+                "kaffeine_channel": ch,
+                "channel": ch,
+                "start_iso": rec.get("start_iso", datetime.now().strftime("%Y-%m-%dT%H:%M:%S")),
+                "duration_iso": rec.get("duration_iso", "01:00:00"),
+            }
+            self.start_timeshift_playback(live_prog)
+            return
+
+        rec_folder = self.storage_mgr.get_recording_folder()
+        QMessageBox.warning(
+            self,
+            "Recording File Not Found",
+            f"Could not find a recording file on disk for '{title}'.\n\nChecked recording folder:\n{rec_folder}"
+        )
 
     def adjust_selected_buffer(self):
         row = self.rec_table.currentRow()

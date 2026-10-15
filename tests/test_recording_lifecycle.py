@@ -1,8 +1,10 @@
 import sqlite3
 from datetime import datetime, timedelta
+from unittest.mock import MagicMock
 
 import pytest
 from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QPushButton
 
 from kaffeine_dvr.config import ConfigManager
 from kaffeine_dvr.gui import MainWindow
@@ -112,10 +114,26 @@ def test_gui_active_schedule_status_and_history_updates(qtbot, isolated_config: 
     qtbot.addWidget(win)
 
     try:
+        # Check column headers for rec_table and history_table
+        assert win.rec_table.columnCount() == 7
+        assert win.rec_table.horizontalHeaderItem(0).text() == "Title"
+        assert win.rec_table.horizontalHeaderItem(1).text() == "Watch"
+        assert win.history_table.columnCount() == 5
+        assert win.history_table.horizontalHeaderItem(0).text() == "Title"
+        assert win.history_table.horizontalHeaderItem(1).text() == "Watch"
+
         # Initially empty
         win.refresh_recordings(force=True)
         assert win.rec_table.rowCount() == 0
         assert win.history_table.rowCount() == 0
+
+        # Add a queued recording in the future: should NOT have a Watch button
+        future_iso = (datetime.now() + timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%S")
+        q_fut_id = win.queue_mgr.add_recording("Future Queued", "NBC 12.1", future_iso, "01:00:00")
+        win.refresh_recordings(force=True)
+        assert win.rec_table.rowCount() == 1
+        assert win.rec_table.cellWidget(0, 1) is None
+        win.queue_mgr.remove_recording(q_fut_id)
 
         # Add an armed recording starting now
         start_dt = datetime.now() - timedelta(seconds=10)
@@ -129,7 +147,11 @@ def test_gui_active_schedule_status_and_history_updates(qtbot, isolated_config: 
         # Active table should reflect transition to RECORDING
         assert win.rec_table.rowCount() == 1
         title_it = win.rec_table.item(0, 0)
-        status_it = win.rec_table.item(0, 4)
+        watch_btn = win.rec_table.cellWidget(0, 1)
+        assert isinstance(watch_btn, QPushButton)
+        assert "Watch" in watch_btn.text()
+
+        status_it = win.rec_table.item(0, 5)
         assert title_it.text() == "Active Breaking News"
         assert "Recording Now" in status_it.text()
         assert status_it.foreground().color().name().lower() == "#ff5252"
@@ -149,14 +171,22 @@ def test_gui_active_schedule_status_and_history_updates(qtbot, isolated_config: 
         # Active table should KEEP the show with status "Completed" (green #28a745)
         assert win.rec_table.rowCount() == 1
         assert win.rec_table.item(0, 0).text() == "Active Breaking News"
-        completed_status_it = win.rec_table.item(0, 4)
+        # Watch button must still be available for completed recording
+        completed_watch_btn = win.rec_table.cellWidget(0, 1)
+        assert isinstance(completed_watch_btn, QPushButton)
+        assert "Watch" in completed_watch_btn.text()
+
+        completed_status_it = win.rec_table.item(0, 5)
         assert completed_status_it.text() == "Completed"
         assert completed_status_it.foreground().color().name().lower() == "#28a745"
 
-        # History table should also contain the completed show
+        # History table should also contain the completed show and have Watch button
         assert win.history_table.rowCount() == 1
         assert win.history_table.item(0, 0).text() == "Active Breaking News"
-        assert win.history_table.item(0, 2).text() == "CNN 3.1"
+        hist_watch_btn = win.history_table.cellWidget(0, 1)
+        assert isinstance(hist_watch_btn, QPushButton)
+        assert "Watch" in hist_watch_btn.text()
+        assert win.history_table.item(0, 3).text() == "CNN 3.1"
 
         # Now simulate 6 hours passing (older end_iso beyond 6 hours)
         conn = win.queue_mgr._get_connection()
@@ -171,6 +201,56 @@ def test_gui_active_schedule_status_and_history_updates(qtbot, isolated_config: 
         assert win.rec_table.rowCount() == 0
         # History table retains the record
         assert win.history_table.rowCount() == 1
+    finally:
+        win.close()
+
+
+def test_gui_watch_button_and_double_click_playback(qtbot, isolated_config: ConfigManager):
+    win = MainWindow(config_mgr=isolated_config)
+    qtbot.addWidget(win)
+
+    try:
+        # Mock play_recording_item
+        win.play_recording_item = MagicMock()
+
+        # 1. Active Schedule recording row
+        start_iso = (datetime.now() - timedelta(minutes=10)).strftime("%Y-%m-%dT%H:%M:%S")
+        qid = win.queue_mgr.add_recording("Playback Test Show", "ABC 7.1", start_iso, "01:00:00")
+        win.queue_mgr.mark_armed(qid, 777)
+        win.queue_mgr.update_statuses([])
+        win.refresh_recordings(force=True)
+
+        assert win.rec_table.rowCount() == 1
+        watch_btn = win.rec_table.cellWidget(0, 1)
+        assert isinstance(watch_btn, QPushButton)
+
+        # Click the watch button
+        watch_btn.click()
+        assert win.play_recording_item.call_count == 1
+        call_rec = win.play_recording_item.call_args[0][0]
+        assert call_rec["title"] == "Playback Test Show"
+
+        # Double click the row item
+        item = win.rec_table.item(0, 0)
+        win._on_rec_table_double_clicked(item)
+        assert win.play_recording_item.call_count == 2
+
+        # 2. History table row
+        win.queue_mgr.add_history_entry("Historic Movie", "HBO 5.1", "2026-10-15T08:00:00", "02:00:00")
+        win.refresh_history(force=True)
+        assert win.history_table.rowCount() == 1
+        hist_watch_btn = win.history_table.cellWidget(0, 1)
+        assert isinstance(hist_watch_btn, QPushButton)
+
+        hist_watch_btn.click()
+        assert win.play_recording_item.call_count == 3
+        hist_call_rec = win.play_recording_item.call_args[0][0]
+        assert hist_call_rec["title"] == "Historic Movie"
+
+        # Double click history row item
+        hist_item = win.history_table.item(0, 0)
+        win._on_history_table_double_clicked(hist_item)
+        assert win.play_recording_item.call_count == 4
     finally:
         win.close()
 
