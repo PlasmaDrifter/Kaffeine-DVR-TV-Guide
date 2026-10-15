@@ -2993,8 +2993,8 @@ class GuideGridVerticalHeader(QHeaderView):
 
     def sizeHint(self):
         sz = super().sizeHint()
-        # Ensure channel column square has comfortable width for logos/names like 'ABC', 'NBC', 'PBS'
-        sz.setWidth(max(70, sz.width()))
+        # Maintain fixed compact width for channel square without resizing
+        sz.setWidth(70)
         return sz
 
     def paintSection(self, painter: QPainter, rect: QRect, logical_index: int):
@@ -3055,16 +3055,32 @@ class GuideGridVerticalHeader(QHeaderView):
         painter.setBrush(bg_color)
         painter.drawRoundedRect(card_rect, 4, 4)
 
-        # Base font setup
+        # Base font setup allowing up to two rows for channel name with word wrap without changing box geometry
+        text_rect = card_rect.adjusted(3, 2, -3, -2)
+        flags = Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap
+
+        # Fit channel name cleanly across up to two lines, scaling down font if needed
         base_font = QFont(self.font())
         base_font.setBold(True)
-        base_font.setPointSize(max(10, min(14, base_font.pointSize() or 11)))
+        chosen_font = None
+        for pt in [11, 10, 9, 8]:
+            font = QFont(base_font)
+            font.setPointSize(pt)
+            fm = QFontMetrics(font)
+            words = channel_name.split()
+            all_words_fit = all(fm.horizontalAdvance(w) <= text_rect.width() for w in words) if words else True
+            br = fm.boundingRect(text_rect, flags, channel_name)
+            if all_words_fit and br.height() <= text_rect.height():
+                chosen_font = font
+                break
+        if not chosen_font:
+            chosen_font = QFont(base_font)
+            chosen_font.setPointSize(8)
 
-        # Clean centered channel title across the entire square
-        painter.setFont(base_font)
+        # Clean centered channel title across the square (1 or 2 rows)
+        painter.setFont(chosen_font)
         painter.setPen(text_color)
-        text_rect = card_rect.adjusted(2, 2, -2, -2)
-        painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, channel_name)
+        painter.drawText(text_rect, flags, channel_name)
 
         painter.restore()
 
@@ -3184,23 +3200,26 @@ class UpcomingShowDialog(BaseFramelessDialog):
 
         if self.is_scheduled:
             rec_btn = QPushButton("Cancel Recording")
-            rec_btn.setStyleSheet("font-weight: bold; background-color: #7f1d1d; color: #fca5a5; padding: 6px 12px; border: 1px solid #ef4444;")
+            rec_btn.setObjectName("dangerActionBtn")
+            rec_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             rec_btn.setDefault(True)
             rec_btn.clicked.connect(self._on_cancel_recording)
             btn_layout.addWidget(rec_btn)
         else:
             rec_btn = QPushButton("Schedule Recording")
-            rec_btn.setStyleSheet("font-weight: bold; background-color: #212635; color: #ffffff; padding: 6px 12px;")
+            rec_btn.setObjectName("primaryActionBtn")
+            rec_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             rec_btn.setDefault(True)
             rec_btn.clicked.connect(self._on_record)
             btn_layout.addWidget(rec_btn)
 
         tune_btn = QPushButton("Watch Channel")
-        tune_btn.setStyleSheet("padding: 6px 12px;")
+        tune_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         tune_btn.clicked.connect(self._on_tune)
         btn_layout.addWidget(tune_btn)
 
         cancel_btn = QPushButton("Close" if self.is_scheduled else "Cancel")
+        cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         cancel_btn.clicked.connect(self.reject)
         btn_layout.addWidget(cancel_btn)
 
@@ -3613,11 +3632,18 @@ QPushButton {{
 }}
 QPushButton:hover {{
     background-color: {tokens["bg_button_hover"]};
-    border-color: {tokens["border_light"]};
+    border: 1px solid {tokens["accent_primary"]};
     color: #ffffff;
+}}
+QPushButton:focus {{
+    background-color: {tokens["bg_button_hover"]};
+    border: 1.5px solid {tokens["accent_primary"]};
+    color: #ffffff;
+    outline: none;
 }}
 QPushButton:pressed {{
     background-color: {tokens["bg_button_pressed"]};
+    border-color: {tokens["accent_pressed"]};
 }}
 QPushButton:disabled {{
     background-color: {tokens["bg_window"]};
@@ -3634,9 +3660,38 @@ QPushButton#primaryActionBtn {{
 }}
 QPushButton#primaryActionBtn:hover {{
     background-color: {tokens["accent_hover"]};
+    border: 1px solid #ffffff;
+}}
+QPushButton#primaryActionBtn:focus {{
+    background-color: {tokens["accent_hover"]};
+    border: 2px solid #ffffff;
+    outline: none;
 }}
 QPushButton#primaryActionBtn:pressed {{
     background-color: {tokens["accent_pressed"]};
+    border: 1px solid {tokens["accent_primary"]};
+}}
+
+/* Danger Action Buttons */
+QPushButton#dangerActionBtn {{
+    background-color: #7f1d1d;
+    border: 1px solid #ef4444;
+    color: #fee2e2;
+    font-weight: bold;
+}}
+QPushButton#dangerActionBtn:hover {{
+    background-color: #991b1b;
+    border: 1px solid #fca5a5;
+    color: #ffffff;
+}}
+QPushButton#dangerActionBtn:focus {{
+    background-color: #991b1b;
+    border: 2px solid #ffffff;
+    outline: none;
+}}
+QPushButton#dangerActionBtn:pressed {{
+    background-color: #5c1414;
+    border: 1px solid #ef4444;
 }}
 
 /* Checkboxes */
