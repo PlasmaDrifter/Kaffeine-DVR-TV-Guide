@@ -236,6 +236,30 @@ def test_channel_signal_health_dialog(qtbot, isolated_config):
         # Check config persisted health
         assert isolated_config.channel_health["2.1 KATU"]["locked"] is True
 
+        # Verify Aim Antenna button and card exist
+        assert dlg.aim_antenna_btn is not None
+        assert dlg.aim_card is not None
+        assert dlg.aim_card.isHidden()
+
+        # Select first row and trigger aim antenna
+        dlg.table.setCurrentCell(0, 0)
+        with patch.object(DvbSignalReader, "read_metrics", return_value={
+            "locked": True, "has_signal": True, "strength_pct": 72.5, "snr_db": 25.0, "ber": 0, "quality_label": "Excellent"
+        }):
+            dlg.aim_antenna_selected_channel()
+            assert not dlg.aim_card.isHidden()
+            assert "KATU" in dlg.aim_title.text()
+
+            # Trigger meter tick
+            dlg._on_aim_timer_tick()
+            assert dlg.aim_strength_bar.value() == 72
+            assert "72.5%" in dlg.aim_peak_lbl.text()
+            assert "LOCKED" in dlg.aim_lock_badge.text()
+
+            # Done aiming
+            dlg.stop_aiming()
+            assert dlg.aim_card.isHidden()
+
         # Test Close Kaffeine button triggers Quit on app proxy
         mock_iface = MagicMock()
         mock_dbus.Interface.return_value = mock_iface

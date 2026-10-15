@@ -896,6 +896,9 @@ class ChannelSignalHealthDialog(BaseFramelessDialog):
         self.config_mgr = config_mgr
         self._worker: Optional[ChannelSignalScanWorker] = None
         self._results: Dict[str, Dict[str, Any]] = dict(self.config_mgr.channel_health) if self.config_mgr else {}
+        self._aim_timer: Optional[QTimer] = None
+        self._aim_channel: Optional[Dict[str, Any]] = None
+        self._aim_peak_strength: float = 0.0
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(18, 16, 18, 16)
@@ -977,6 +980,71 @@ class ChannelSignalHealthDialog(BaseFramelessDialog):
         self.progress_bar.setValue(0)
         layout.addWidget(self.progress_bar)
 
+        # Live Antenna Aiming Meter Card (shown when aiming a channel)
+        self.aim_card = QFrame()
+        self.aim_card.setObjectName("aimCard")
+        self.aim_card.setVisible(False)
+        self.aim_card.setStyleSheet(
+            "QFrame#aimCard {"
+            "  background-color: rgba(30, 41, 59, 0.75);"
+            "  border: 1px solid #38bdf8;"
+            "  border-radius: 8px;"
+            "  padding: 10px 14px;"
+            "}"
+        )
+        aim_layout = QVBoxLayout(self.aim_card)
+        aim_layout.setContentsMargins(10, 8, 10, 8)
+        aim_layout.setSpacing(6)
+
+        aim_top = QHBoxLayout()
+        self.aim_title = QLabel("<b>Live Antenna Signal Adjuster</b>")
+        self.aim_title.setStyleSheet("font-size: 13px; color: #38bdf8;")
+        aim_top.addWidget(self.aim_title)
+        aim_top.addStretch()
+
+        self.aim_lock_badge = QLabel("● SEARCHING")
+        self.aim_lock_badge.setStyleSheet("font-size: 12px; font-weight: bold; color: #facc15; padding: 2px 8px; border-radius: 4px; background: rgba(0,0,0,0.3);")
+        aim_top.addWidget(self.aim_lock_badge)
+
+        self.aim_done_btn = QPushButton("Done Aiming")
+        self.aim_done_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.aim_done_btn.setStyleSheet(
+            "QPushButton { background: #0284c7; color: white; font-weight: bold; border-radius: 4px; padding: 4px 12px; }"
+            "QPushButton:hover { background: #0369a1; }"
+        )
+        self.aim_done_btn.clicked.connect(self.stop_aiming)
+        aim_top.addWidget(self.aim_done_btn)
+        aim_layout.addLayout(aim_top)
+
+        # Meter metrics row
+        meter_row = QHBoxLayout()
+        self.aim_strength_bar = QProgressBar()
+        self.aim_strength_bar.setFixedHeight(18)
+        self.aim_strength_bar.setRange(0, 100)
+        self.aim_strength_bar.setValue(0)
+        self.aim_strength_bar.setTextVisible(True)
+        self.aim_strength_bar.setFormat("Strength: %p%")
+        self.aim_strength_bar.setStyleSheet(
+            "QProgressBar { border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; text-align: center; font-weight: bold; background: rgba(0,0,0,0.4); color: white; }"
+            "QProgressBar::chunk { background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284c7, stop:1 #4ade80); border-radius: 3px; }"
+        )
+        meter_row.addWidget(self.aim_strength_bar, 2)
+
+        self.aim_snr_lbl = QLabel("SNR: -- dB")
+        self.aim_snr_lbl.setStyleSheet("font-size: 12px; font-weight: bold; color: #cbd5e1; min-width: 110px;")
+        meter_row.addWidget(self.aim_snr_lbl, 0)
+
+        self.aim_peak_lbl = QLabel("Peak: 0.0%")
+        self.aim_peak_lbl.setStyleSheet("font-size: 11px; color: #94a3b8; min-width: 90px;")
+        meter_row.addWidget(self.aim_peak_lbl, 0)
+
+        self.aim_ber_lbl = QLabel("BER: 0")
+        self.aim_ber_lbl.setStyleSheet("font-size: 11px; color: #94a3b8; min-width: 70px;")
+        meter_row.addWidget(self.aim_ber_lbl, 0)
+        aim_layout.addLayout(meter_row)
+
+        layout.addWidget(self.aim_card)
+
         # Table
         self.table = QTableWidget(len(self.channels), 6)
         self.table.setHorizontalHeaderLabels([
@@ -994,7 +1062,7 @@ class ChannelSignalHealthDialog(BaseFramelessDialog):
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
-        self.table.itemDoubleClicked.connect(lambda item: self.test_selected_channel())
+        self.table.itemDoubleClicked.connect(lambda item: self.aim_antenna_selected_channel())
         layout.addWidget(self.table, 1)
 
         self._populate_table()
@@ -1010,6 +1078,11 @@ class ChannelSignalHealthDialog(BaseFramelessDialog):
         self.test_single_btn = QPushButton("Test Selected Channel")
         self.test_single_btn.clicked.connect(self.test_selected_channel)
         btn_bar.addWidget(self.test_single_btn)
+
+        self.aim_antenna_btn = QPushButton("Aim Antenna (Live Meter)")
+        self.aim_antenna_btn.setToolTip("Opens Kaffeine with live zero-latency video/audio and starts a fast live signal meter so you can adjust your antenna in real-time.")
+        self.aim_antenna_btn.clicked.connect(self.aim_antenna_selected_channel)
+        btn_bar.addWidget(self.aim_antenna_btn)
 
         self.stop_btn = QPushButton("Stop Scan")
         self.stop_btn.setEnabled(False)
@@ -1123,14 +1196,141 @@ class ChannelSignalHealthDialog(BaseFramelessDialog):
         else:
             self.summary_badge.setText(f"<span style='color: #94a3b8;'>Total: {total} channels</span>")
 
+    def aim_antenna_selected_channel(self):
+        """Open Kaffeine live and start high-frequency signal strength meter for antenna aiming."""
+        if self._worker and self._worker.isRunning():
+            return
+
+        row = self.table.currentRow()
+        if row < 0 or row >= len(self.channels):
+            self.status_lbl.setText("Select a channel first, then click 'Aim Antenna (Live Meter)' or double-click.")
+            return
+
+        ch = self.channels[row]
+        ch_name = ch.get("name", "").strip()
+        if not ch_name:
+            return
+
+        self._aim_channel = ch
+        self._aim_peak_strength = 0.0
+
+        # 1. Update UI to aiming mode
+        self.aim_title.setText(f"<b>Live Antenna Adjuster — Tuning {ch_name}...</b>")
+        self.aim_strength_bar.setValue(0)
+        self.aim_snr_lbl.setText("SNR: -- dB")
+        self.aim_peak_lbl.setText("Peak: 0.0%")
+        self.aim_ber_lbl.setText("BER: 0")
+        self.aim_lock_badge.setText("● TUNING")
+        self.aim_lock_badge.setStyleSheet("font-size: 12px; font-weight: bold; color: #38bdf8; padding: 2px 8px; border-radius: 4px; background: rgba(0,0,0,0.3);")
+        self.aim_card.setVisible(True)
+
+        self.scan_all_btn.setEnabled(False)
+        self.test_single_btn.setEnabled(False)
+        self.aim_antenna_btn.setEnabled(False)
+        self.stop_btn.setEnabled(False)
+        self.status_lbl.setText(f"Aiming antenna for {ch_name}. Watch live video in Kaffeine and adjust antenna for peak signal.")
+
+        # 2. Instruct Kaffeine to tune to channel and unminimize/raise window for live zero-latency feedback
+        from .dbus_client import KaffeineDbusClient
+        client = KaffeineDbusClient()
+        if not client.is_running():
+            client.launch_kaffeine(mode="normal")
+        client.tune_channel(ch_name, raise_window=True, view_mode="normal")
+
+        # 3. Start high-frequency signal meter polling (every 120ms)
+        if self._aim_timer is None:
+            self._aim_timer = QTimer(self)
+            self._aim_timer.timeout.connect(self._on_aim_timer_tick)
+        self._aim_timer.start(120)
+
+    def _on_aim_timer_tick(self):
+        """Read instantaneous hardware metrics and update live aiming meter."""
+        from .signal_scanner import DvbSignalReader
+        metrics = DvbSignalReader.read_metrics()
+        locked = metrics.get("locked", False)
+        has_sig = metrics.get("has_signal", False) or metrics.get("has_carrier", False)
+        pct = metrics.get("strength_pct", 0.0)
+        snr = metrics.get("snr_db", 0.0)
+        ber = metrics.get("ber", 0)
+
+        if pct > self._aim_peak_strength:
+            self._aim_peak_strength = pct
+
+        ch_name = self._aim_channel.get("name", "") if self._aim_channel else ""
+        self.aim_title.setText(f"<b>Live Antenna Adjuster — {ch_name}</b>")
+        self.aim_strength_bar.setValue(int(round(pct)))
+        self.aim_snr_lbl.setText(f"SNR: {snr:.1f} dB")
+        self.aim_peak_lbl.setText(f"Peak: {self._aim_peak_strength:.1f}%")
+        self.aim_ber_lbl.setText(f"BER: {ber}")
+
+        if locked:
+            self.aim_lock_badge.setText("● LOCKED")
+            self.aim_lock_badge.setStyleSheet("font-size: 12px; font-weight: bold; color: #4ade80; padding: 2px 8px; border-radius: 4px; background: rgba(74, 222, 128, 0.15);")
+            self.aim_strength_bar.setStyleSheet(
+                "QProgressBar { border: 1px solid rgba(74, 222, 128, 0.4); border-radius: 4px; text-align: center; font-weight: bold; background: rgba(0,0,0,0.4); color: white; }"
+                "QProgressBar::chunk { background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #10b981, stop:1 #4ade80); border-radius: 3px; }"
+            )
+        elif has_sig:
+            self.aim_lock_badge.setText("● CARRIER (NO LOCK)")
+            self.aim_lock_badge.setStyleSheet("font-size: 12px; font-weight: bold; color: #facc15; padding: 2px 8px; border-radius: 4px; background: rgba(250, 204, 21, 0.15);")
+            self.aim_strength_bar.setStyleSheet(
+                "QProgressBar { border: 1px solid rgba(250, 204, 21, 0.4); border-radius: 4px; text-align: center; font-weight: bold; background: rgba(0,0,0,0.4); color: white; }"
+                "QProgressBar::chunk { background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #d97706, stop:1 #facc15); border-radius: 3px; }"
+            )
+        else:
+            self.aim_lock_badge.setText("● NO SIGNAL")
+            self.aim_lock_badge.setStyleSheet("font-size: 12px; font-weight: bold; color: #f87171; padding: 2px 8px; border-radius: 4px; background: rgba(248, 113, 113, 0.15);")
+            self.aim_strength_bar.setStyleSheet(
+                "QProgressBar { border: 1px solid rgba(248, 113, 113, 0.4); border-radius: 4px; text-align: center; font-weight: bold; background: rgba(0,0,0,0.4); color: white; }"
+                "QProgressBar::chunk { background-color: #ef4444; border-radius: 3px; }"
+            )
+
+        # Update table row with latest live sample
+        if self._aim_channel:
+            metrics["channel_name"] = ch_name
+            metrics["channel_number"] = self._aim_channel.get("number")
+            metrics["transponder"] = self._aim_channel.get("transponder", "")
+            metrics["scanned_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+            self._on_channel_result(ch_name, metrics)
+
+    def stop_aiming(self):
+        """Stop live aiming mode, silence Kaffeine, and minimize according to configured mode."""
+        if self._aim_timer and self._aim_timer.isActive():
+            self._aim_timer.stop()
+
+        self.aim_card.setVisible(False)
+        self.scan_all_btn.setEnabled(True)
+        self.test_single_btn.setEnabled(True)
+        self.aim_antenna_btn.setEnabled(True)
+        self.stop_btn.setEnabled(False)
+
+        ch_name = self._aim_channel.get("name", "") if self._aim_channel else "channel"
+        self.status_lbl.setText(f"Antenna aiming completed for {ch_name}. Peak signal: {self._aim_peak_strength:.1f}%.")
+        self._aim_channel = None
+
+        # Stop live playback
+        self._stop_kaffeine_playback()
+
+        # Minimize Kaffeine if configured launch mode is taskbar or tray
+        try:
+            from .dbus_client import KaffeineDbusClient
+            from .config import ConfigManager
+            cfg = ConfigManager()
+            if cfg.launch_mode in ("taskbar", "tray"):
+                KaffeineDbusClient().minimize_kaffeine(mode=cfg.launch_mode)
+        except Exception:
+            pass
+
     def scan_all_channels(self):
         if self._worker and self._worker.isRunning():
             return
+        self.stop_aiming()
         self._start_scan(self.channels)
 
     def test_selected_channel(self):
         if self._worker and self._worker.isRunning():
             return
+        self.stop_aiming()
         row = self.table.currentRow()
         if row < 0 or row >= len(self.channels):
             return
@@ -1221,11 +1421,13 @@ class ChannelSignalHealthDialog(BaseFramelessDialog):
                 self.status_lbl.setText(f"Could not close Kaffeine: {e}")
 
     def closeEvent(self, event):
+        self.stop_aiming()
         self.stop_scan()
         self._stop_kaffeine_playback()
         super().closeEvent(event)
 
     def reject(self):
+        self.stop_aiming()
         self.stop_scan()
         self._stop_kaffeine_playback()
         super().reject()
