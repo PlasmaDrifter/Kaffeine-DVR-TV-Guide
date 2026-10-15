@@ -891,7 +891,7 @@ class ChannelSignalHealthDialog(BaseFramelessDialog):
     def __init__(self, channels: List[Dict[str, Any]], config_mgr: Optional[ConfigManager] = None, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Channel Signal Health & Reception Monitor")
-        self.resize(880, 580)
+        self.resize(900, 780)
         self.channels = channels or []
         self.config_mgr = config_mgr
         self._worker: Optional[ChannelSignalScanWorker] = None
