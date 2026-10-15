@@ -246,11 +246,19 @@ class KaffeineWebRequestHandler(http.server.BaseHTTPRequestHandler):
                 hist_out = []
                 for h in hist:
                     hid = h.get("id")
-                    is_avail, _, sz_bytes = self.server_obj.storage_mgr.check_history_file_availability(h)
+                    is_avail, found, sz_bytes = self.server_obj.storage_mgr.check_history_file_availability(h)
                     size_str = f"{round(sz_bytes / (1024 ** 3), 2)} GB" if sz_bytes > 0 else ""
+                    filename = found.name if (is_avail and found) else ""
+                    stream_url = ""
+                    if is_avail and hid is not None:
+                        if filename:
+                            stream_url = f"/api/stream/{hid}/{urllib.parse.quote(filename)}"
+                        else:
+                            stream_url = f"/api/stream/{hid}"
                     hist_out.append({
                         "id": hid,
                         "title": h.get("title"),
+                        "filename": filename,
                         "channel": h.get("channel"),
                         "start_iso": h.get("start_iso"),
                         "completed_at": h.get("completed_at"),
@@ -258,7 +266,7 @@ class KaffeineWebRequestHandler(http.server.BaseHTTPRequestHandler):
                         "status": "COMPLETED",
                         "size_str": size_str,
                         "file_available": is_avail,
-                        "stream_url": f"/api/stream/{hid}" if is_avail else ""
+                        "stream_url": stream_url
                     })
 
                 self._send_json({"active": active_out, "history": hist_out})
@@ -267,10 +275,12 @@ class KaffeineWebRequestHandler(http.server.BaseHTTPRequestHandler):
                 self._send_json({"error": str(e)}, status=500)
                 return
 
-        # Stream recording with RFC 7233 byte-range support: GET /api/stream/<id>
+        # Stream recording with RFC 7233 byte-range support: GET /api/stream/<id> or /api/stream/<id>/<filename>
         if path.startswith("/api/stream/"):
             try:
-                hid = int(path.split("/")[-1])
+                subpath = path[len("/api/stream/"):].strip("/")
+                hid_str = subpath.split("/")[0]
+                hid = int(hid_str)
                 import sqlite3
                 conn = self.server_obj.queue_mgr._get_connection()
                 conn.row_factory = sqlite3.Row
@@ -305,25 +315,31 @@ class KaffeineWebRequestHandler(http.server.BaseHTTPRequestHandler):
         self._send_json({"error": "Not Found"}, status=404)
 
     def _stream_file(self, file_path: Path, query_str: str = ""):
-        """Streams media file. If file is raw MPEG-2 TS (.m2t), transcodes on-the-fly to MP4 for browser compatibility."""
+        """Streams media file. If MPEG-2 TS (.m2t), transcodes on-the-fly to MP4 for browser compatibility."""
         qs = urllib.parse.parse_qs(query_str)
         is_raw_download = qs.get("raw", ["0"])[0] == "1"
 
         # If already mp4 or webm, or raw download requested, use standard Range streaming
         if is_raw_download or file_path.suffix.lower() in (".mp4", ".m4v", ".webm"):
-            self._stream_file_with_range(file_path)
+            self._stream_file_with_range(file_path, is_download=is_raw_download)
             return
 
         # Check if ffmpeg is available on system
         ffmpeg_bin = shutil.which("ffmpeg")
         if not ffmpeg_bin:
-            self._stream_file_with_range(file_path)
+            self._stream_file_with_range(file_path, is_download=False)
             return
 
         start_time_sec = float(qs.get("t", ["0"])[0])
 
+        stream_filename = file_path.with_suffix(".mp4").name
+        quoted_stream_fn = urllib.parse.quote(stream_filename, safe="")
+        ascii_stream_fn = stream_filename.encode("ascii", "ignore").decode("ascii").replace('"', "") or "stream.mp4"
+        cd_header = f'inline; filename="{ascii_stream_fn}"; filename*=UTF-8\'\'{quoted_stream_fn}'
+
         self.send_response(200)
         self.send_header("Content-Type", "video/mp4")
+        self.send_header("Content-Disposition", cd_header)
         self.send_header("Cache-Control", "no-cache")
         self.end_headers()
 
@@ -360,7 +376,7 @@ class KaffeineWebRequestHandler(http.server.BaseHTTPRequestHandler):
         except Exception:
             pass
 
-    def _stream_file_with_range(self, file_path: Path):
+    def _stream_file_with_range(self, file_path: Path, is_download: bool = False):
         """Streams a media file supporting HTTP Range headers for seeking/scrubbing."""
         total_size = file_path.stat().st_size
         range_header = self.headers.get("Range")
@@ -388,6 +404,12 @@ class KaffeineWebRequestHandler(http.server.BaseHTTPRequestHandler):
         end = min(end, total_size - 1)
         chunk_len = end - start + 1
 
+        filename = file_path.name
+        quoted_filename = urllib.parse.quote(filename, safe="")
+        ascii_filename = filename.encode("ascii", "ignore").decode("ascii").replace('"', "") or "recording.m2t"
+        disposition_type = "attachment" if is_download else "inline"
+        content_disposition = f'{disposition_type}; filename="{ascii_filename}"; filename*=UTF-8\'\'{quoted_filename}'
+
         if range_header:
             self.send_response(206)
             self.send_header("Content-Range", f"bytes {start}-{end}/{total_size}")
@@ -396,6 +418,7 @@ class KaffeineWebRequestHandler(http.server.BaseHTTPRequestHandler):
 
         self.send_header("Content-Type", mime_type)
         self.send_header("Content-Length", str(chunk_len))
+        self.send_header("Content-Disposition", content_disposition)
         self.send_header("Accept-Ranges", "bytes")
         self.send_header("Cache-Control", "no-cache")
         self.end_headers()

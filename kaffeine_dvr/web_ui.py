@@ -382,12 +382,14 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
           return;
         }
 
-        tbody.innerHTML = combined.map(r => {
+        window.recordingsData = combined;
+
+        tbody.innerHTML = combined.map((r, idx) => {
           const isFinished = r.status === "COMPLETED" || !r.status;
           const isFileAvailable = !!r.file_available;
           let playBtn = "";
           if (isFileAvailable) {
-            playBtn = `<button class="btn btn-sm" onclick='openVideoPlayer("${r.stream_url}", "${escapeHtml(r.title)}")'>▶ Play</button>`;
+            playBtn = `<button class="btn btn-sm" onclick="playByIndex(${idx})">▶ Play</button>`;
           } else if (r.status === "RECORDING") {
             playBtn = `<span class="badge badge-recording">Recording Now</span>`;
           } else if (r.status === "ARMED" || r.status === "QUEUED") {
@@ -396,9 +398,13 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
             playBtn = `<span style="color: var(--text-muted); font-size: 0.8rem;">File Unavailable</span>`;
           }
 
-          let cancelBtn = "";
+          let actionBtn = "";
           if (r.id && (r.status === "QUEUED" || r.status === "ARMED")) {
-            cancelBtn = `<button class="btn btn-danger btn-sm" onclick="cancelRecording(${r.id})">Cancel</button>`;
+            actionBtn = `<button class="btn btn-danger btn-sm" onclick="cancelRecording(${r.id})">Cancel</button>`;
+          } else if (isFileAvailable && r.stream_url) {
+            const rawDlUrl = authToken ? `${r.stream_url}?raw=1&token=${encodeURIComponent(authToken)}` : `${r.stream_url}?raw=1`;
+            const dlName = escapeHtml(r.filename || ((r.title || "recording").trim().replace(/[/\\?%*:|"<>]/g, '_') + ".m2t"));
+            actionBtn = `<a href="${rawDlUrl}" download="${dlName}" class="btn btn-secondary btn-sm" style="text-decoration: none; padding: 4px 8px; font-size: 0.75rem;">Download</a>`;
           }
 
           return `<tr>
@@ -407,12 +413,18 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
             <td>${escapeHtml(r.channel || "")}</td>
             <td style="color: var(--text-muted); font-size: 0.85rem;">${escapeHtml(r.start_iso || r.completed_at || "")}</td>
             <td>${escapeHtml(r.size_str || r.status || "Completed")}</td>
-            <td style="text-align: right;">${cancelBtn}</td>
+            <td style="text-align: right;">${actionBtn}</td>
           </tr>`;
         }).join("");
       } catch (e) {
         tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 25px; color: #ef4444;">Failed to load recordings.</td></tr>`;
       }
+    }
+
+    function playByIndex(idx) {
+      const r = (window.recordingsData || [])[idx];
+      if (!r) return;
+      openVideoPlayer(r.stream_url, r.title, r.filename);
     }
 
     async function cancelRecording(id) {
@@ -427,12 +439,22 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
       }
     }
 
-    function openVideoPlayer(url, title) {
+    function openVideoPlayer(url, title, filename) {
       if (!url) return;
       const modal = document.getElementById("videoModal");
       const video = document.getElementById("html5VideoPlayer");
       const dlLink = document.getElementById("videoDownloadLink");
       document.getElementById("videoModalTitle").textContent = title || "Watch Recording";
+
+      let downloadName = filename;
+      if (!downloadName && title) {
+        downloadName = title.trim().replace(/[/\\?%*:|"<>]/g, '_') + '.m2t';
+      }
+      if (downloadName) {
+        dlLink.setAttribute("download", downloadName);
+      } else {
+        dlLink.removeAttribute("download");
+      }
 
       // Stream URL (MP4 stream)
       const streamUrl = authToken ? `${url}?token=${encodeURIComponent(authToken)}` : url;

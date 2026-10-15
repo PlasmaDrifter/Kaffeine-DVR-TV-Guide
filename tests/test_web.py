@@ -161,8 +161,19 @@ def test_web_video_streaming_and_http_range(web_test_env):
         assert resp.status == 200
         assert resp.headers.get("Accept-Ranges") == "bytes"
         assert int(resp.headers.get("Content-Length")) == 10000
+        cd_header = resp.headers.get("Content-Disposition", "")
+        assert "attachment" in cd_header
+        assert "Championship_Game_20261015.m2t" in cd_header
         data = resp.read()
         assert len(data) == 10000
+
+    # 1b. Request with filename in URL path
+    with urllib.request.urlopen(f"{base_url}/api/stream/{hid}/Championship_Game_20261015.m2t?raw=1") as resp:
+        assert resp.status == 200
+        cd_header = resp.headers.get("Content-Disposition", "")
+        assert "attachment" in cd_header
+        assert "Championship_Game_20261015.m2t" in cd_header
+        assert len(resp.read()) == 10000
 
     # 2. HTTP Range request for bytes 100-199 with raw parameter (206 Partial Content)
     range_req = urllib.request.Request(f"{base_url}/api/stream/{hid}?raw=1", headers={"Range": "bytes=100-199"})
