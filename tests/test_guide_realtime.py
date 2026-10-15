@@ -195,6 +195,7 @@ def test_auto_advance_minute_setting(qtbot, isolated_config):
 
 
 def test_guide_grid_unhighlight_toggle_and_empty(qtbot, isolated_config):
+    isolated_config.guide_single_click_play = False
     win = MainWindow(config_mgr=isolated_config)
     qtbot.addWidget(win)
 
@@ -241,6 +242,7 @@ def test_guide_grid_unhighlight_escape(qtbot, isolated_config):
     from PyQt6.QtCore import QEvent
     from PyQt6.QtGui import QKeyEvent
 
+    isolated_config.guide_single_click_play = False
     win = MainWindow(config_mgr=isolated_config)
     qtbot.addWidget(win)
 

@@ -438,7 +438,65 @@ class CenteredComboBox(ThemedComboBox):
         self.setItemData(index, Qt.AlignmentFlag.AlignCenter, Qt.ItemDataRole.TextAlignmentRole)
 
 
-class ServiceLogsDialog(QDialog):
+class BaseFramelessDialog(QDialog):
+    """
+    Base dialog providing a modern frameless window without OS titlebar decorations,
+    antialiased rounded corners (10px) matching the active application theme,
+    draggable header/window movement, and keyboard accessibility.
+    """
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self._drag_pos = None
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_pos = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            event.accept()
+        else:
+            super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._drag_pos is not None and (event.buttons() & Qt.MouseButton.LeftButton):
+            self.move(event.globalPosition().toPoint() - self._drag_pos)
+            event.accept()
+        else:
+            super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        self._drag_pos = None
+        super().mouseReleaseEvent(event)
+
+    def get_dialog_colors(self):
+        bg = "#191c28"
+        border = "#333a4d"
+        parent = self.parent()
+        config_mgr = None
+        if hasattr(self, "config_mgr") and self.config_mgr:
+            config_mgr = self.config_mgr
+        elif parent and hasattr(parent, "config_mgr") and parent.config_mgr:
+            config_mgr = parent.config_mgr
+
+        if config_mgr:
+            app_theme = getattr(config_mgr, "app_theme", "midnight")
+            tokens = APP_THEMES.get(app_theme, APP_THEMES.get("midnight", {}))
+            if tokens:
+                bg = tokens.get("bg_window", bg)
+                border = tokens.get("border_color", border)
+        return bg, border
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        rect = self.rect().adjusted(1, 1, -1, -1)
+        bg_col, border_col = self.get_dialog_colors()
+        painter.setBrush(QColor(bg_col))
+        painter.setPen(QPen(QColor(border_col), 1.5))
+        painter.drawRoundedRect(rect, 10, 10)
+
+
+class ServiceLogsDialog(BaseFramelessDialog):
     """
     Log viewer dialog displaying recent journalctl entries for kaffeine-dvr-watcher.service.
     Features fast live refresh, text search/filtering, line limit selection, and clipboard export.
@@ -451,7 +509,7 @@ class ServiceLogsDialog(QDialog):
         self._worker = None
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setContentsMargins(18, 16, 18, 16)
         layout.setSpacing(10)
 
         # Header bar
@@ -464,6 +522,18 @@ class ServiceLogsDialog(QDialog):
         self.status_badge = QLabel("Checking...")
         self.status_badge.setStyleSheet("font-size: 11px; font-weight: bold; color: #8c98aa;")
         header_row.addWidget(self.status_badge)
+
+        close_x = QToolButton(self)
+        close_x.setText("✕")
+        close_x.setToolTip("Close")
+        close_x.setCursor(Qt.CursorShape.PointingHandCursor)
+        close_x.setStyleSheet(
+            "QToolButton { background: transparent; color: #8c98aa; font-size: 13px; font-weight: bold; border: none; padding: 2px 6px; border-radius: 4px; }"
+            "QToolButton:hover { color: #ffffff; background-color: rgba(255, 255, 255, 0.1); }"
+        )
+        close_x.clicked.connect(self.accept)
+        header_row.addWidget(close_x)
+
         layout.addLayout(header_row)
 
         # Controls row
@@ -583,7 +653,7 @@ class ServiceLogsDialog(QDialog):
                 self.copy_btn.setText("Copied!")
                 QTimer.singleShot(1500, lambda: self.copy_btn.setText("Copy to Clipboard"))
 
-class ReleaseNotesDialog(QDialog):
+class ReleaseNotesDialog(BaseFramelessDialog):
     """
     Modal dialog providing an interactive 'What's New' release notes reader.
     Displays formatted changelog, version badge, and direct action buttons.
@@ -595,7 +665,7 @@ class ReleaseNotesDialog(QDialog):
         self.on_install_callback = on_install_callback
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setContentsMargins(20, 18, 20, 20)
         layout.setSpacing(14)
 
         # Header bar
@@ -618,6 +688,17 @@ class ReleaseNotesDialog(QDialog):
         dlg_sub = QLabel(f"<span style='color: #8c98aa; font-size: 12px;'>{subtitle_text}</span>")
         title_col.addWidget(dlg_sub)
         header_row.addLayout(title_col, 1)
+
+        close_x = QToolButton(self)
+        close_x.setText("✕")
+        close_x.setToolTip("Close")
+        close_x.setCursor(Qt.CursorShape.PointingHandCursor)
+        close_x.setStyleSheet(
+            "QToolButton { background: transparent; color: #8c98aa; font-size: 13px; font-weight: bold; border: none; padding: 2px 6px; border-radius: 4px; }"
+            "QToolButton:hover { color: #ffffff; background-color: rgba(255, 255, 255, 0.1); }"
+        )
+        close_x.clicked.connect(self.accept)
+        header_row.addWidget(close_x, 0, Qt.AlignmentFlag.AlignTop)
 
         layout.addLayout(header_row)
 
@@ -672,12 +753,17 @@ class ReleaseNotesDialog(QDialog):
 
 
 
-class ManualRecordDialog(QDialog):
+class ManualRecordDialog(BaseFramelessDialog):
     def __init__(self, channels: List[str], parent=None, default_buffer_mins: int = 0):
         super().__init__(parent)
         self.setWindowTitle("Schedule Manual Recording")
         self.setMinimumWidth(400)
         layout = QFormLayout(self)
+        layout.setContentsMargins(18, 16, 18, 16)
+
+        header_lbl = QLabel("<b>Schedule Manual Recording</b>")
+        header_lbl.setStyleSheet("font-size: 15px; color: #ffffff; margin-bottom: 6px;")
+        layout.addRow(header_lbl)
 
         self.title_input = QLineEdit()
         self.channel_combo = ThemedComboBox()
@@ -709,12 +795,17 @@ class ManualRecordDialog(QDialog):
         layout.addRow(btn_box)
 
 
-class AddRuleDialog(QDialog):
+class AddRuleDialog(BaseFramelessDialog):
     def __init__(self, channels: List[str], parent=None, default_title: str = ""):
         super().__init__(parent)
         self.setWindowTitle("Add Auto-Record Rule")
         self.setMinimumWidth(380)
         layout = QFormLayout(self)
+        layout.setContentsMargins(18, 16, 18, 16)
+
+        header_lbl = QLabel("<b>Add Auto-Record Rule</b>")
+        header_lbl.setStyleSheet("font-size: 15px; color: #ffffff; margin-bottom: 6px;")
+        layout.addRow(header_lbl)
 
         self.keyword_input = QLineEdit(default_title)
         self.channel_combo = ThemedComboBox()
@@ -742,12 +833,17 @@ class AddRuleDialog(QDialog):
         layout.addRow(btn_box)
 
 
-class EditRuleDialog(QDialog):
+class EditRuleDialog(BaseFramelessDialog):
     def __init__(self, channels: List[str], rule_id: str, keyword: str, channel: str, enabled: bool, buffer_mins: Optional[int] = None, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Edit Auto-Record Rule")
         self.setMinimumWidth(380)
         layout = QFormLayout(self)
+        layout.setContentsMargins(18, 16, 18, 16)
+
+        header_lbl = QLabel("<b>Edit Auto-Record Rule</b>")
+        header_lbl.setStyleSheet("font-size: 15px; color: #ffffff; margin-bottom: 6px;")
+        layout.addRow(header_lbl)
 
         self.rule_id_lbl = QLabel(f"<b>{rule_id}</b>")
         self.keyword_input = QLineEdit(keyword)
@@ -786,7 +882,7 @@ class EditRuleDialog(QDialog):
         layout.addRow(btn_box)
 
 
-class ChannelSignalHealthDialog(QDialog):
+class ChannelSignalHealthDialog(BaseFramelessDialog):
     """
     Channel Signal Health & Reception Monitor dialog.
     Sequentially tests the digital TV lineup against live DVB frontend hardware,
@@ -802,16 +898,30 @@ class ChannelSignalHealthDialog(QDialog):
         self._results: Dict[str, Dict[str, Any]] = dict(self.config_mgr.channel_health) if self.config_mgr else {}
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 16, 18, 16)
         layout.setSpacing(10)
 
         # Header description
+        header_row = QHBoxLayout()
         desc_lbl = QLabel(
             "<b>Channel Signal Health & Reception Monitor</b><br>"
             "<span style='color: #8c98aa;'>Tests your digital TV lineup against physical DVB/ATSC tuner hardware, "
             "verifying digital carrier lock, reception signal strength, and SNR.</span>"
         )
         desc_lbl.setTextFormat(Qt.TextFormat.RichText)
-        layout.addWidget(desc_lbl)
+        header_row.addWidget(desc_lbl, 1)
+
+        close_x = QToolButton(self)
+        close_x.setText("✕")
+        close_x.setToolTip("Close")
+        close_x.setCursor(Qt.CursorShape.PointingHandCursor)
+        close_x.setStyleSheet(
+            "QToolButton { background: transparent; color: #8c98aa; font-size: 13px; font-weight: bold; border: none; padding: 2px 6px; border-radius: 4px; }"
+            "QToolButton:hover { color: #ffffff; background-color: rgba(255, 255, 255, 0.1); }"
+        )
+        close_x.clicked.connect(self.close)
+        header_row.addWidget(close_x, 0, Qt.AlignmentFlag.AlignTop)
+        layout.addLayout(header_row)
 
         # Signal Reception Explanation Card
         explainer_box = QFrame()
@@ -1092,7 +1202,7 @@ class ChannelSignalHealthDialog(QDialog):
         super().reject()
 
 
-class RetentionCleanupDialog(QDialog):
+class RetentionCleanupDialog(BaseFramelessDialog):
     """
     Compact confirmation dialog for manual retention cleanup.
     Provides a concise prompt with an option to ignore retention policy and delete all recordings.
@@ -1393,7 +1503,7 @@ def make_setting_label(title: str, tooltip_text: str) -> QWidget:
     return w
 
 
-class AdjustBufferDialog(QDialog):
+class AdjustBufferDialog(BaseFramelessDialog):
     """
     Dialog for adjusting recording end buffer with a dedicated 2-line title container.
     Guarantees a clean 2-line layout without clipping and truncates to 2 lines max with ellipsis.
@@ -1405,7 +1515,12 @@ class AdjustBufferDialog(QDialog):
         self.setMinimumWidth(440)
 
         form = QFormLayout(self)
+        form.setContentsMargins(18, 16, 18, 16)
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+
+        header_lbl = QLabel("<b>Adjust Recording Buffer</b>")
+        header_lbl.setStyleSheet("font-size: 15px; color: #ffffff; margin-bottom: 6px;")
+        form.addRow(header_lbl)
 
         # 2-line title label
         self.title_lbl = QLabel()
@@ -3007,7 +3122,7 @@ class GuideGridTable(QTableWidget):
             painter.end()
 
 
-class UpcomingShowDialog(QDialog):
+class UpcomingShowDialog(BaseFramelessDialog):
     ACTION_CANCEL = 0
     ACTION_RECORD = 1
     ACTION_TUNE = 2
@@ -3027,11 +3142,25 @@ class UpcomingShowDialog(QDialog):
         start_fmt = timing_info.get("start_fmt", "")
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 16, 18, 16)
         layout.setSpacing(12)
 
+        header_row = QHBoxLayout()
         header_lbl = QLabel(f"<b>{title}</b>")
         header_lbl.setStyleSheet("font-size: 15px; color: #66bb6a;")
-        layout.addWidget(header_lbl)
+        header_row.addWidget(header_lbl, 1)
+
+        close_x = QToolButton(self)
+        close_x.setText("✕")
+        close_x.setToolTip("Close")
+        close_x.setCursor(Qt.CursorShape.PointingHandCursor)
+        close_x.setStyleSheet(
+            "QToolButton { background: transparent; color: #8c98aa; font-size: 13px; font-weight: bold; border: none; padding: 2px 6px; border-radius: 4px; }"
+            "QToolButton:hover { color: #ffffff; background-color: rgba(255, 255, 255, 0.1); }"
+        )
+        close_x.clicked.connect(self.reject)
+        header_row.addWidget(close_x, 0, Qt.AlignmentFlag.AlignTop)
+        layout.addLayout(header_row)
 
         sub_parts = []
         if ep:
@@ -3090,7 +3219,7 @@ class UpcomingShowDialog(QDialog):
         self.accept()
 
 
-class FirstRunWelcomeDialog(QDialog):
+class FirstRunWelcomeDialog(BaseFramelessDialog):
     def __init__(self, config_mgr: ConfigManager, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Welcome to Kaffeine DVR & TV Guide")
@@ -3098,7 +3227,7 @@ class FirstRunWelcomeDialog(QDialog):
         self.config_mgr = config_mgr
         self.setStyleSheet(f"""
             QDialog {{
-                background-color: #191c28;
+                background: transparent;
                 color: #dce1e8;
             }}
             QLabel {{
@@ -3167,11 +3296,27 @@ class FirstRunWelcomeDialog(QDialog):
         layout.setSpacing(10)
         layout.setContentsMargins(22, 14, 22, 16)
 
+        header_row = QHBoxLayout()
+        header_row.addStretch()
         title_lbl = QLabel("Welcome to Kaffeine DVR & TV Guide")
         title_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title_lbl.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         title_lbl.setStyleSheet("font-size: 19px; font-weight: bold; color: #ffffff; padding: 2px 0 2px 0; background: transparent;")
-        layout.addWidget(title_lbl)
+        header_row.addWidget(title_lbl)
+        header_row.addStretch()
+
+        close_x = QToolButton(self)
+        close_x.setText("✕")
+        close_x.setToolTip("Close")
+        close_x.setCursor(Qt.CursorShape.PointingHandCursor)
+        close_x.setStyleSheet(
+            "QToolButton { background: transparent; color: #8c98aa; font-size: 13px; font-weight: bold; border: none; padding: 2px 6px; border-radius: 4px; }"
+            "QToolButton:hover { color: #ffffff; background-color: rgba(255, 255, 255, 0.1); }"
+        )
+        close_x.clicked.connect(self.reject)
+        header_row.addWidget(close_x, 0, Qt.AlignmentFlag.AlignTop)
+
+        layout.addLayout(header_row)
 
         # Environment box
         env_box = QGroupBox("Detected System Environment")

@@ -366,6 +366,7 @@ def test_watch_or_tune_routing(qtbot, isolated_config, monkeypatch):
 
 
 def test_grid_immediate_highlight_on_show_switch_and_toggle(qtbot, isolated_config):
+    isolated_config.guide_single_click_play = False
     win = MainWindow(config_mgr=isolated_config)
     qtbot.addWidget(win)
 
@@ -444,7 +445,6 @@ def test_settings_dropdowns_are_themed(qtbot, isolated_config):
     assert isinstance(win.provider_combo, ThemedComboBox)
     assert isinstance(win.launch_mode_combo, ThemedComboBox)
     assert isinstance(win.live_tv_mode_combo, ThemedComboBox)
-    assert isinstance(win.playback_player_combo, ThemedComboBox)
     assert isinstance(win.update_freq_combo, ThemedComboBox)
 
 
@@ -480,6 +480,99 @@ def test_build_app_stylesheet_number_stepper_and_combobox():
         assert f"border: 1px solid {tokens['border_color']};" in css
         assert "QFrame#numberStepper[focused=\"true\"] {" in css
         assert f"border-color: {tokens['accent_primary']};" in css
+
+
+def test_base_frameless_dialogs(qtbot, isolated_config):
+    from PyQt6.QtGui import QPainter, QPixmap
+    from kaffeine_dvr.gui import (
+        BaseFramelessDialog,
+        UpcomingShowDialog,
+        ManualRecordDialog,
+        AddRuleDialog,
+        EditRuleDialog,
+        RetentionCleanupDialog,
+        AdjustBufferDialog,
+        FirstRunWelcomeDialog,
+        ServiceLogsDialog,
+        ReleaseNotesDialog,
+        ChannelSignalHealthDialog
+    )
+
+    # 1. Base class properties
+    base = BaseFramelessDialog()
+    qtbot.addWidget(base)
+    assert bool(base.windowFlags() & Qt.WindowType.FramelessWindowHint)
+    assert base.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+
+    # 2. Verify all 10 dialog subclasses inherit BaseFramelessDialog
+    dialog_classes = [
+        UpcomingShowDialog,
+        ManualRecordDialog,
+        AddRuleDialog,
+        EditRuleDialog,
+        RetentionCleanupDialog,
+        AdjustBufferDialog,
+        FirstRunWelcomeDialog,
+        ServiceLogsDialog,
+        ReleaseNotesDialog,
+        ChannelSignalHealthDialog,
+    ]
+    for cls in dialog_classes:
+        assert issubclass(cls, BaseFramelessDialog), f"{cls.__name__} must inherit BaseFramelessDialog"
+
+    # 3. Instantiate and render UpcomingShowDialog
+    prog = {
+        "show_title": "Frameless Test Show",
+        "kaffeine_channel": "7.1 KGO",
+        "start_iso": "2026-10-15T20:00:00",
+        "duration_iso": "01:00:00"
+    }
+    timing = {
+        "time_desc": "in 1 hour",
+        "start_fmt": "8:00 PM",
+        "state": "upcoming"
+    }
+    upcoming_dlg = UpcomingShowDialog(prog, timing, is_scheduled=False)
+    qtbot.addWidget(upcoming_dlg)
+    assert bool(upcoming_dlg.windowFlags() & Qt.WindowType.FramelessWindowHint)
+    assert upcoming_dlg.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+
+    pixmap = QPixmap(upcoming_dlg.sizeHint())
+    painter = QPainter(pixmap)
+    upcoming_dlg.render(painter)
+    painter.end()
+    assert not pixmap.isNull()
+
+    # 4. Instantiate and test ManualRecordDialog
+    manual_dlg = ManualRecordDialog(["Ch 1", "Ch 2"])
+    qtbot.addWidget(manual_dlg)
+    assert bool(manual_dlg.windowFlags() & Qt.WindowType.FramelessWindowHint)
+
+    # 5. Test mouse drag tracking
+    from PyQt6.QtGui import QMouseEvent
+    from PyQt6.QtCore import QPointF
+    press_event = QMouseEvent(
+        QMouseEvent.Type.MouseButtonPress,
+        QPointF(20.0, 20.0),
+        QPointF(120.0, 120.0),
+        Qt.MouseButton.LeftButton,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier
+    )
+    base.mousePressEvent(press_event)
+    assert base._drag_pos is not None
+
+    release_event = QMouseEvent(
+        QMouseEvent.Type.MouseButtonRelease,
+        QPointF(20.0, 20.0),
+        QPointF(120.0, 120.0),
+        Qt.MouseButton.LeftButton,
+        Qt.MouseButton.NoButton,
+        Qt.KeyboardModifier.NoModifier
+    )
+    base.mouseReleaseEvent(release_event)
+    assert base._drag_pos is None
+
 
 
 
