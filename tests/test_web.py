@@ -219,3 +219,19 @@ def test_web_video_streaming_and_http_range(web_test_env):
     with pytest.raises(urllib.error.HTTPError) as exc_info:
         urllib.request.urlopen(f"{base_url}/api/stream/{bad_hid}")
     assert exc_info.value.code == 403
+
+
+def test_web_companion_ui_anchored_epg_and_channels(web_test_env):
+    base_url = web_test_env["base_url"]
+
+    # Fetch main companion web UI
+    with urllib.request.urlopen(f"{base_url}/") as resp:
+        assert resp.status == 200
+        html = resp.read().decode("utf-8")
+        assert "guideChannelSelect" in html
+        assert "epg-channels-col" in html
+        assert "epgTimelinePane" in html
+        assert "epgChannelList" in html
+        assert "populateChannelDropdown" in html
+        assert "epg-rec-dot" in html
+

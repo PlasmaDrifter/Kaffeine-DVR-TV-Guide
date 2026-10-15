@@ -68,115 +68,135 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
     .grid-table tr:hover { background: #202836; }
 
     /* Compact List View Table */
-    .compact-table th { padding: 6px 10px; font-size: 0.74rem; }
-    .compact-table td { padding: 5px 10px; font-size: 0.82rem; line-height: 1.25; }
+    .compact-table th { padding: 5px 8px; font-size: 0.72rem; }
+    .compact-table td { padding: 4px 8px; font-size: 0.8rem; line-height: 1.2; }
 
-    /* EPG Grid Styles with Grab / Pan */
+    /* EPG Grid Styles with Anchored Left Channels and Grab / Pan */
     .epg-wrapper {
       position: relative;
       width: 100%;
-      overflow-x: auto;
-      overflow-y: auto;
+      display: flex;
       max-height: calc(100vh - 210px);
       min-height: 480px;
       background: var(--card-bg);
       border: 1px solid var(--card-border);
       border-radius: 8px;
-      cursor: grab;
-      user-select: none;
-      -webkit-user-select: none;
+      overflow: hidden;
+      box-sizing: border-box;
     }
-    .epg-wrapper.grabbing {
-      cursor: grabbing;
-    }
-    .epg-wrapper.grabbing * {
-      cursor: grabbing !important;
-      user-select: none;
-    }
-    .epg-header {
+    .epg-channels-col {
+      width: 110px;
+      min-width: 110px;
+      max-width: 110px;
+      flex-shrink: 0;
       display: flex;
-      position: sticky;
-      top: 0;
-      z-index: 25;
+      flex-direction: column;
       background: #141a24;
-      border-bottom: 2px solid var(--card-border);
-      height: 38px;
-    }
-    .epg-channel-header {
-      position: sticky;
-      left: 0;
-      z-index: 30;
-      width: 160px;
-      min-width: 160px;
-      background: #111620;
       border-right: 2px solid var(--card-border);
-      padding: 8px 12px;
-      font-size: 0.8rem;
+      z-index: 30;
+      user-select: none;
+    }
+    .epg-corner-header {
+      height: 32px;
+      min-height: 32px;
+      box-sizing: border-box;
+      background: #111620;
+      border-bottom: 2px solid var(--card-border);
+      padding: 6px 8px;
+      font-size: 0.74rem;
       font-weight: 700;
       text-transform: uppercase;
       color: var(--text-muted);
       display: flex;
       align-items: center;
     }
-    .epg-timeline-header {
+    .epg-channel-list {
+      flex: 1;
+      overflow: hidden;
       display: flex;
+      flex-direction: column;
+    }
+    .epg-channel-cell {
+      height: 42px;
+      min-height: 42px;
+      max-height: 42px;
+      box-sizing: border-box;
+      padding: 4px 8px;
+      border-bottom: 1px solid #232b38;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .epg-channel-name {
+      font-weight: 700;
+      font-size: 0.8rem;
+      color: #fff;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .epg-timeline-pane {
+      flex: 1;
+      min-width: 0;
+      overflow-x: auto;
+      overflow-y: auto;
       position: relative;
+      cursor: grab;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .epg-timeline-pane.grabbing {
+      cursor: grabbing;
+    }
+    .epg-timeline-pane.grabbing * {
+      cursor: grabbing !important;
+    }
+    .epg-timeline-header {
+      position: sticky;
+      top: 0;
+      z-index: 25;
+      background: #141a24;
+      border-bottom: 2px solid var(--card-border);
+      height: 32px;
+      min-height: 32px;
+      display: flex;
     }
     .epg-time-slot {
       width: 150px;
       min-width: 150px;
-      padding: 8px 10px;
-      font-size: 0.78rem;
+      height: 32px;
+      line-height: 32px;
+      padding: 0 8px;
+      font-size: 0.74rem;
       font-weight: 600;
       color: var(--text-muted);
       border-right: 1px solid #283244;
       box-sizing: border-box;
       white-space: nowrap;
     }
-    .epg-row {
-      display: flex;
+    .epg-timeline-body {
       position: relative;
-      height: 64px;
+    }
+    .epg-row {
+      height: 42px;
+      min-height: 42px;
+      max-height: 42px;
+      box-sizing: border-box;
+      position: relative;
       border-bottom: 1px solid #232b38;
     }
     .epg-row:hover {
       background: rgba(255, 255, 255, 0.02);
     }
-    .epg-channel-col {
-      position: sticky;
-      left: 0;
-      z-index: 15;
-      width: 160px;
-      min-width: 160px;
-      background: #141a24;
-      border-right: 2px solid var(--card-border);
-      padding: 8px 12px;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      box-sizing: border-box;
-    }
-    .epg-channel-name {
-      font-weight: 700;
-      font-size: 0.88rem;
-      color: #fff;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .epg-track {
-      position: relative;
-      height: 100%;
-    }
     .epg-program-tile {
       position: absolute;
-      top: 4px;
-      bottom: 4px;
+      top: 3px;
+      bottom: 3px;
       box-sizing: border-box;
       background: #1e2638;
       border: 1px solid #334155;
-      border-radius: 5px;
-      padding: 5px 8px;
+      border-radius: 4px;
+      padding: 3px 6px;
       cursor: pointer;
       overflow: hidden;
       transition: background 0.15s, border-color 0.15s;
@@ -190,15 +210,24 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
       z-index: 10;
     }
     .epg-program-tile.scheduled {
-      border-left: 4px solid #ef4444;
+      border-left: 3px solid #ef4444;
       background: #2b1f2e;
     }
     .epg-program-tile.airing-now {
       border-color: #38bdf8;
     }
+    .epg-rec-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #ef4444;
+      margin-right: 4px;
+      vertical-align: middle;
+    }
     .epg-tile-title {
-      font-size: 0.82rem;
-      font-weight: 700;
+      font-size: 0.76rem;
+      font-weight: 600;
       color: #f1f5f9;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -206,12 +235,13 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
       line-height: 1.2;
     }
     .epg-tile-time {
-      font-size: 0.7rem;
+      font-size: 0.66rem;
       color: var(--text-muted);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      margin-top: 3px;
+      margin-top: 2px;
+      line-height: 1;
     }
     .epg-now-line {
       position: absolute;
@@ -304,6 +334,10 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
           <button id="jumpNowBtn" class="btn btn-sm btn-secondary" onclick="scrollToCurrentTime()">Jump to Now</button>
         </div>
         <div class="toolbar-group">
+          <label style="font-size: 0.82rem; color: var(--text-muted);">Channel:</label>
+          <select id="guideChannelSelect" onchange="renderGuide()">
+            <option value="All">All Channels</option>
+          </select>
           <label id="trimPassedWrapper" style="font-size: 0.82rem; color: var(--text-muted); display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none;">
             <input type="checkbox" id="trimPassedCheckbox" checked onchange="renderGuide()"> Trim Passed Shows
           </label>
@@ -314,7 +348,19 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
       <!-- EPG Grid View Container -->
       <div id="guideGridContainer" style="display: block;">
         <div id="epgGridWrapper" class="epg-wrapper">
-          <div style="text-align: center; color: var(--text-muted); padding: 40px;">Loading TV Guide Grid...</div>
+          <div id="epgEmptyNotice" style="display: none; text-align: center; color: var(--text-muted); padding: 40px; width: 100%;">
+            Loading TV Guide Grid...
+          </div>
+          <div id="epgGridContent" style="display: flex; width: 100%; height: 100%; overflow: hidden;">
+            <div class="epg-channels-col">
+              <div class="epg-corner-header">Channel</div>
+              <div class="epg-channel-list" id="epgChannelList"></div>
+            </div>
+            <div class="epg-timeline-pane" id="epgTimelinePane">
+              <div class="epg-timeline-header" id="epgTimelineHeader" style="width: 8400px;"></div>
+              <div class="epg-timeline-body" id="epgTimelineBody" style="width: 8400px;"></div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -420,39 +466,59 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
     let hasDragged = false;
 
     function initEPGPan() {
-      const wrapper = document.getElementById("epgGridWrapper");
-      if (!wrapper) return;
+      const pane = document.getElementById("epgTimelinePane");
+      const chList = document.getElementById("epgChannelList");
+      const chCol = document.querySelector(".epg-channels-col");
+      if (!pane) return;
 
-      wrapper.addEventListener("mousedown", (e) => {
+      // Sync vertical scrolling between timeline pane and channel list
+      pane.addEventListener("scroll", () => {
+        if (chList) chList.scrollTop = pane.scrollTop;
+      }, { passive: true });
+
+      // Forward wheel scrolling from channel list to timeline pane
+      if (chCol) {
+        chCol.addEventListener("wheel", (e) => {
+          pane.scrollTop += e.deltaY;
+          e.preventDefault();
+        }, { passive: false });
+      }
+
+      function startPan(e) {
         if (e.button !== 0) return;
         isPanning = true;
         hasDragged = false;
-        panStartX = e.pageX - wrapper.offsetLeft;
-        panStartY = e.pageY - wrapper.offsetTop;
-        panScrollLeft = wrapper.scrollLeft;
-        panScrollTop = wrapper.scrollTop;
-      });
+        panStartX = e.pageX - pane.offsetLeft;
+        panStartY = e.pageY - pane.offsetTop;
+        panScrollLeft = pane.scrollLeft;
+        panScrollTop = pane.scrollTop;
+      }
+
+      pane.addEventListener("mousedown", startPan);
+      if (chCol) {
+        chCol.addEventListener("mousedown", startPan);
+      }
 
       window.addEventListener("mousemove", (e) => {
         if (!isPanning) return;
-        const x = e.pageX - wrapper.offsetLeft;
-        const y = e.pageY - wrapper.offsetTop;
+        const x = e.pageX - pane.offsetLeft;
+        const y = e.pageY - pane.offsetTop;
         const walkX = x - panStartX;
         const walkY = y - panStartY;
 
         if (Math.abs(walkX) > 4 || Math.abs(walkY) > 4) {
           hasDragged = true;
-          wrapper.classList.add("grabbing");
+          pane.classList.add("grabbing");
         }
 
-        wrapper.scrollLeft = panScrollLeft - walkX;
-        wrapper.scrollTop = panScrollTop - walkY;
+        pane.scrollLeft = panScrollLeft - walkX;
+        pane.scrollTop = panScrollTop - walkY;
       });
 
       window.addEventListener("mouseup", () => {
         if (!isPanning) return;
         isPanning = false;
-        wrapper.classList.remove("grabbing");
+        pane.classList.remove("grabbing");
         setTimeout(() => {
           hasDragged = false;
         }, 80);
@@ -562,14 +628,40 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
       } catch (e) {}
     }
 
+    function populateChannelDropdown(items) {
+      const sel = document.getElementById("guideChannelSelect");
+      if (!sel) return;
+      const currentVal = sel.value || "All";
+      const channelSet = new Set();
+      (items || []).forEach(p => {
+        if (p.channel) channelSet.add(p.channel);
+      });
+      const channels = Array.from(channelSet);
+      channels.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+
+      sel.innerHTML = '<option value="All">All Channels</option>' +
+        channels.map(ch => `<option value="${escapeHtml(ch)}">${escapeHtml(ch)}</option>`).join("");
+
+      if (channels.includes(currentVal)) {
+        sel.value = currentVal;
+      } else {
+        sel.value = "All";
+      }
+    }
+
     async function loadGuide() {
       const dateElem = document.getElementById("guideDateSelect");
       const selDate = dateElem ? dateElem.value : "";
       const tbody = document.getElementById("guideTableBody");
-      const epgWrapper = document.getElementById("epgGridWrapper");
+      const notice = document.getElementById("epgEmptyNotice");
+      const content = document.getElementById("epgGridContent");
 
       if (tbody) tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding: 25px; color: var(--text-muted);">Fetching schedule for ${selDate || "today"}...</td></tr>`;
-      if (epgWrapper) epgWrapper.innerHTML = `<div style="text-align:center; color: var(--text-muted); padding: 40px;">Fetching schedule for ${selDate || "today"}...</div>`;
+      if (notice) {
+        notice.style.display = "block";
+        notice.textContent = `Fetching schedule for ${selDate || "today"}...`;
+      }
+      if (content) content.style.display = "none";
 
       try {
         const resp = await apiFetch(`/api/guide?date=${encodeURIComponent(selDate)}`);
@@ -577,10 +669,15 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
           const errData = await resp.json().catch(() => ({}));
           const errMsg = `Error ${resp.status}: ${escapeHtml(errData.error || "Failed to load TV guide.")}`;
           if (tbody) tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding: 25px; color: #ef4444;">${errMsg}</td></tr>`;
-          if (epgWrapper) epgWrapper.innerHTML = `<div style="text-align:center; color: #ef4444; padding: 40px;">${errMsg}</div>`;
+          if (notice) {
+            notice.style.display = "block";
+            notice.innerHTML = errMsg;
+          }
+          if (content) content.style.display = "none";
           return;
         }
         guideItems = await resp.json();
+        populateChannelDropdown(guideItems);
         renderGuide();
 
         const now = new Date();
@@ -591,13 +688,23 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
       } catch (e) {
         const errMsg = escapeHtml(e.message || "Failed to load TV guide.");
         if (tbody) tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding: 25px; color: #ef4444;">${errMsg}</td></tr>`;
-        if (epgWrapper) epgWrapper.innerHTML = `<div style="text-align:center; color: #ef4444; padding: 40px;">${errMsg}</div>`;
+        if (notice) {
+          notice.style.display = "block";
+          notice.innerHTML = errMsg;
+        }
+        if (content) content.style.display = "none";
       }
     }
 
     function renderGuide() {
       const q = (document.getElementById("guideSearchInput").value || "").toLowerCase().trim();
+      const chSel = document.getElementById("guideChannelSelect");
+      const selectedChannel = chSel ? chSel.value : "All";
+
       let items = guideItems || [];
+      if (selectedChannel && selectedChannel !== "All") {
+        items = items.filter(p => p.channel === selectedChannel);
+      }
       if (q) {
         items = items.filter(p =>
           (p.title && p.title.toLowerCase().includes(q)) ||
@@ -673,12 +780,23 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
     }
 
     function renderEPGGrid(items) {
-      const container = document.getElementById("epgGridWrapper");
-      if (!container) return;
+      const notice = document.getElementById("epgEmptyNotice");
+      const content = document.getElementById("epgGridContent");
+      const chList = document.getElementById("epgChannelList");
+      const timeHeader = document.getElementById("epgTimelineHeader");
+      const timeBody = document.getElementById("epgTimelineBody");
+
       if (!items || items.length === 0) {
-        container.innerHTML = `<div style="text-align:center; color:var(--text-muted); padding:40px;">No broadcast listings found for this date.</div>`;
+        if (notice) {
+          notice.style.display = "block";
+          notice.textContent = "No broadcast listings found for this date.";
+        }
+        if (content) content.style.display = "none";
         return;
       }
+
+      if (notice) notice.style.display = "none";
+      if (content) content.style.display = "flex";
 
       // Group by channel in order
       const channelMap = new Map();
@@ -715,8 +833,14 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
         }
       }
 
+      let channelCellsHtml = "";
       let rowsHtml = "";
+
       channelMap.forEach((progs, chName) => {
+        channelCellsHtml += `<div class="epg-channel-cell">
+          <div class="epg-channel-name" title="${escapeHtml(chName)}">${escapeHtml(chName)}</div>
+        </div>`;
+
         let tilesHtml = "";
         for (const p of progs) {
           const pIdx = guideItems.indexOf(p);
@@ -739,46 +863,33 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
           const tileClass = `epg-program-tile ${isSched ? 'scheduled' : ''} ${isAiringNow ? 'airing-now' : ''}`;
 
           tilesHtml += `<div class="${tileClass}" style="left: ${leftPx}px; width: ${widthPx}px;" onclick="openProgramModal(${pIdx})" title="${escapeHtml(p.title)}: ${escapeHtml(p.summary || '')}">
-            <div class="epg-tile-title">${isSched ? '🔴 ' : ''}${escapeHtml(p.title || 'Untitled')}</div>
+            <div class="epg-tile-title">${isSched ? '<span class="epg-rec-dot"></span>' : ''}${escapeHtml(p.title || 'Untitled')}</div>
             <div class="epg-tile-time">${escapeHtml(timeRange)}</div>
           </div>`;
         }
 
         rowsHtml += `<div class="epg-row">
-          <div class="epg-channel-col"><div class="epg-channel-name" title="${escapeHtml(chName)}">${escapeHtml(chName)}</div></div>
-          <div class="epg-track" style="width: ${TRACK_WIDTH}px;">
-            ${nowLineHtml}
-            ${tilesHtml}
-          </div>
+          ${tilesHtml}
         </div>`;
       });
 
-      container.innerHTML = `
-        <div class="epg-header">
-          <div class="epg-channel-header">Channels</div>
-          <div class="epg-timeline-header" style="width: ${TRACK_WIDTH}px;">
-            ${nowLineHtml}
-            ${slotsHtml}
-          </div>
-        </div>
-        <div class="epg-body">
-          ${rowsHtml}
-        </div>
-      `;
+      if (chList) chList.innerHTML = channelCellsHtml;
+      if (timeHeader) timeHeader.innerHTML = nowLineHtml + slotsHtml;
+      if (timeBody) timeBody.innerHTML = nowLineHtml + rowsHtml;
     }
 
     function scrollToCurrentTime() {
-      const container = document.getElementById("epgGridWrapper");
-      if (!container) return;
+      const pane = document.getElementById("epgTimelinePane");
+      if (!pane) return;
       const selDate = document.getElementById("guideDateSelect") ? document.getElementById("guideDateSelect").value : "";
       const dayStart = new Date(selDate + "T00:00:00");
       const now = new Date();
       const diffMins = (now - dayStart) / 60000;
       if (diffMins >= 0 && diffMins <= TOTAL_SLOTS * 30) {
         const nowPx = Math.round((diffMins / 30) * SLOT_WIDTH);
-        container.scrollTo({ left: Math.max(0, nowPx - 260), behavior: 'smooth' });
+        pane.scrollTo({ left: Math.max(0, nowPx - 120), behavior: 'smooth' });
       } else {
-        container.scrollTo({ left: 0, behavior: 'smooth' });
+        pane.scrollTo({ left: 0, behavior: 'smooth' });
       }
     }
 
