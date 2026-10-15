@@ -2846,6 +2846,105 @@ class GuideGridHeader(QHeaderView):
                 painter.end()
 
 
+class GuideGridVerticalHeader(QHeaderView):
+    """
+    Custom vertical header for the TV guide grid:
+    - Renders each channel label as a distinct, clearly separated square/card with clean borders.
+    - Displays a pronounced visual indicator ('● PLAYING' badge, vibrant background, glowing border)
+      when that channel is actively playing in live timeshift mode.
+    - Provides a pointing hand cursor to make it obvious that each channel square is clickable.
+    """
+    def __init__(self, parent=None, main_window=None):
+        super().__init__(Qt.Orientation.Vertical, parent)
+        self.main_window = main_window
+        self.setSectionsClickable(True)
+        self.setHighlightSections(False)
+        self.viewport().setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def sizeHint(self):
+        sz = super().sizeHint()
+        # Ensure channel column square has comfortable width for logos/names like 'ABC', 'NBC', 'PBS'
+        sz.setWidth(max(70, sz.width()))
+        return sz
+
+    def paintSection(self, painter: QPainter, rect: QRect, logical_index: int):
+        painter.save()
+        mw = getattr(self, "main_window", None)
+        active_ts = getattr(mw, "_active_timeshift", None) if mw else None
+        active_ch = (active_ts.get("channel") or "").strip().lower() if active_ts else ""
+
+        # Retrieve channel name for this row
+        channel_name = ""
+        model = self.model()
+        if model:
+            val = model.headerData(logical_index, Qt.Orientation.Vertical, Qt.ItemDataRole.DisplayRole)
+            if val is not None:
+                channel_name = str(val).strip()
+        if not channel_name and mw and hasattr(mw, "grid_channels") and logical_index < len(mw.grid_channels):
+            channel_name = str(mw.grid_channels[logical_index]).strip()
+
+        is_playing = bool(active_ch and channel_name and active_ch == channel_name.lower())
+
+        # Card geometry with 2px margin around each channel square for clear separation
+        card_rect = rect.adjusted(3, 3, -3, -3)
+
+        if is_playing:
+            # Active playing channel: vibrant dark emerald/cyan background with glowing green border
+            bg_color = QColor("#064e3b")
+            border_color = QColor("#22c55e")
+            border_width = 2
+            text_color = QColor("#ffffff")
+        else:
+            # Pronounced distinct card background with clear dark slate border
+            is_alt = (logical_index % 2 == 1)
+            bg_color = QColor("#1e293b") if is_alt else QColor("#162032")
+            border_color = QColor("#3b4861")
+            border_width = 1
+            text_color = QColor("#f8fafc")
+
+        # Fill background card
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setPen(QPen(border_color, border_width))
+        painter.setBrush(bg_color)
+        painter.drawRoundedRect(card_rect, 5, 5)
+
+        # Base font setup
+        base_font = QFont(self.font())
+        base_font.setBold(True)
+        base_font.setPointSize(max(10, min(14, base_font.pointSize() or 11)))
+
+        if is_playing:
+            # Reserve space for "● PLAYING" badge at the bottom of the square
+            badge_h = 14
+            badge_w = min(card_rect.width() - 8, 56)
+            title_rect = QRect(card_rect.left() + 2, card_rect.top() + 4, card_rect.width() - 4, max(12, card_rect.height() - badge_h - 9))
+            painter.setFont(base_font)
+            painter.setPen(text_color)
+            painter.drawText(title_rect, Qt.AlignmentFlag.AlignCenter, channel_name)
+
+            # Draw "● PLAYING" badge
+            badge_x = card_rect.left() + (card_rect.width() - badge_w) // 2
+            badge_rect = QRect(badge_x, card_rect.bottom() - badge_h - 4, badge_w, badge_h)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor("#16a34a"))
+            painter.drawRoundedRect(badge_rect, 3, 3)
+
+            badge_font = QFont(base_font)
+            badge_font.setPointSize(max(7, base_font.pointSize() - 3))
+            badge_font.setBold(True)
+            painter.setFont(badge_font)
+            painter.setPen(QColor("#ffffff"))
+            painter.drawText(badge_rect, Qt.AlignmentFlag.AlignCenter, "PLAYING")
+        else:
+            # Centered channel title
+            painter.setFont(base_font)
+            painter.setPen(text_color)
+            text_rect = card_rect.adjusted(2, 2, -2, -2)
+            painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, channel_name)
+
+        painter.restore()
+
+
 class GuideGridTable(QTableWidget):
     """
     Custom table widget for the guide grid that draws a vertical current-time
@@ -3626,13 +3725,12 @@ QTableWidget#guideGridTable QHeaderView::section:horizontal {{
     border-top: none;
 }}
 QTableWidget#guideGridTable QHeaderView::section:vertical {{
-    background-color: {tokens["table_header_bg"]};
+    background-color: transparent;
     color: #ffffff;
     font-weight: bold;
     font-size: 12px;
-    padding: 6px 10px;
-    border: 1px solid {tokens["table_gridline"]};
-    border-left: none;
+    padding: 0px;
+    border: none;
 }}
 
 /* Modern Status & Progress Bar */
@@ -4592,6 +4690,9 @@ class MainWindow(QMainWindow):
         self.guide_grid_table.setObjectName("guideGridTable")
         self.guide_grid_header = GuideGridHeader(Qt.Orientation.Horizontal, self.guide_grid_table, main_window=self)
         self.guide_grid_table.setHorizontalHeader(self.guide_grid_header)
+        self.guide_grid_vheader = GuideGridVerticalHeader(self.guide_grid_table, main_window=self)
+        self.guide_grid_table.setVerticalHeader(self.guide_grid_vheader)
+        self.guide_grid_vheader.sectionClicked.connect(self._on_grid_channel_header_clicked)
         self.guide_grid_table.setColumnCount(56)
         grid_headers = []
         for h in range(24):
@@ -10585,6 +10686,63 @@ class MainWindow(QMainWindow):
                     f"'{title}' on {ch} has already finished broadcasting ({timing_info.get('time_desc')})."
                 )
 
+    def _on_grid_channel_header_clicked(self, logical_index: int):
+        """
+        Handles user clicking the channel header square on the left of the TV guide grid:
+        - If the channel is already playing, informs the user or focuses the session.
+        - Otherwise, initiates continuous live channel playback without program boundary cuts.
+        """
+        channel_name = ""
+        if hasattr(self, "grid_channels") and logical_index < len(self.grid_channels):
+            channel_name = str(self.grid_channels[logical_index]).strip()
+        elif hasattr(self, "guide_grid_table") and self.guide_grid_table.model():
+            val = self.guide_grid_table.model().headerData(logical_index, Qt.Orientation.Vertical, Qt.ItemDataRole.DisplayRole)
+            if val is not None:
+                channel_name = str(val).strip()
+
+        if not channel_name:
+            return
+
+        active_ts = getattr(self, "_active_timeshift", None)
+        active_ch = (active_ts.get("channel") or "").strip().lower() if active_ts else ""
+        if active_ch and active_ch == channel_name.lower():
+            # Channel is currently playing
+            self.status_bar.showMessage(f"Channel {channel_name} is already playing continuously in {self.config_mgr.live_tv_watch_mode.upper()}.", 4000)
+            return
+
+        self.start_continuous_channel_playback(channel_name)
+
+    def start_continuous_channel_playback(self, channel: str):
+        """
+        Starts continuous live channel timeshifting for an extended 8-hour block on the given channel:
+        - Unlike individual show playback, continuous channel playback keeps recording and playing
+          through consecutive shows uninterrupted until the player is closed or stopped.
+        """
+        if not channel:
+            return
+
+        ch = channel.strip()
+        now_dt = datetime.now()
+        now_iso = now_dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+        live_prog = self._find_live_program_for_channel(ch)
+        current_show_title = live_prog.get("show_title") or live_prog.get("title") if live_prog else "Live Stream"
+
+        # Continuous capture program definition: 8-hour block
+        continuous_prog = {
+            "show_title": f"{ch} Live Stream",
+            "title": f"{ch} Live Stream",
+            "kaffeine_channel": ch,
+            "channel": ch,
+            "start_iso": now_iso,
+            "duration_iso": "08:00:00",
+            "_is_continuous_channel": True,
+            "_original_show": current_show_title
+        }
+
+        self.status_bar.showMessage(f"Starting continuous stream on {ch} (Now: {current_show_title})...", 5000)
+        self.start_timeshift_playback(continuous_prog)
+
     def start_timeshift_playback(self, prog: Dict[str, Any]):
         """
         Timeshifts a live broadcast in the user's selected video player:
@@ -10648,6 +10806,8 @@ class MainWindow(QMainWindow):
             }
             if proc and hasattr(self, "_timeshift_poll_timer"):
                 self._timeshift_poll_timer.start()
+            if hasattr(self, "guide_grid_vheader") and self.guide_grid_vheader:
+                self.guide_grid_vheader.viewport().update()
             self._display_program_details(prog)
             return
 
@@ -10755,6 +10915,8 @@ class MainWindow(QMainWindow):
             }
             if proc and hasattr(self, "_timeshift_poll_timer"):
                 self._timeshift_poll_timer.start()
+            if hasattr(self, "guide_grid_vheader") and self.guide_grid_vheader:
+                self.guide_grid_vheader.viewport().update()
             self._display_program_details(prog)
             return
 
@@ -10842,6 +11004,8 @@ class MainWindow(QMainWindow):
         self.status_bar.showMessage(msg, 5000)
         self.refresh_recordings()
         self._refresh_guide_view(keep_scroll=True)
+        if hasattr(self, "guide_grid_vheader") and self.guide_grid_vheader:
+            self.guide_grid_vheader.viewport().update()
         prog = self._get_active_selected_program()
         if prog:
             self._display_program_details(prog)
