@@ -11633,6 +11633,8 @@ class MainWindow(QMainWindow):
             return
 
         menu = QMenu(self)
+        menu.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        menu.setObjectName("guideContextMenu")
 
         primary_title, secondary_sub = get_program_display_titles(prog)
         channel = prog.get("kaffeine_channel") or prog.get("channel") or ""
@@ -11665,35 +11667,64 @@ class MainWindow(QMainWindow):
         text_secondary = tokens.get("text_secondary", "#8c9bb0")
         border_color = tokens.get("border_color", "#333a4c")
 
+        menu.setStyleSheet(f"""
+            QMenu#guideContextMenu {{
+                background-color: {tokens.get("menu_bg", "#1c202e")};
+                color: {text_primary};
+                border: 1.5px solid {border_color};
+                border-radius: 10px;
+                padding: 8px 6px;
+                font-size: 14px;
+            }}
+            QMenu#guideContextMenu::item {{
+                padding: 8px 18px;
+                border-radius: 6px;
+                margin: 2px 6px;
+                font-size: 14px;
+                font-weight: 500;
+            }}
+            QMenu#guideContextMenu::item:selected {{
+                background-color: {tokens.get("menu_item_selected", "#2b3346")};
+                color: #ffffff;
+            }}
+            QMenu#guideContextMenu::separator {{
+                height: 1px;
+                background-color: {border_color};
+                margin: 6px 10px;
+            }}
+        """)
+
         cat = prog.get("_category") or classify_guide_category(prog)
         cat_colors = getattr(self.config_mgr, "category_colors", {})
         title_color_hex = cat_colors.get(cat, DEFAULT_CATEGORY_COLORS.get(cat, "#b9feff"))
 
         container = QWidget()
         container.setObjectName("guideContextMenuContainer")
+        container.setMinimumWidth(460)
+        container.setMaximumWidth(520)
         container.setStyleSheet(
             "QWidget#guideContextMenuContainer { background: transparent; } "
             "QLabel { background: transparent; }"
         )
         layout = QVBoxLayout(container)
-        layout.setContentsMargins(12, 10, 12, 8)
-        layout.setSpacing(4)
+        layout.setContentsMargins(16, 14, 16, 12)
+        layout.setSpacing(6)
 
         title_lbl = QLabel()
         title_lbl.setWordWrap(True)
-        title_lbl.setMaximumWidth(400)
+        title_lbl.setMaximumWidth(500)
         escaped_title = html.escape(primary_title)
-        title_html = f"<span style='font-size: 13px; font-weight: bold; color: {title_color_hex};'>{escaped_title}</span>"
+        title_html = f"<span style='font-size: 16px; font-weight: bold; color: {title_color_hex};'>{escaped_title}</span>"
         if season and number:
-            title_html += f" <span style='font-size: 11px; color: {text_secondary};'>(S{season:02d}E{number:02d})</span>"
+            title_html += f" <span style='font-size: 13px; color: {text_secondary};'>(S{season:02d}E{number:02d})</span>"
         title_lbl.setText(title_html)
         layout.addWidget(title_lbl)
 
         if secondary_sub and secondary_sub != primary_title:
             sub_lbl = QLabel(f"&quot;{html.escape(secondary_sub)}&quot;")
-            sub_lbl.setStyleSheet(f"font-size: 11px; font-weight: 600; color: {text_secondary};")
+            sub_lbl.setStyleSheet(f"font-size: 13px; font-weight: 600; color: {text_secondary};")
             sub_lbl.setWordWrap(True)
-            sub_lbl.setMaximumWidth(400)
+            sub_lbl.setMaximumWidth(500)
             layout.addWidget(sub_lbl)
 
         meta_parts = []
@@ -11705,15 +11736,15 @@ class MainWindow(QMainWindow):
             meta_parts.append(f"({dur_str})")
         if meta_parts:
             meta_lbl = QLabel(" • ".join(meta_parts))
-            meta_lbl.setStyleSheet(f"font-size: 11px; color: {text_secondary};")
+            meta_lbl.setStyleSheet(f"font-size: 12px; color: {text_secondary};")
             meta_lbl.setWordWrap(True)
-            meta_lbl.setMaximumWidth(400)
+            meta_lbl.setMaximumWidth(500)
             layout.addWidget(meta_lbl)
 
         divider = QFrame()
         divider.setFrameShape(QFrame.Shape.HLine)
         divider.setFrameShadow(QFrame.Shadow.Plain)
-        divider.setStyleSheet(f"color: {border_color}; background-color: {border_color}; max-height: 1px; margin-top: 2px; margin-bottom: 2px;")
+        divider.setStyleSheet(f"color: {border_color}; background-color: {border_color}; max-height: 1px; margin-top: 4px; margin-bottom: 4px;")
         layout.addWidget(divider)
 
         display_summary = summary
@@ -11724,8 +11755,8 @@ class MainWindow(QMainWindow):
 
         desc_lbl = QLabel(display_summary)
         desc_lbl.setWordWrap(True)
-        desc_lbl.setMaximumWidth(400)
-        desc_lbl.setStyleSheet(f"font-size: 11px; color: {text_primary}; line-height: 1.35;")
+        desc_lbl.setMaximumWidth(500)
+        desc_lbl.setStyleSheet(f"font-size: 13px; color: {text_primary}; line-height: 1.4;")
         layout.addWidget(desc_lbl)
 
         header_action = QWidgetAction(menu)
@@ -11737,22 +11768,7 @@ class MainWindow(QMainWindow):
 
         menu.addSeparator()
 
-        active_map = self.queue_mgr.get_active_scheduled_map()
-        ch_key = (channel or "").strip().lower()
-        iso_key = (prog.get("start_iso") or "")[:16]
-        rec_info = active_map.get((ch_key, iso_key))
-
-        if rec_info is None:
-            menu.addAction("Record Program", self.record_selected_guide_item)
-        else:
-            buf_val = rec_info.get("buffer_mins", 0) or 0
-            menu.addAction(f"Adjust Buffer (+{buf_val}m)...", self.record_selected_guide_item)
-            menu.addAction("Cancel Recording", self.cancel_selected_guide_recording)
-
-        menu.addAction("Record Series (Add Rule)...", self.add_rule_from_selected_guide_item)
-
-        menu.addSeparator()
-
+        # 1. Watch / Tune action first
         timing_info = self._get_program_timing_state(prog)
         state = timing_info.get("state", "upcoming")
         if state == "live":
@@ -11767,6 +11783,22 @@ class MainWindow(QMainWindow):
         sel_ch = (channel or "").strip().lower()
         if has_active_ts and (cur_ts_ch == sel_ch or state == "live"):
             menu.addAction(f"Stop Timeshift ({self._active_timeshift.get('channel')})", self.stop_timeshift)
+
+        # 2. Record Program action second
+        active_map = self.queue_mgr.get_active_scheduled_map()
+        ch_key = (channel or "").strip().lower()
+        iso_key = (prog.get("start_iso") or "")[:16]
+        rec_info = active_map.get((ch_key, iso_key))
+
+        if rec_info is None:
+            menu.addAction("Record Program", self.record_selected_guide_item)
+        else:
+            buf_val = rec_info.get("buffer_mins", 0) or 0
+            menu.addAction(f"Adjust Buffer (+{buf_val}m)...", self.record_selected_guide_item)
+            menu.addAction("Cancel Recording", self.cancel_selected_guide_recording)
+
+        # 3. Record Series action third
+        menu.addAction("Record Series (Add Rule)...", self.add_rule_from_selected_guide_item)
 
         target_pos = global_pos if global_pos is not None else QCursor.pos()
         menu.exec(target_pos)

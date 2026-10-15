@@ -711,12 +711,16 @@ def test_guide_grid_context_menu_record_without_play_and_description(qtbot, isol
     assert win.config_mgr.guide_detail_collapsed is True
     assert win.guide_detail_text.isVisible() is False
 
-    # 4. Context menu was created and contains the description and Record action
+    # 4. Context menu was created and contains the description and ordered actions
     assert len(captured_menus) == 1
     menu = captured_menus[0]
     action_texts = [a.text() for a in menu.actions() if a.text()]
     assert "Record Program" in action_texts
     assert "Record Series (Add Rule)..." in action_texts
+    watch_idx = next(i for i, t in enumerate(action_texts) if "Watch" in t or "Play" in t)
+    rec_idx = action_texts.index("Record Program")
+    rule_idx = action_texts.index("Record Series (Add Rule)...")
+    assert watch_idx < rec_idx < rule_idx
 
     # Find the header widget in the menu to verify description is shown
     header_widget = None
