@@ -45,7 +45,7 @@ def test_reset_to_defaults_preserves_user_data(isolated_config: ConfigManager):
     cfg.channel_map = {"ABC": "Channel 7.1", "NBC": "Channel 12.1"}
     cfg.rules = [{"title": "My Favorite Show", "channel": "ABC"}]
     cfg.tvpassport_stations = {"ABC": 1234}
-    
+
     # Change tweakable settings
     cfg.end_buffer_mins = 15
     cfg.lead_time_mins = 10

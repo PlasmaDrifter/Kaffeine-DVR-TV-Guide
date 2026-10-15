@@ -1,24 +1,22 @@
-import os
 import struct
 from unittest.mock import MagicMock, patch
-import pytest
-from PyQt6.QtCore import Qt
+
 from PyQt6.QtWidgets import QFrame, QLabel
 
+from kaffeine_dvr.gui import ChannelSignalHealthDialog
 from kaffeine_dvr.signal_scanner import (
-    DvbSignalReader,
-    ChannelSignalScanWorker,
-    FE_HAS_SIGNAL,
     FE_HAS_CARRIER,
-    FE_HAS_VITERBI,
-    FE_HAS_SYNC,
     FE_HAS_LOCK,
-    FE_READ_STATUS,
+    FE_HAS_SIGNAL,
+    FE_HAS_SYNC,
+    FE_HAS_VITERBI,
+    FE_READ_BER,
     FE_READ_SIGNAL_STRENGTH,
     FE_READ_SNR,
-    FE_READ_BER,
+    FE_READ_STATUS,
+    ChannelSignalScanWorker,
+    DvbSignalReader,
 )
-from kaffeine_dvr.gui import ChannelSignalHealthDialog
 
 
 def test_dvb_signal_reader_no_device():

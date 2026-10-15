@@ -7,6 +7,7 @@ color themes, channel mappings, recording safety buffers, and bounds checking.
 
 import json
 import os
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -56,14 +57,14 @@ def compute_past_theme_colors(grid_bg_hex: str, text_primary_hex: Optional[str] 
             "past_title": "#788292",
             "past_subtext": "#5a6474",
         }
-    h, l, s = colorsys.rgb_to_hls(r, g, b)
+    h, lum, s = colorsys.rgb_to_hls(r, g, b)
 
-    if l < 0.08:
-        l_past = min(1.0, l + 0.03)
+    if lum < 0.08:
+        l_past = min(1.0, lum + 0.03)
         l_past_alt = min(1.0, l_past + 0.02)
         l_border = min(1.0, l_past + 0.08)
     else:
-        l_past = max(0.04, l * 0.75)
+        l_past = max(0.04, lum * 0.75)
         l_past_alt = max(0.03, l_past * 0.90)
         l_border = min(1.0, l_past * 1.5)
 
@@ -77,7 +78,7 @@ def compute_past_theme_colors(grid_bg_hex: str, text_primary_hex: Optional[str] 
     past_bg_alt = to_hex(h, l_past_alt, s_past)
     past_border = to_hex(h, l_border, s_past * 0.8)
 
-    l_title = max(0.45, min(0.65, l + 0.45))
+    l_title = max(0.45, min(0.65, lum + 0.45))
     l_sub = max(0.35, min(0.55, l_title - 0.15))
     s_text = max(0.08, min(0.35, s * 0.6))
     past_title = to_hex(h, l_title, s_text)
@@ -448,7 +449,7 @@ class ConfigManager:
         self.config_file = self.config_dir / "config.json"
         self.data_dir = self.home_dir / ".local" / "share" / "kaffeine-dvr"
         self.kaffeine_db_path = self.home_dir / ".local" / "share" / "kaffeine" / "sqlite.db"
-        
+
         self.config_dir.mkdir(parents=True, exist_ok=True)
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.data = self._load()
@@ -565,7 +566,7 @@ class ConfigManager:
                     return data
             except Exception:
                 pass
-        
+
         default_data = self.get_default_config()
         self._save(default_data)
         return default_data
@@ -1018,7 +1019,7 @@ class ConfigManager:
             if not name:
                 continue
             name_upper = name.upper()
-            
+
             # Collect all names this channel is known by (scanned name + any mapped aliases)
             all_known_names = {name_upper} | alias_map.get(name_upper, set())
 

@@ -60,7 +60,6 @@ def detect_player_installation(player_key: str) -> str:
     - 'flatpak': found via Flatpak app installation
     - '': not detected
     """
-    import shutil
     info = SUPPORTED_PLAYERS.get(player_key)
     if not info:
         return ""
@@ -84,7 +83,6 @@ def resolve_system_default_player_command(file_path: str) -> Optional[List[str]]
     Resolve the actual binary and arguments for the user's default desktop media player
     via xdg-mime and .desktop files, rather than calling the transient xdg-open wrapper.
     """
-    import shlex
     import shutil
 
     desktop_dirs = [
@@ -152,7 +150,6 @@ class KaffeineDbusClient:
         3. System PATH lookup via shutil.which("kaffeine").
         4. Standard distribution location /usr/bin/kaffeine.
         """
-        import shutil
         try:
             from .config import ConfigManager
             cfg = ConfigManager()
@@ -286,7 +283,6 @@ class KaffeineDbusClient:
 
     def minimize_kaffeine(self, mode: str = "taskbar") -> bool:
         """Minimize Kaffeine window to the taskbar or system tray if running."""
-        import shutil
         kdotool_bin = shutil.which("kdotool")
         xdotool_bin = shutil.which("xdotool")
         if not kdotool_bin and not xdotool_bin:
@@ -352,7 +348,6 @@ class KaffeineDbusClient:
         we continue asserting minimization for post_match_duration seconds after the window is first seen.
         Strictly targets Kaffeine itself, never the Kaffeine DVR TV Guide application window.
         """
-        import shutil
         import time
 
         kdotool_bin = shutil.which("kdotool")
@@ -524,7 +519,6 @@ class KaffeineDbusClient:
 
     def raise_window(self):
         """Unminimize and raise Kaffeine window to the foreground."""
-        import shutil
         kdotool_bin = shutil.which("kdotool")
         xdotool_bin = shutil.which("xdotool")
         env = self._get_display_env()
@@ -576,7 +570,6 @@ class KaffeineDbusClient:
         while ensuring single_instance_enabled=false so it never hijacks or affects other player windows.
         """
         import re
-        import shutil
 
         base_user_dir = Path.home() / ".config" / "smplayer"
         target_dir = Path.home() / ".config" / "kaffeine-dvr" / "smplayer"
@@ -632,7 +625,6 @@ class KaffeineDbusClient:
         env = self._get_display_env()
         player_mode = (player or "system").lower().strip()
 
-        import shlex
         import shutil
 
         cmd = []
@@ -719,7 +711,7 @@ class KaffeineDbusClient:
         import dbus
         bus = dbus.SessionBus()
         proxy = bus.get_object(self.service_name, self.object_path)
-        
+
         # Call ListProgramSchedule
         # Try through interface or direct method call
         try:
@@ -762,7 +754,7 @@ class KaffeineDbusClient:
             conn = sqlite3.connect(str(self.kaffeine_db_path))
             cur = conn.cursor()
             cur.execute("""
-                SELECT Id, Name, Channel, Begin, Duration, Repeat, Disabled, Subheading, Details 
+                SELECT Id, Name, Channel, Begin, Duration, Repeat, Disabled, Subheading, Details
                 FROM RecordingSchedule ORDER BY Begin ASC
             """)
             rows = cur.fetchall()

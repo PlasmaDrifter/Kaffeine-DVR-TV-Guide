@@ -27,3 +27,11 @@ include = ["kaffeine_dvr*"]
 [tool.pytest.ini_options]
 qt_api = "pyqt6"
 addopts = "-ra"
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]

@@ -95,7 +95,7 @@ class TVMazeProvider:
         url = f"https://api.tvmaze.com/schedule?country={country}&date={today_str}"
         headers = {"User-Agent": cls.USER_AGENT}
         req = urllib.request.Request(url, headers=headers)
-        
+
         start_t = time.perf_counter()
         try:
             with urllib.request.urlopen(req, timeout=10) as resp:  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
@@ -246,7 +246,7 @@ class TVPassportProvider:
         url = f"{base}/{today_str}"
         headers = {"User-Agent": cls.USER_AGENT}
         req = urllib.request.Request(url, headers=headers)
-        
+
         start_t = time.perf_counter()
         try:
             with urllib.request.urlopen(req, timeout=12) as resp:  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected

@@ -13,7 +13,6 @@ from .dbus_client import KaffeineDbusClient
 from .guide_service import GuideService
 from .queue_manager import QueueManager
 
-
 SPORTS_KEYWORDS = (
     "football", "nfl", "ncaa", "basketball", "nba", "wnba", "baseball", "mlb",
     "hockey", "nhl", "soccer", "premier league", "nascar", "racing", "pga",

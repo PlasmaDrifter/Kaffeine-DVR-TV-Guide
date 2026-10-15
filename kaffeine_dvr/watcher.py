@@ -230,7 +230,7 @@ class Watcher:
         cfg = ConfigManager()
         interval_seconds = getattr(cfg, "auto_sync_interval_hours", 6) * 3600
         now = time.time()
-        
+
         # If we haven't synced yet in this session or interval has elapsed
         if (now - self.last_sync_time) >= interval_seconds:
             self.last_sync_time = now
@@ -242,7 +242,7 @@ class Watcher:
                 guide_svc = GuideService(channel_map=cfg.channel_map, config_mgr=cfg)
                 synced_count = guide_svc.sync_guide(days=cfg.guide_days_ahead)
                 print(f"[{now_str}] Guide sync completed: {synced_count} programs cached.", flush=True)
-                
+
                 rules_eng = RulesEngine(cfg, self.dbus_client, guide_svc)
                 scheduled = rules_eng.evaluate_and_schedule()
                 print(f"[{now_str}] Rule evaluation completed: {len(scheduled)} recordings scheduled.", flush=True)

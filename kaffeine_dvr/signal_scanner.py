@@ -11,7 +11,7 @@ import os
 import struct
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
 
@@ -272,7 +272,7 @@ class ChannelSignalScanWorker(QThread):
                 if television_iface:
                     try:
                         television_iface.PlayChannel(ch_name)
-                    except Exception as e:
+                    except Exception:
                         # Log but continue to allow checking status
                         pass
 

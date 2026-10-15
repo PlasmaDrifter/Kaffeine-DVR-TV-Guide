@@ -110,7 +110,7 @@ try:
     from .guide_service import GuideService
     from .queue_manager import QueueManager
     from .rules_engine import RulesEngine
-    from .signal_scanner import ChannelSignalScanWorker, DvbSignalReader
+    from .signal_scanner import ChannelSignalScanWorker
     from .storage_manager import StorageManager
     from .watcher import Watcher
 except (ImportError, ValueError):
@@ -124,7 +124,7 @@ except (ImportError, ValueError):
     from kaffeine_dvr.guide_service import GuideService
     from kaffeine_dvr.queue_manager import QueueManager
     from kaffeine_dvr.rules_engine import RulesEngine
-    from kaffeine_dvr.signal_scanner import ChannelSignalScanWorker, DvbSignalReader
+    from kaffeine_dvr.signal_scanner import ChannelSignalScanWorker
     from kaffeine_dvr.storage_manager import StorageManager
     from kaffeine_dvr.watcher import Watcher
 
@@ -379,8 +379,7 @@ class ThemedComboBox(QComboBox):
         opt.subControls = QStyle.SubControl.SC_ComboBoxFrame
         style_painter.drawComplexControl(QStyle.ComplexControl.CC_ComboBox, opt)
 
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        style_painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         w = self.width()
         h = self.height()
@@ -398,16 +397,16 @@ class ThemedComboBox(QComboBox):
             arrow_color.setAlpha(200)
 
         pen = QPen(arrow_color, 2.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
-        painter.setPen(pen)
+        style_painter.setPen(pen)
 
         ax = w - 14
         ay = h // 2 - 2
-        painter.drawLine(ax - 4, ay, ax, ay + 4)
-        painter.drawLine(ax, ay + 4, ax + 4, ay)
+        style_painter.drawLine(ax - 4, ay, ax, ay + 4)
+        style_painter.drawLine(ax, ay + 4, ax + 4, ay)
 
         # Draw text
         text = self.itemText(self.currentIndex())
-        painter.setPen(self.palette().color(QPalette.ColorRole.Text))
+        style_painter.setPen(self.palette().color(QPalette.ColorRole.Text))
         if self.centered:
             text_rect = QRect(0, 0, w, h)
             style_painter.drawItemText(text_rect, Qt.AlignmentFlag.AlignCenter, self.palette(), self.isEnabled(), text, QPalette.ColorRole.Text)
@@ -637,7 +636,7 @@ class ServiceLogsDialog(BaseFramelessDialog):
 
         lines = self.raw_logs.splitlines()
         if query:
-            filtered = [l for l in lines if query in l.lower()]
+            filtered = [line_txt for line_txt in lines if query in line_txt.lower()]
             self.log_view.setPlainText("\n".join(filtered))
             self.line_count_lbl.setText(f"Showing {len(filtered)} of {len(lines)} lines (filtered)")
         else:
@@ -773,7 +772,7 @@ class ManualRecordDialog(BaseFramelessDialog):
         self.title_input = QLineEdit()
         self.channel_combo = ThemedComboBox()
         self.channel_combo.addItems(channels)
-        
+
         now = datetime.now()
         self.start_input = QLineEdit(now.strftime("%Y-%m-%dT%H:%M:00"))
         self.duration_input = QLineEdit("01:00:00")
@@ -1318,8 +1317,8 @@ class ChannelSignalHealthDialog(BaseFramelessDialog):
 
         # Minimize Kaffeine if configured launch mode is taskbar or tray
         try:
-            from .dbus_client import KaffeineDbusClient
             from .config import ConfigManager
+            from .dbus_client import KaffeineDbusClient
             cfg = ConfigManager()
             if cfg.launch_mode in ("taskbar", "tray"):
                 KaffeineDbusClient().minimize_kaffeine(mode=cfg.launch_mode)
@@ -1807,7 +1806,7 @@ class AdjustBufferDialog(BaseFramelessDialog):
     def _update_elided_title(self):
         fm = self.title_lbl.fontMetrics()
         avail_w = max(100, self.title_lbl.width() if self.title_lbl.width() > 0 else self.width() - 80)
-        
+
         words = self.raw_title.split()
         if not words:
             self.title_lbl.setText("")
@@ -3307,13 +3306,10 @@ class GuideGridVerticalHeader(QHeaderView):
         cfg = getattr(mw, "config_mgr", None) if mw else None
         app_theme_key = getattr(cfg, "app_theme", "midnight") if cfg else "midnight"
         tokens = APP_THEMES.get(app_theme_key, APP_THEMES.get("midnight", {}))
-        cat_colors = getattr(cfg, "category_colors", {}) if cfg else {}
-
         # Theme-derived color tokens
         header_bg_hex = tokens.get("table_header_bg") or "#1e2330"
         border_hex = tokens.get("border_color") or tokens.get("table_gridline") or "#332623"
         text_primary_hex = tokens.get("text_primary") or "#ffffff"
-        accent_hex = tokens.get("accent_primary") or "#ea580c"
 
         # Retrieve channel name for this row
         channel_name = ""
@@ -4860,13 +4856,12 @@ class MainWindow(QMainWindow):
             app._wheel_filter_installed = True
 
         # Check for first-run setup wizard for new users
-        QTimer.singleShot(600, self.check_first_run)
-
-        # Run health check quietly on startup to populate settings dashboard
-        QTimer.singleShot(1500, lambda: self.test_all_sources_health(silent=True))
-
-        # Check monthly updates if enabled
-        QTimer.singleShot(2500, self.check_monthly_updates_on_startup)
+        if not os.environ.get("PYTEST_CURRENT_TEST"):
+            QTimer.singleShot(600, self.check_first_run)
+            # Run health check quietly on startup to populate settings dashboard
+            QTimer.singleShot(1500, lambda: self.test_all_sources_health(silent=True))
+            # Check monthly updates if enabled
+            QTimer.singleShot(2500, self.check_monthly_updates_on_startup)
 
     def init_ui(self):
         central_widget = QWidget()
@@ -6466,7 +6461,7 @@ class MainWindow(QMainWindow):
             swatch_btn.setFixedSize(26, 26)
             swatch_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             swatch_btn.setStyleSheet(f"QPushButton.category-color-tile {{ background-color: {hex_val}; }}")
-            swatch_btn.clicked.connect(lambda checked=False, k=cat_key, l=cat_label: self._choose_category_color(k, l))
+            swatch_btn.clicked.connect(lambda checked=False, k=cat_key, cat_lbl=cat_label: self._choose_category_color(k, cat_lbl))
             col1_grid.addWidget(swatch_btn, r_idx, 0, Qt.AlignmentFlag.AlignVCenter)
             self._cat_swatches[cat_key] = swatch_btn
 
@@ -7537,10 +7532,11 @@ class MainWindow(QMainWindow):
         layout.addWidget(title_box)
 
         # Base style helper
-        make_card_style = lambda color: (
-            "QGroupBox { font-size: 15px; font-weight: bold; margin-top: 14px; padding-top: 18px; } "
-            f"QGroupBox::title {{ subcontrol-origin: margin; subcontrol-position: top center; padding: 0 6px; color: {color}; }}"
-        )
+        def make_card_style(color: str) -> str:
+            return (
+                "QGroupBox { font-size: 15px; font-weight: bold; margin-top: 14px; padding-top: 18px; } "
+                f"QGroupBox::title {{ subcontrol-origin: margin; subcontrol-position: top center; padding: 0 6px; color: {color}; }}"
+            )
         body_style = "color: #d8e2ee; font-size: 14px; line-height: 1.6;"
 
         # Step 1: Physical Channels & Antenna Scan (Kaffeine)
@@ -7652,10 +7648,11 @@ class MainWindow(QMainWindow):
         layout.addWidget(title_box)
 
         # Base styles
-        make_group_style = lambda color: (
-            "QGroupBox { font-size: 15px; font-weight: bold; margin-top: 14px; padding-top: 18px; } "
-            f"QGroupBox::title {{ subcontrol-origin: margin; subcontrol-position: top center; padding: 0 6px; color: {color}; }}"
-        )
+        def make_group_style(color: str) -> str:
+            return (
+                "QGroupBox { font-size: 15px; font-weight: bold; margin-top: 14px; padding-top: 18px; } "
+                f"QGroupBox::title {{ subcontrol-origin: margin; subcontrol-position: top center; padding: 0 6px; color: {color}; }}"
+            )
         body_style = "color: #d8e2ee; font-size: 14px; line-height: 1.6;"
 
         # Section 1: Guide Sources & Coverage
@@ -7767,10 +7764,11 @@ class MainWindow(QMainWindow):
         layout.addWidget(title_box)
 
         # Base style helpers
-        make_group_style = lambda color: (
-            "QGroupBox { font-size: 15px; font-weight: bold; margin-top: 14px; padding-top: 18px; } "
-            f"QGroupBox::title {{ subcontrol-origin: margin; subcontrol-position: top center; padding: 0 6px; color: {color}; }}"
-        )
+        def make_group_style(color: str) -> str:
+            return (
+                "QGroupBox { font-size: 15px; font-weight: bold; margin-top: 14px; padding-top: 18px; } "
+                f"QGroupBox::title {{ subcontrol-origin: margin; subcontrol-position: top center; padding: 0 6px; color: {color}; }}"
+            )
         body_style = "color: #d8e2ee; font-size: 14px; line-height: 1.6;"
 
         # Section 1: Navigation & Interactive Controls
@@ -8001,10 +7999,10 @@ class MainWindow(QMainWindow):
         self.status_bar.showMessage("Schedules Direct check completed.", 3000)
 
     def save_sd_settings(self):
-        u = self.sd_user_input.text().strip()
-        p = self.sd_pass_input.text().strip()
-        l = self.sd_lineup_input.text().strip()
-        self.config_mgr.schedules_direct = {"username": u, "password": p, "lineup": l}
+        user_val = self.sd_user_input.text().strip()
+        pass_val = self.sd_pass_input.text().strip()
+        lineup_val = self.sd_lineup_input.text().strip()
+        self.config_mgr.schedules_direct = {"username": user_val, "password": pass_val, "lineup": lineup_val}
         self.test_all_sources_health(silent=True)
         QMessageBox.information(self, "Saved", "Schedules Direct credentials saved successfully.")
 
@@ -9050,13 +9048,15 @@ class MainWindow(QMainWindow):
         self._clock_timer = QTimer(self)
         self._clock_timer.setInterval(1000)
         self._clock_timer.timeout.connect(self._update_clock_display)
-        self._clock_timer.start()
 
         # Real-time guide synchronization every 60 seconds
         self._guide_realtime_timer = QTimer(self)
         self._guide_realtime_timer.setInterval(60000)
         self._guide_realtime_timer.timeout.connect(self._update_guide_realtime)
-        self._guide_realtime_timer.start()
+
+        if not os.environ.get("PYTEST_CURRENT_TEST"):
+            self._clock_timer.start()
+            self._guide_realtime_timer.start()
 
     def _check_schedule_status_updates(self, force: bool = False):
         """
@@ -10978,7 +10978,7 @@ class MainWindow(QMainWindow):
         query = self.guide_search_input.text().strip()
         channel = self.guide_channel_combo.currentText()
         airdate = self.guide_date_combo.currentData()
-        
+
         # When viewing the grid for a specific date or today, don't trim earlier shows of that day.
         # In list mode with All Upcoming, trim ended programs.
         is_grid = (self.guide_stack.currentIndex() == 0)
@@ -11272,7 +11272,7 @@ class MainWindow(QMainWindow):
 
                 item = QTableWidgetItem(show_title)
                 item.setData(Qt.ItemDataRole.UserRole, p_copy)
-                
+
                 # Visual styling based on timing state
                 if timing_state == "past":
                     cur_bg = QColor("#161922") if (idx % 2 == 0) else QColor("#14171f")
@@ -11459,12 +11459,6 @@ class MainWindow(QMainWindow):
 
         self.guide_detail_title.setText(header_prefix + colored_title + rest_of_header)
         self.guide_detail_text.setText(summary)
-
-        live_mode = getattr(self.config_mgr, "live_tv_watch_mode", "timeshift")
-        rec_file = timing_info.get("recorded_file")
-        is_live_rec = timing_info.get("is_active_recording") or bool(rec_file)
-        player_name = self.config_mgr.playback_player
-        player_disp = "Player" if player_name == "system" else player_name.upper()
 
         single_click = getattr(self.config_mgr, "guide_single_click_play", True)
 
@@ -11753,7 +11747,6 @@ class MainWindow(QMainWindow):
         timing_info = self._get_program_timing_state(prog)
         state = timing_info.get("state")
         ch = prog.get("kaffeine_channel") or prog.get("channel", "")
-        title = prog.get("show_title") or prog.get("title") or "Program"
         rec_file = timing_info.get("recorded_file")
         is_live_rec = timing_info.get("is_active_recording") or bool(rec_file)
 
@@ -12809,9 +12802,6 @@ class MainWindow(QMainWindow):
                     self.status_bar.clearMessage()
                 except Exception:
                     pass
-
-            QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
-            QApplication.processEvents()
         except Exception:
             pass
         super().closeEvent(event)

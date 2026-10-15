@@ -134,7 +134,7 @@ class QueueManager:
 
         # Check for duplicates or update if still QUEUED
         cur.execute("""
-            SELECT id, status, buffer_mins FROM recording_queue 
+            SELECT id, status, buffer_mins FROM recording_queue
             WHERE channel = ? AND start_iso = ? AND status IN ('QUEUED', 'ARMED', 'RECORDING')
         """, (channel, start_iso))
         existing = cur.fetchone()
@@ -660,7 +660,7 @@ class QueueManager:
         cur = conn.cursor()
         cur.execute("SELECT * FROM recording_queue WHERE status IN ('ARMED', 'RECORDING', 'QUEUED', 'COMPLETED')")
         active = [dict(r) for r in cur.fetchall()]
-        
+
         now = datetime.now()
         started_count = 0
         archived_count = 0

@@ -422,6 +422,7 @@ def test_grid_immediate_highlight_on_show_switch_and_toggle(qtbot, isolated_conf
 
 def test_themed_combo_box(qtbot):
     from PyQt6.QtGui import QPainter, QPixmap
+
     from kaffeine_dvr.gui import ThemedComboBox
 
     combo = ThemedComboBox()
@@ -452,6 +453,7 @@ def test_settings_dropdowns_are_themed(qtbot, isolated_config):
 
 def test_number_stepper_focus_event(qtbot):
     from PyQt6.QtCore import QEvent
+
     from kaffeine_dvr.gui import NumberStepper
 
     stepper = NumberStepper()
@@ -486,18 +488,19 @@ def test_build_app_stylesheet_number_stepper_and_combobox():
 
 def test_base_frameless_dialogs(qtbot, isolated_config):
     from PyQt6.QtGui import QPainter, QPixmap
+
     from kaffeine_dvr.gui import (
-        BaseFramelessDialog,
-        UpcomingShowDialog,
-        ManualRecordDialog,
         AddRuleDialog,
-        EditRuleDialog,
-        RetentionCleanupDialog,
         AdjustBufferDialog,
+        BaseFramelessDialog,
+        ChannelSignalHealthDialog,
+        EditRuleDialog,
         FirstRunWelcomeDialog,
-        ServiceLogsDialog,
+        ManualRecordDialog,
         ReleaseNotesDialog,
-        ChannelSignalHealthDialog
+        RetentionCleanupDialog,
+        ServiceLogsDialog,
+        UpcomingShowDialog,
     )
 
     # 1. Base class properties
@@ -551,8 +554,8 @@ def test_base_frameless_dialogs(qtbot, isolated_config):
     assert bool(manual_dlg.windowFlags() & Qt.WindowType.FramelessWindowHint)
 
     # 5. Test mouse drag tracking
-    from PyQt6.QtGui import QMouseEvent
     from PyQt6.QtCore import QPointF
+    from PyQt6.QtGui import QMouseEvent
     press_event = QMouseEvent(
         QMouseEvent.Type.MouseButtonPress,
         QPointF(20.0, 20.0),
@@ -577,9 +580,8 @@ def test_base_frameless_dialogs(qtbot, isolated_config):
 
 
 def test_system_player_resolution_and_timeshift_poll(monkeypatch, tmp_path):
-    from kaffeine_dvr.dbus_client import resolve_system_default_player_command, KaffeineDbusClient
+    from kaffeine_dvr.dbus_client import KaffeineDbusClient
     from kaffeine_dvr.gui import MainWindow
-    from kaffeine_dvr.config import ConfigManager
 
     # 1. Test resolve_system_default_player_command with mock desktop file
     app_dir = tmp_path / "applications"
@@ -599,10 +601,9 @@ def test_system_player_resolution_and_timeshift_poll(monkeypatch, tmp_path):
     test_video = str(tmp_path / "stream.m2t")
     # Patch desktop_dirs search inside resolve_system_default_player_command by injecting app_dir
     import kaffeine_dvr.dbus_client as dbc
-    orig_resolve = dbc.resolve_system_default_player_command
 
     def mock_resolve(file_path):
-        import subprocess, shutil, shlex
+        import shlex
         out = "custom-player.desktop"
         p = app_dir / out
         with open(p, "r", encoding="utf-8") as f:
@@ -689,7 +690,6 @@ def test_guide_grid_context_menu_record_without_play_and_description(qtbot, isol
     monkeypatch.setattr(win, "handle_program_activation", lambda p: activated_progs.append(p))
 
     captured_menus = []
-    real_exec = QMenu.exec
 
     def mock_exec(menu_self, *args, **kwargs):
         captured_menus.append(menu_self)
@@ -698,7 +698,6 @@ def test_guide_grid_context_menu_record_without_play_and_description(qtbot, isol
     monkeypatch.setattr(QMenu, "exec", mock_exec)
 
     # Simulate right click context menu on cell (0, 0)
-    vp = table.viewport()
     pos = table.visualItemRect(item).center()
     win._on_guide_grid_context_menu(pos)
 
@@ -733,7 +732,7 @@ def test_guide_grid_context_menu_record_without_play_and_description(qtbot, isol
             break
     assert header_widget is not None
     labels = header_widget.findChildren(QLabel)
-    label_texts = " ".join(l.text() for l in labels)
+    label_texts = " ".join(lbl.text() for lbl in labels)
     assert "Right Click Mystery" in label_texts
     assert "A captivating mystery show" in label_texts
 
@@ -745,7 +744,6 @@ def test_guide_grid_context_menu_record_without_play_and_description(qtbot, isol
     active_map = win.queue_mgr.get_active_scheduled_map()
     assert ("channel 5.1", "2026-10-15T21:00") in active_map
     assert win.guide_detail_text.isVisible() is False
-    win.close()
 
 
 def test_guide_grid_context_menu_when_already_scheduled(qtbot, isolated_config, monkeypatch):
@@ -785,7 +783,6 @@ def test_guide_grid_context_menu_when_already_scheduled(qtbot, isolated_config, 
     assert any("Buffer (+10m)" in t for t in pill_texts)
     assert any("Cancel Rec" in t for t in pill_texts)
     assert "Record Program" not in pill_texts
-    win.close()
 
 
 def test_guide_list_context_menu(qtbot, isolated_config, monkeypatch):
@@ -816,7 +813,6 @@ def test_guide_list_context_menu(qtbot, isolated_config, monkeypatch):
     pills = captured_menus[0].findChildren(QPushButton)
     pill_texts = [b.text() for b in pills]
     assert "Record Program" in pill_texts
-    win.close()
 
 
 def test_guide_context_menu_watch_upcoming_bypasses_upcoming_dialog(qtbot, isolated_config, monkeypatch):
@@ -864,7 +860,6 @@ def test_guide_context_menu_watch_upcoming_bypasses_upcoming_dialog(qtbot, isola
     # Started timeshift for channel directly
     assert len(started_timeshift) == 1
     assert started_timeshift[0]["kaffeine_channel"] == "Channel 11.1"
-    win.close()
 
 
 def test_guide_context_menu_long_description_more_button(qtbot, isolated_config, monkeypatch):
@@ -900,7 +895,6 @@ def test_guide_context_menu_long_description_more_button(qtbot, isolated_config,
     pills = menu.findChildren(QPushButton)
     more_btns = [b for b in pills if "full description" in b.text().lower()]
     assert len(more_btns) == 1
-    win.close()
 
 
 def test_watch_and_timeshift_buttons_hidden_when_single_click_enabled(qtbot, isolated_config):
@@ -944,7 +938,6 @@ def test_watch_and_timeshift_buttons_hidden_when_single_click_enabled(qtbot, iso
     win._on_single_click_play_toggled(False)
     assert win.watch_guide_btn.isVisible() is True
     assert win.stop_timeshift_btn.isVisible() is True
-    win.close()
 
 
 def test_guide_list_single_click_and_double_click_actions(qtbot, isolated_config, monkeypatch):
@@ -998,8 +991,6 @@ def test_guide_list_single_click_and_double_click_actions(qtbot, isolated_config
     assert len(activated_progs) == 2
     assert activated_progs[1]["show_title"] == "List Single Click Show"
 
-    win.close()
-
 
 def test_kaffeine_launch_mode_label(qtbot, isolated_config):
     win = MainWindow(config_mgr=isolated_config)
@@ -1008,9 +999,8 @@ def test_kaffeine_launch_mode_label(qtbot, isolated_config):
 
     # Find the label in DVR settings
     labels = [lbl.text() for lbl in win.findChildren(QLabel)]
-    assert any("Kaffeine Launch Mode:" in l for l in labels)
-    assert not any("Recording Launch Mode:" in l for l in labels)
-    win.close()
+    assert any("Kaffeine Launch Mode:" in lbl for lbl in labels)
+    assert not any("Recording Launch Mode:" in lbl for lbl in labels)
 
 
 def test_live_badge_text_contrast(qtbot, isolated_config):
@@ -1073,10 +1063,9 @@ def test_updates_tab_contact_row(qtbot, isolated_config):
 
     tab = win.create_settings_updates_tab()
     labels = [lbl.text() for lbl in tab.findChildren(QLabel)]
-    assert any("Contact:" in l for l in labels)
-    assert any("plasmadrifter121@gmail.com" in l for l in labels)
-    assert any("email about bugs" in l for l in labels)
-    win.close()
+    assert any("Contact:" in lbl for lbl in labels)
+    assert any("plasmadrifter121@gmail.com" in lbl for lbl in labels)
+    assert any("email about bugs" in lbl for lbl in labels)
 
 
 def test_selected_scheduled_program_border_is_red(qtbot, isolated_config):
@@ -1169,11 +1158,10 @@ def test_notification_settings_ui(qtbot, isolated_config):
     win.notify_persistent_check.setChecked(False)
     assert isolated_config.persistent_desktop_notifications is False
 
-    win.close()
-
 
 def test_send_desktop_notification_persistence(monkeypatch):
     import subprocess
+
     from kaffeine_dvr.watcher import send_desktop_notification
 
     calls = []

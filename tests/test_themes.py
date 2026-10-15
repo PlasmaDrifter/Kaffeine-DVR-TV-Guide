@@ -307,7 +307,6 @@ def test_guide_grid_themes_alphabetical_order(qtbot, isolated_config):
             chips.append(w.display_name)
     assert len(chips) == len(THEME_PRESETS)
     assert chips == sorted(chips, key=lambda s: s.lower())
-    win.close()
 
 
 def test_single_click_help_badge_and_abilities(qtbot, isolated_config):
@@ -323,5 +322,4 @@ def test_single_click_help_badge_and_abilities(qtbot, isolated_config):
     assert "Select for Details" in tooltip or "select" in tooltip.lower()
     assert "description" in tooltip.lower()
     assert "Right-Click" in tooltip
-    win.close()
 

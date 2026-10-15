@@ -36,8 +36,6 @@ def test_custom_title_bar_widgets(qtbot, isolated_config):
     assert title_bar.max_btn.toolTip() == "Maximize"
     assert win.centralWidget().property("frameless_rounded") == "true"
 
-    win.close()
-
 
 def test_custom_title_bar_config_toggle(qtbot, isolated_config):
     cfg = isolated_config
@@ -63,8 +61,6 @@ def test_custom_title_bar_config_toggle(qtbot, isolated_config):
     assert not win.custom_title_bar.isHidden()
     assert not win.clock_widget.isHidden()
 
-    win.close()
-
 
 def test_custom_title_bar_window_state_change(qtbot, isolated_config):
     win = MainWindow(config_mgr=isolated_config)
@@ -83,5 +79,3 @@ def test_custom_title_bar_window_state_change(qtbot, isolated_config):
     win.changeEvent(event)
     assert title_bar.max_btn.text() == "▢"
     assert win.centralWidget().property("frameless_rounded") == "true"
-
-    win.close()

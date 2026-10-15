@@ -1,14 +1,12 @@
-import sqlite3
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock
 
-import pytest
 from PyQt6.QtCore import QEvent, QPointF, Qt
 from PyQt6.QtGui import QMouseEvent
 from PyQt6.QtWidgets import QApplication, QPushButton, QTableWidget
 
 from kaffeine_dvr.config import ConfigManager
-from kaffeine_dvr.gui import MainWindow, TableButtonCell, build_app_stylesheet
+from kaffeine_dvr.gui import MainWindow, build_app_stylesheet
 from kaffeine_dvr.queue_manager import QueueManager
 
 
@@ -132,107 +130,104 @@ def test_gui_active_schedule_status_and_history_updates(qtbot, isolated_config: 
     win = MainWindow(config_mgr=isolated_config)
     qtbot.addWidget(win)
 
-    try:
-        # Check column headers for rec_table and history_table
-        assert win.rec_table.columnCount() == 7
-        assert win.rec_table.horizontalHeaderItem(0).text() == "Watch"
-        assert win.rec_table.horizontalHeaderItem(1).text() == "Title"
-        assert win.history_table.columnCount() == 6
-        assert win.history_table.horizontalHeaderItem(0).text() == "Watch"
-        assert win.history_table.horizontalHeaderItem(1).text() == "Title"
-        assert win.history_table.horizontalHeaderItem(5).text() == "Status"
+    # Check column headers for rec_table and history_table
+    assert win.rec_table.columnCount() == 7
+    assert win.rec_table.horizontalHeaderItem(0).text() == "Watch"
+    assert win.rec_table.horizontalHeaderItem(1).text() == "Title"
+    assert win.history_table.columnCount() == 6
+    assert win.history_table.horizontalHeaderItem(0).text() == "Watch"
+    assert win.history_table.horizontalHeaderItem(1).text() == "Title"
+    assert win.history_table.horizontalHeaderItem(5).text() == "Status"
 
-        # Initially empty
-        win.refresh_recordings(force=True)
-        assert win.rec_table.rowCount() == 0
-        assert win.history_table.rowCount() == 0
+    # Initially empty
+    win.refresh_recordings(force=True)
+    assert win.rec_table.rowCount() == 0
+    assert win.history_table.rowCount() == 0
 
-        # Add a queued recording in the future: should NOT have a Watch button
-        future_iso = (datetime.now() + timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%S")
-        q_fut_id = win.queue_mgr.add_recording("Future Queued", "NBC 12.1", future_iso, "01:00:00")
-        win.refresh_recordings(force=True)
-        assert win.rec_table.rowCount() == 1
-        assert _extract_watch_button(win.rec_table.cellWidget(0, 0)) is None
-        win.queue_mgr.remove_recording(q_fut_id)
+    # Add a queued recording in the future: should NOT have a Watch button
+    future_iso = (datetime.now() + timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%S")
+    q_fut_id = win.queue_mgr.add_recording("Future Queued", "NBC 12.1", future_iso, "01:00:00")
+    win.refresh_recordings(force=True)
+    assert win.rec_table.rowCount() == 1
+    assert _extract_watch_button(win.rec_table.cellWidget(0, 0)) is None
+    win.queue_mgr.remove_recording(q_fut_id)
 
-        # Add an armed recording starting now
-        start_dt = datetime.now() - timedelta(seconds=10)
-        start_iso = start_dt.strftime("%Y-%m-%dT%H:%M:%S")
-        qid = win.queue_mgr.add_recording("Active Breaking News", "CNN 3.1", start_iso, "01:00:00")
-        win.queue_mgr.mark_armed(qid, 555)
+    # Add an armed recording starting now
+    start_dt = datetime.now() - timedelta(seconds=10)
+    start_iso = start_dt.strftime("%Y-%m-%dT%H:%M:%S")
+    qid = win.queue_mgr.add_recording("Active Breaking News", "CNN 3.1", start_iso, "01:00:00")
+    win.queue_mgr.mark_armed(qid, 555)
 
-        # Trigger periodic status check (force=True since window is not shown)
-        win._check_schedule_status_updates(force=True)
+    # Trigger periodic status check (force=True since window is not shown)
+    win._check_schedule_status_updates(force=True)
 
-        # Active table should reflect transition to RECORDING
-        assert win.rec_table.rowCount() == 1
-        title_it = win.rec_table.item(0, 1)
-        watch_btn = _extract_watch_button(win.rec_table.cellWidget(0, 0))
-        assert isinstance(watch_btn, QPushButton)
-        assert "Watch" in watch_btn.text()
-        assert watch_btn.objectName() == "tableWatchBtn"
-        assert watch_btn.maximumWidth() == 78 and watch_btn.maximumHeight() == 24
-        assert watch_btn.minimumWidth() == 78 and watch_btn.minimumHeight() == 24
+    # Active table should reflect transition to RECORDING
+    assert win.rec_table.rowCount() == 1
+    title_it = win.rec_table.item(0, 1)
+    watch_btn = _extract_watch_button(win.rec_table.cellWidget(0, 0))
+    assert isinstance(watch_btn, QPushButton)
+    assert "Watch" in watch_btn.text()
+    assert watch_btn.objectName() == "tableWatchBtn"
+    assert watch_btn.maximumWidth() == 78 and watch_btn.maximumHeight() == 24
+    assert watch_btn.minimumWidth() == 78 and watch_btn.minimumHeight() == 24
 
-        status_it = win.rec_table.item(0, 5)
-        assert title_it.text() == "Active Breaking News"
-        assert "Recording Now" in status_it.text()
-        assert status_it.foreground().color().name().lower() == "#ff5252"
-        assert win.history_table.rowCount() == 0
+    status_it = win.rec_table.item(0, 5)
+    assert title_it.text() == "Active Breaking News"
+    assert "Recording Now" in status_it.text()
+    assert status_it.foreground().color().name().lower() == "#ff5252"
+    assert win.history_table.rowCount() == 0
 
-        # Now simulate show finishing by adjusting end_iso into the past in the database
-        conn = win.queue_mgr._get_connection()
-        cur = conn.cursor()
-        past_end = (datetime.now() - timedelta(seconds=5)).isoformat()
-        cur.execute("UPDATE recording_queue SET end_iso = ? WHERE id = ?", (past_end, qid))
-        conn.commit()
-        conn.close()
+    # Now simulate show finishing by adjusting end_iso into the past in the database
+    conn = win.queue_mgr._get_connection()
+    cur = conn.cursor()
+    past_end = (datetime.now() - timedelta(seconds=5)).isoformat()
+    cur.execute("UPDATE recording_queue SET end_iso = ? WHERE id = ?", (past_end, qid))
+    conn.commit()
+    conn.close()
 
-        # Trigger periodic check again
-        win._check_schedule_status_updates(force=True)
+    # Trigger periodic check again
+    win._check_schedule_status_updates(force=True)
 
-        # Active table should KEEP the show with status "Completed" (green #28a745)
-        assert win.rec_table.rowCount() == 1
-        assert win.rec_table.item(0, 1).text() == "Active Breaking News"
-        # Watch button must still be available for completed recording
-        completed_watch_btn = _extract_watch_button(win.rec_table.cellWidget(0, 0))
-        assert isinstance(completed_watch_btn, QPushButton)
-        assert "Watch" in completed_watch_btn.text()
-        assert completed_watch_btn.objectName() == "tableWatchBtn"
+    # Active table should KEEP the show with status "Completed" (green #28a745)
+    assert win.rec_table.rowCount() == 1
+    assert win.rec_table.item(0, 1).text() == "Active Breaking News"
+    # Watch button must still be available for completed recording
+    completed_watch_btn = _extract_watch_button(win.rec_table.cellWidget(0, 0))
+    assert isinstance(completed_watch_btn, QPushButton)
+    assert "Watch" in completed_watch_btn.text()
+    assert completed_watch_btn.objectName() == "tableWatchBtn"
 
-        completed_status_it = win.rec_table.item(0, 5)
-        assert completed_status_it.text() == "Completed"
-        assert completed_status_it.foreground().color().name().lower() == "#28a745"
+    completed_status_it = win.rec_table.item(0, 5)
+    assert completed_status_it.text() == "Completed"
+    assert completed_status_it.foreground().color().name().lower() == "#28a745"
 
-        # History table should also contain the completed show
-        assert win.history_table.rowCount() == 1
-        assert win.history_table.item(0, 1).text() == "Active Breaking News"
-        hist_watch_btn = _extract_watch_button(win.history_table.cellWidget(0, 0))
-        assert isinstance(hist_watch_btn, QPushButton)
-        assert "Watch" in hist_watch_btn.text()
-        assert hist_watch_btn.objectName() == "tableWatchBtn"
-        assert hist_watch_btn.maximumWidth() == 78 and hist_watch_btn.maximumHeight() == 24
-        assert hist_watch_btn.minimumWidth() == 78 and hist_watch_btn.minimumHeight() == 24
-        assert win.history_table.item(0, 3).text() == "CNN 3.1"
-        # Status column reflects that no physical file exists on disk
-        assert "Deleted from Disk" in win.history_table.item(0, 5).text()
-        assert not hist_watch_btn.isEnabled()
+    # History table should also contain the completed show
+    assert win.history_table.rowCount() == 1
+    assert win.history_table.item(0, 1).text() == "Active Breaking News"
+    hist_watch_btn = _extract_watch_button(win.history_table.cellWidget(0, 0))
+    assert isinstance(hist_watch_btn, QPushButton)
+    assert "Watch" in hist_watch_btn.text()
+    assert hist_watch_btn.objectName() == "tableWatchBtn"
+    assert hist_watch_btn.maximumWidth() == 78 and hist_watch_btn.maximumHeight() == 24
+    assert hist_watch_btn.minimumWidth() == 78 and hist_watch_btn.minimumHeight() == 24
+    assert win.history_table.item(0, 3).text() == "CNN 3.1"
+    # Status column reflects that no physical file exists on disk
+    assert "Deleted from Disk" in win.history_table.item(0, 5).text()
+    assert not hist_watch_btn.isEnabled()
 
-        # Now simulate 6 hours passing (older end_iso beyond 6 hours)
-        conn = win.queue_mgr._get_connection()
-        cur = conn.cursor()
-        expired_end = (datetime.now() - timedelta(hours=6, seconds=10)).isoformat()
-        cur.execute("UPDATE recording_queue SET end_iso = ? WHERE id = ?", (expired_end, qid))
-        conn.commit()
-        conn.close()
+    # Now simulate 6 hours passing (older end_iso beyond 6 hours)
+    conn = win.queue_mgr._get_connection()
+    cur = conn.cursor()
+    expired_end = (datetime.now() - timedelta(hours=6, seconds=10)).isoformat()
+    cur.execute("UPDATE recording_queue SET end_iso = ? WHERE id = ?", (expired_end, qid))
+    conn.commit()
+    conn.close()
 
-        win._check_schedule_status_updates(force=True)
-        # Now Active Schedule table is purged of the 6-hour expired entry
-        assert win.rec_table.rowCount() == 0
-        # History table retains the record
-        assert win.history_table.rowCount() == 1
-    finally:
-        win.close()
+    win._check_schedule_status_updates(force=True)
+    # Now Active Schedule table is purged of the 6-hour expired entry
+    assert win.rec_table.rowCount() == 0
+    # History table retains the record
+    assert win.history_table.rowCount() == 1
 
 
 def test_gui_watch_button_and_double_click_playback(qtbot, isolated_config: ConfigManager, tmp_path):
@@ -240,92 +235,86 @@ def test_gui_watch_button_and_double_click_playback(qtbot, isolated_config: Conf
     win = MainWindow(config_mgr=isolated_config)
     qtbot.addWidget(win)
 
-    try:
-        # Mock play_recording_item
-        win.play_recording_item = MagicMock()
+    # Mock play_recording_item
+    win.play_recording_item = MagicMock()
 
-        # 1. Active Schedule recording row
-        start_iso = (datetime.now() - timedelta(minutes=10)).strftime("%Y-%m-%dT%H:%M:%S")
-        qid = win.queue_mgr.add_recording("Playback Test Show", "ABC 7.1", start_iso, "01:00:00")
-        win.queue_mgr.mark_armed(qid, 777)
-        win.queue_mgr.update_statuses([])
-        win.refresh_recordings(force=True)
+    # 1. Active Schedule recording row
+    start_iso = (datetime.now() - timedelta(minutes=10)).strftime("%Y-%m-%dT%H:%M:%S")
+    qid = win.queue_mgr.add_recording("Playback Test Show", "ABC 7.1", start_iso, "01:00:00")
+    win.queue_mgr.mark_armed(qid, 777)
+    win.queue_mgr.update_statuses([])
+    win.refresh_recordings(force=True)
 
-        assert win.rec_table.rowCount() == 1
-        watch_btn = _extract_watch_button(win.rec_table.cellWidget(0, 0))
-        assert isinstance(watch_btn, QPushButton)
+    assert win.rec_table.rowCount() == 1
+    watch_btn = _extract_watch_button(win.rec_table.cellWidget(0, 0))
+    assert isinstance(watch_btn, QPushButton)
 
-        # Click the watch button
-        watch_btn.click()
-        assert win.play_recording_item.call_count == 1
-        call_rec = win.play_recording_item.call_args[0][0]
-        assert call_rec["title"] == "Playback Test Show"
+    # Click the watch button
+    watch_btn.click()
+    assert win.play_recording_item.call_count == 1
+    call_rec = win.play_recording_item.call_args[0][0]
+    assert call_rec["title"] == "Playback Test Show"
 
-        # Double click the row item
-        item = win.rec_table.item(0, 1)
-        win._on_rec_table_double_clicked(item)
-        assert win.play_recording_item.call_count == 2
+    # Double click the row item
+    item = win.rec_table.item(0, 1)
+    win._on_rec_table_double_clicked(item)
+    assert win.play_recording_item.call_count == 2
 
-        # 2. History table row with simulated video file on disk
-        video_file = tmp_path / "Historic_Movie_20261015.m2t"
-        video_file.write_bytes(b"0" * 1024 * 500)
+    # 2. History table row with simulated video file on disk
+    video_file = tmp_path / "Historic_Movie_20261015.m2t"
+    video_file.write_bytes(b"0" * 1024 * 500)
 
-        win.queue_mgr.add_history_entry("Historic Movie", "HBO 5.1", "2026-10-15T08:00:00", "02:00:00", file_path=str(video_file))
-        win.refresh_history(force=True)
-        assert win.history_table.rowCount() == 1
-        hist_watch_btn = _extract_watch_button(win.history_table.cellWidget(0, 0))
-        assert isinstance(hist_watch_btn, QPushButton)
-        assert hist_watch_btn.isEnabled()
+    win.queue_mgr.add_history_entry("Historic Movie", "HBO 5.1", "2026-10-15T08:00:00", "02:00:00", file_path=str(video_file))
+    win.refresh_history(force=True)
+    assert win.history_table.rowCount() == 1
+    hist_watch_btn = _extract_watch_button(win.history_table.cellWidget(0, 0))
+    assert isinstance(hist_watch_btn, QPushButton)
+    assert hist_watch_btn.isEnabled()
 
-        hist_watch_btn.click()
-        assert win.play_recording_item.call_count == 3
-        hist_call_rec = win.play_recording_item.call_args[0][0]
-        assert hist_call_rec["title"] == "Historic Movie"
+    hist_watch_btn.click()
+    assert win.play_recording_item.call_count == 3
+    hist_call_rec = win.play_recording_item.call_args[0][0]
+    assert hist_call_rec["title"] == "Historic Movie"
 
-        # Double click history row item
-        hist_item = win.history_table.item(0, 1)
-        win._on_history_table_double_clicked(hist_item)
-        assert win.play_recording_item.call_count == 4
-    finally:
-        win.close()
+    # Double click history row item
+    hist_item = win.history_table.item(0, 1)
+    win._on_history_table_double_clicked(hist_item)
+    assert win.play_recording_item.call_count == 4
 
 
 def test_gui_recording_subtabs_order_and_hint_label(qtbot, isolated_config: ConfigManager):
     win = MainWindow(config_mgr=isolated_config)
     qtbot.addWidget(win)
 
-    try:
-        # Check subtabs order: 0 = Active Schedule, 1 = History, 2 = Auto-Record Rules
-        assert win.recordings_subtabs.count() == 3
-        assert win.recordings_subtabs.tabText(0) == "Active Schedule"
-        assert win.recordings_subtabs.tabText(1) == "History"
-        assert win.recordings_subtabs.tabText(2) == "Auto-Record Rules"
+    # Check subtabs order: 0 = Active Schedule, 1 = History, 2 = Auto-Record Rules
+    assert win.recordings_subtabs.count() == 3
+    assert win.recordings_subtabs.tabText(0) == "Active Schedule"
+    assert win.recordings_subtabs.tabText(1) == "History"
+    assert win.recordings_subtabs.tabText(2) == "Auto-Record Rules"
 
-        # Check retention hint label in empty space of control bar
-        assert hasattr(win, "schedule_retention_hint_lbl")
-        assert "6 hours" in win.schedule_retention_hint_lbl.text()
-        assert "History" in win.schedule_retention_hint_lbl.text()
+    # Check retention hint label in empty space of control bar
+    assert hasattr(win, "schedule_retention_hint_lbl")
+    assert "6 hours" in win.schedule_retention_hint_lbl.text()
+    assert "History" in win.schedule_retention_hint_lbl.text()
 
-        # Directly insert an entry in queue
-        start_iso = (datetime.now() + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%S")
-        win.queue_mgr.add_recording("Future Show", "ABC 7.1", start_iso, "00:30:00")
+    # Directly insert an entry in queue
+    start_iso = (datetime.now() + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%S")
+    win.queue_mgr.add_recording("Future Show", "ABC 7.1", start_iso, "00:30:00")
 
-        # Switch to Recordings Schedule tab (index 1)
-        win.tabs.setCurrentIndex(1)
+    # Switch to Recordings Schedule tab (index 1)
+    win.tabs.setCurrentIndex(1)
 
-        assert win.rec_table.rowCount() == 1
-        assert win.rec_table.item(0, 1).text() == "Future Show"
+    assert win.rec_table.rowCount() == 1
+    assert win.rec_table.item(0, 1).text() == "Future Show"
 
-        # Switch subtab to History (index 1)
-        win.recordings_subtabs.setCurrentIndex(1)
+    # Switch subtab to History (index 1)
+    win.recordings_subtabs.setCurrentIndex(1)
 
-        # Insert entry in history
-        win.queue_mgr.add_history_entry("Past Broadcast", "ABC 7.1", "2026-10-15T10:00:00", "00:30:00")
-        win.refresh_history(force=True)
-        assert win.history_table.rowCount() == 1
-        assert win.history_table.item(0, 1).text() == "Past Broadcast"
-    finally:
-        win.close()
+    # Insert entry in history
+    win.queue_mgr.add_history_entry("Past Broadcast", "ABC 7.1", "2026-10-15T10:00:00", "00:30:00")
+    win.refresh_history(force=True)
+    assert win.history_table.rowCount() == 1
+    assert win.history_table.item(0, 1).text() == "Past Broadcast"
 
 
 def test_history_disk_availability_and_sync_rules(qtbot, isolated_config: ConfigManager, tmp_path):
@@ -333,67 +322,64 @@ def test_history_disk_availability_and_sync_rules(qtbot, isolated_config: Config
     win = MainWindow(config_mgr=isolated_config)
     qtbot.addWidget(win)
 
-    try:
-        # 1. Setup completed recording in both queue and history
-        start_iso = (datetime.now() - timedelta(minutes=45)).strftime("%Y-%m-%dT%H:%M:%S")
-        end_iso = (datetime.now() - timedelta(minutes=15)).strftime("%Y-%m-%dT%H:%M:%S")
+    # 1. Setup completed recording in both queue and history
+    start_iso = (datetime.now() - timedelta(minutes=45)).strftime("%Y-%m-%dT%H:%M:%S")
+    end_iso = (datetime.now() - timedelta(minutes=15)).strftime("%Y-%m-%dT%H:%M:%S")
 
-        qid = win.queue_mgr.add_recording("Sync Test Broadcast", "PBS 10.1", start_iso, "00:30:00")
-        conn = win.queue_mgr._get_connection()
-        cur = conn.cursor()
-        cur.execute("UPDATE recording_queue SET status = 'COMPLETED', end_iso = ? WHERE id = ?", (end_iso, qid))
-        conn.commit()
-        conn.close()
+    qid = win.queue_mgr.add_recording("Sync Test Broadcast", "PBS 10.1", start_iso, "00:30:00")
+    conn = win.queue_mgr._get_connection()
+    cur = conn.cursor()
+    cur.execute("UPDATE recording_queue SET status = 'COMPLETED', end_iso = ? WHERE id = ?", (end_iso, qid))
+    conn.commit()
+    conn.close()
 
-        hid = win.queue_mgr.add_history_entry("Sync Test Broadcast", "PBS 10.1", start_iso, "00:30:00")
+    win.queue_mgr.add_history_entry("Sync Test Broadcast", "PBS 10.1", start_iso, "00:30:00")
 
-        win.refresh_recordings(force=True)
-        win.refresh_history(force=True)
+    win.refresh_recordings(force=True)
+    win.refresh_history(force=True)
 
-        assert win.rec_table.rowCount() == 1
-        assert win.history_table.rowCount() == 1
+    assert win.rec_table.rowCount() == 1
+    assert win.history_table.rowCount() == 1
 
-        # File does not exist yet -> "Deleted from Disk", watch button disabled
-        assert "Deleted from Disk" in win.history_table.item(0, 5).text()
-        hist_btn = _extract_watch_button(win.history_table.cellWidget(0, 0))
-        assert hist_btn is not None and not hist_btn.isEnabled()
+    # File does not exist yet -> "Deleted from Disk", watch button disabled
+    assert "Deleted from Disk" in win.history_table.item(0, 5).text()
+    hist_btn = _extract_watch_button(win.history_table.cellWidget(0, 0))
+    assert hist_btn is not None and not hist_btn.isEnabled()
 
-        # 2. Simulate video file creation on disk
-        video_file = tmp_path / "Sync_Test_Broadcast.m2t"
-        video_file.write_bytes(b"X" * (1024 * 1024 * 2))  # 2 MB
+    # 2. Simulate video file creation on disk
+    video_file = tmp_path / "Sync_Test_Broadcast.m2t"
+    video_file.write_bytes(b"X" * (1024 * 1024 * 2))  # 2 MB
 
-        win.refresh_history(force=True)
-        assert "Available (2 MB)" in win.history_table.item(0, 5).text()
-        hist_btn = _extract_watch_button(win.history_table.cellWidget(0, 0))
-        assert hist_btn is not None and hist_btn.isEnabled()
+    win.refresh_history(force=True)
+    assert "Available (2 MB)" in win.history_table.item(0, 5).text()
+    hist_btn = _extract_watch_button(win.history_table.cellWidget(0, 0))
+    assert hist_btn is not None and hist_btn.isEnabled()
 
-        # 3. Rule: Clearing item in history ALSO clears it from active schedule (if within 6 hours)
-        win.history_table.setCurrentCell(0, 1)
-        win.clear_selected_history_entry()
+    # 3. Rule: Clearing item in history ALSO clears it from active schedule (if within 6 hours)
+    win.history_table.setCurrentCell(0, 1)
+    win.clear_selected_history_entry()
 
-        assert win.history_table.rowCount() == 0
-        assert win.rec_table.rowCount() == 0  # Active schedule was also cleared!
+    assert win.history_table.rowCount() == 0
+    assert win.rec_table.rowCount() == 0  # Active schedule was also cleared!
 
-        # 4. Rule: Clearing/canceling from active schedule does NOT remove from history
-        fut_iso = (datetime.now() + timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%S")
-        qid2 = win.queue_mgr.add_recording("Keep In History Show", "NBC 4.1", fut_iso, "00:30:00")
-        hid2 = win.queue_mgr.add_history_entry("Keep In History Show", "NBC 4.1", start_iso, "00:30:00")
-        win.refresh_recordings(force=True)
-        win.refresh_history(force=True)
+    # 4. Rule: Clearing/canceling from active schedule does NOT remove from history
+    fut_iso = (datetime.now() + timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%S")
+    win.queue_mgr.add_recording("Keep In History Show", "NBC 4.1", fut_iso, "00:30:00")
+    win.queue_mgr.add_history_entry("Keep In History Show", "NBC 4.1", start_iso, "00:30:00")
+    win.refresh_recordings(force=True)
+    win.refresh_history(force=True)
 
-        assert win.rec_table.rowCount() == 1
-        assert win.history_table.rowCount() == 1
+    assert win.rec_table.rowCount() == 1
+    assert win.history_table.rowCount() == 1
 
-        # Cancel/remove from active schedule
-        win.rec_table.setCurrentCell(0, 1)
-        win.cancel_selected_recording()
+    # Cancel/remove from active schedule
+    win.rec_table.setCurrentCell(0, 1)
+    win.cancel_selected_recording()
 
-        # Active schedule should be empty, but History must still retain the entry
-        assert win.rec_table.rowCount() == 0
-        assert win.history_table.rowCount() == 1
-        assert win.history_table.item(0, 1).text() == "Keep In History Show"
-    finally:
-        win.close()
+    # Active schedule should be empty, but History must still retain the entry
+    assert win.rec_table.rowCount() == 0
+    assert win.history_table.rowCount() == 1
+    assert win.history_table.item(0, 1).text() == "Keep In History Show"
 
 
 def test_gui_recording_schedule_column_placements_persistence(qtbot, isolated_config: ConfigManager):
@@ -418,43 +404,40 @@ def test_gui_recording_schedule_column_placements_persistence(qtbot, isolated_co
     win = MainWindow(config_mgr=isolated_config)
     qtbot.addWidget(win)
 
-    try:
-        # Check that sections are movable
-        assert win.rec_table.horizontalHeader().sectionsMovable() is True
-        assert win.history_table.horizontalHeader().sectionsMovable() is True
+    # Check that sections are movable
+    assert win.rec_table.horizontalHeader().sectionsMovable() is True
+    assert win.history_table.horizontalHeader().sectionsMovable() is True
 
-        # Verify that custom column placements and widths were restored from settings
-        assert win.rec_table.horizontalHeader().visualIndex(1) == 3
-        assert win.rec_table.horizontalHeader().sectionSize(2) == 350
+    # Verify that custom column placements and widths were restored from settings
+    assert win.rec_table.horizontalHeader().visualIndex(1) == 3
+    assert win.rec_table.horizontalHeader().sectionSize(2) == 350
 
-        assert win.history_table.horizontalHeader().visualIndex(3) == 1
-        assert win.history_table.horizontalHeader().sectionSize(1) == 275
+    assert win.history_table.horizontalHeader().visualIndex(3) == 1
+    assert win.history_table.horizontalHeader().sectionSize(1) == 275
 
-        # Trigger _adjust_table_columns to ensure custom widths are preserved and not overwritten
-        win._adjust_table_columns()
-        assert win.rec_table.horizontalHeader().sectionSize(2) == 350
-        assert win.history_table.horizontalHeader().sectionSize(1) == 275
+    # Trigger _adjust_table_columns to ensure custom widths are preserved and not overwritten
+    win._adjust_table_columns()
+    assert win.rec_table.horizontalHeader().sectionSize(2) == 350
+    assert win.history_table.horizontalHeader().sectionSize(1) == 275
 
-        # Resize a column on history table and verify settings update
-        win.history_table.horizontalHeader().resizeSection(1, 410)
-        saved_hist_bytes = win.settings.value("history_table_header_state")
-        check_hist = QTableWidget(1, 6)
-        check_hist.horizontalHeader().restoreState(saved_hist_bytes)
-        assert check_hist.horizontalHeader().sectionSize(1) == 410
+    # Resize a column on history table and verify settings update
+    win.history_table.horizontalHeader().resizeSection(1, 410)
+    saved_hist_bytes = win.settings.value("history_table_header_state")
+    check_hist = QTableWidget(1, 6)
+    check_hist.horizontalHeader().restoreState(saved_hist_bytes)
+    assert check_hist.horizontalHeader().sectionSize(1) == 410
 
-        # Move logical Column 1 to Visual Index 4, and check that settings value updates
-        win.rec_table.horizontalHeader().moveSection(3, 4)
-        saved_rec_bytes = win.settings.value("rec_table_header_state")
-        assert saved_rec_bytes is not None
+    # Move logical Column 1 to Visual Index 4, and check that settings value updates
+    win.rec_table.horizontalHeader().moveSection(3, 4)
+    saved_rec_bytes = win.settings.value("rec_table_header_state")
+    assert saved_rec_bytes is not None
 
-        # Verify dynamic update in settings reflects change
-        check_rec = QTableWidget(1, 7)
-        check_rec.horizontalHeader().restoreState(saved_rec_bytes)
-        assert check_rec.horizontalHeader().visualIndex(1) == 4
-    finally:
-        win.close()
-        s.remove("rec_table_header_state")
-        s.remove("history_table_header_state")
+    # Verify dynamic update in settings reflects change
+    check_rec = QTableWidget(1, 7)
+    check_rec.horizontalHeader().restoreState(saved_rec_bytes)
+    assert check_rec.horizontalHeader().visualIndex(1) == 4
+    s.remove("rec_table_header_state")
+    s.remove("history_table_header_state")
 
 
 def test_gui_recording_tables_unhighlight_on_tab_navigation_and_toggle_click(qtbot, isolated_config: ConfigManager, tmp_path):
@@ -462,149 +445,140 @@ def test_gui_recording_tables_unhighlight_on_tab_navigation_and_toggle_click(qtb
     win = MainWindow(config_mgr=isolated_config)
     qtbot.addWidget(win)
 
-    try:
-        # Populate one item in active schedule and one in history
-        start_iso = (datetime.now() + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%S")
-        win.queue_mgr.add_recording("Toggle Active Show", "ABC 7.1", start_iso, "01:00:00")
-        past_iso = (datetime.now() - timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%S")
-        win.queue_mgr.add_history_entry("Toggle Past Show", "PBS 10.1", past_iso, "00:30:00")
+    # Populate one item in active schedule and one in history
+    start_iso = (datetime.now() + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%S")
+    win.queue_mgr.add_recording("Toggle Active Show", "ABC 7.1", start_iso, "01:00:00")
+    past_iso = (datetime.now() - timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%S")
+    win.queue_mgr.add_history_entry("Toggle Past Show", "PBS 10.1", past_iso, "00:30:00")
 
-        win.refresh_recordings(force=True)
-        win.refresh_history(force=True)
+    win.refresh_recordings(force=True)
+    win.refresh_history(force=True)
 
-        assert win.rec_table.rowCount() == 1
-        assert win.history_table.rowCount() == 1
+    assert win.rec_table.rowCount() == 1
+    assert win.history_table.rowCount() == 1
 
-        # 1. Test Unhighlight on Tab Navigation
-        # Select row in active schedule table
-        win.rec_table.selectRow(0)
-        win.rec_table.setCurrentCell(0, 1)
-        assert len(win.rec_table.selectedItems()) > 0
-        assert win.rec_table.currentRow() == 0
+    # 1. Test Unhighlight on Tab Navigation
+    # Select row in active schedule table
+    win.rec_table.selectRow(0)
+    win.rec_table.setCurrentCell(0, 1)
+    assert len(win.rec_table.selectedItems()) > 0
+    assert win.rec_table.currentRow() == 0
 
-        # Navigate away to subtab 1 (History)
-        win.recordings_subtabs.setCurrentIndex(1)
-        assert len(win.rec_table.selectedItems()) == 0
-        assert win.rec_table.currentRow() == -1
+    # Navigate away to subtab 1 (History)
+    win.recordings_subtabs.setCurrentIndex(1)
+    assert len(win.rec_table.selectedItems()) == 0
+    assert win.rec_table.currentRow() == -1
 
-        # Navigate back to subtab 0 (Active Schedule) - should remain unhighlighted
-        win.recordings_subtabs.setCurrentIndex(0)
-        assert len(win.rec_table.selectedItems()) == 0
-        assert win.rec_table.currentRow() == -1
+    # Navigate back to subtab 0 (Active Schedule) - should remain unhighlighted
+    win.recordings_subtabs.setCurrentIndex(0)
+    assert len(win.rec_table.selectedItems()) == 0
+    assert win.rec_table.currentRow() == -1
 
-        # Switch to main tab 1 and select row in history table
-        win.tabs.setCurrentIndex(1)
-        win.recordings_subtabs.setCurrentIndex(1)
-        win.history_table.selectRow(0)
-        win.history_table.setCurrentCell(0, 1)
-        assert len(win.history_table.selectedItems()) > 0
+    # Switch to main tab 1 and select row in history table
+    win.tabs.setCurrentIndex(1)
+    win.recordings_subtabs.setCurrentIndex(1)
+    win.history_table.selectRow(0)
+    win.history_table.setCurrentCell(0, 1)
+    assert len(win.history_table.selectedItems()) > 0
 
-        # Switch main tab away to TV Guide Browser (tab 0)
-        win.tabs.setCurrentIndex(0)
-        assert len(win.history_table.selectedItems()) == 0
-        assert win.history_table.currentRow() == -1
+    # Switch main tab away to TV Guide Browser (tab 0)
+    win.tabs.setCurrentIndex(0)
+    assert len(win.history_table.selectedItems()) == 0
+    assert win.history_table.currentRow() == -1
 
-        # Switch main tab back to Recordings (tab 1) - should remain unhighlighted
-        win.tabs.setCurrentIndex(1)
-        assert len(win.history_table.selectedItems()) == 0
-        assert win.history_table.currentRow() == -1
+    # Switch main tab back to Recordings (tab 1) - should remain unhighlighted
+    win.tabs.setCurrentIndex(1)
+    assert len(win.history_table.selectedItems()) == 0
+    assert win.history_table.currentRow() == -1
 
-        # 2. Test Single Click Toggle Selection (click to highlight, click again to unhighlight)
-        win.recordings_subtabs.setCurrentIndex(0)
-        # Position over row 0 in rec_table viewport
-        pos = QPointF(50.0, float(win.rec_table.rowViewportPosition(0) + 5))
+    # 2. Test Single Click Toggle Selection (click to highlight, click again to unhighlight)
+    win.recordings_subtabs.setCurrentIndex(0)
+    # Position over row 0 in rec_table viewport
+    pos = QPointF(50.0, float(win.rec_table.rowViewportPosition(0) + 5))
 
-        # First click: selects row 0
-        QApplication.sendEvent(win.rec_table.viewport(), QMouseEvent(QEvent.Type.MouseButtonPress, pos, Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier))
-        win.rec_table.selectRow(0)
-        win.rec_table.setCurrentCell(0, 1)
-        QApplication.sendEvent(win.rec_table.viewport(), QMouseEvent(QEvent.Type.MouseButtonRelease, pos, Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier))
+    # First click: selects row 0
+    QApplication.sendEvent(win.rec_table.viewport(), QMouseEvent(QEvent.Type.MouseButtonPress, pos, Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier))
+    win.rec_table.selectRow(0)
+    win.rec_table.setCurrentCell(0, 1)
+    QApplication.sendEvent(win.rec_table.viewport(), QMouseEvent(QEvent.Type.MouseButtonRelease, pos, Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier))
 
-        assert len(win.rec_table.selectedItems()) > 0
-        assert win.rec_table.currentRow() == 0
+    assert len(win.rec_table.selectedItems()) > 0
+    assert win.rec_table.currentRow() == 0
 
-        # Second click on the same row: unselects/unhighlights
-        QApplication.sendEvent(win.rec_table.viewport(), QMouseEvent(QEvent.Type.MouseButtonPress, pos, Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier))
-        QApplication.sendEvent(win.rec_table.viewport(), QMouseEvent(QEvent.Type.MouseButtonRelease, pos, Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier))
+    # Second click on the same row: unselects/unhighlights
+    QApplication.sendEvent(win.rec_table.viewport(), QMouseEvent(QEvent.Type.MouseButtonPress, pos, Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier))
+    QApplication.sendEvent(win.rec_table.viewport(), QMouseEvent(QEvent.Type.MouseButtonRelease, pos, Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier))
 
-        assert len(win.rec_table.selectedItems()) == 0
-        assert win.rec_table.currentRow() == -1
+    assert len(win.rec_table.selectedItems()) == 0
+    assert win.rec_table.currentRow() == -1
 
-        # 3. Test Quick Double Click still selects and executes
-        win.play_recording_item = MagicMock()
-        item = win.rec_table.item(0, 1)
-        win._on_rec_table_double_clicked(item)
-        assert win.rec_table.currentRow() == 0
-        assert len(win.rec_table.selectedItems()) > 0
-    finally:
-        win.close()
+    # 3. Test Quick Double Click still selects and executes
+    win.play_recording_item = MagicMock()
+    item = win.rec_table.item(0, 1)
+    win._on_rec_table_double_clicked(item)
+    assert win.rec_table.currentRow() == 0
+    assert len(win.rec_table.selectedItems()) > 0
 
 
 def test_gui_tab_switch_between_recordings_and_guide_does_not_crash(qtbot, isolated_config: ConfigManager):
     win = MainWindow(config_mgr=isolated_config)
     qtbot.addWidget(win)
 
-    try:
-        # Start on Guide Browser (tab 0)
-        assert win.tabs.currentIndex() == 0
+    # Start on Guide Browser (tab 0)
+    assert win.tabs.currentIndex() == 0
 
-        # Switch to Recordings tab (tab 1)
-        win.tabs.setCurrentIndex(1)
-        assert win.tabs.currentIndex() == 1
+    # Switch to Recordings tab (tab 1)
+    win.tabs.setCurrentIndex(1)
+    assert win.tabs.currentIndex() == 1
 
-        # Switch back to Guide Browser (tab 0)
-        win.tabs.setCurrentIndex(0)
-        assert win.tabs.currentIndex() == 0
+    # Switch back to Guide Browser (tab 0)
+    win.tabs.setCurrentIndex(0)
+    assert win.tabs.currentIndex() == 0
 
-        # Wait for the timer to fire safely
-        qtbot.wait(100)
+    # Wait for the timer to fire safely
+    qtbot.wait(100)
 
-        # Switch back to Recordings tab (tab 1)
-        win.tabs.setCurrentIndex(1)
-        assert win.tabs.currentIndex() == 1
+    # Switch back to Recordings tab (tab 1)
+    win.tabs.setCurrentIndex(1)
+    assert win.tabs.currentIndex() == 1
 
-        # Switch back to Guide Browser (tab 0)
-        win.tabs.setCurrentIndex(0)
-        assert win.tabs.currentIndex() == 0
-        qtbot.wait(100)
-    finally:
-        win.close()
+    # Switch back to Guide Browser (tab 0)
+    win.tabs.setCurrentIndex(0)
+    assert win.tabs.currentIndex() == 0
+    qtbot.wait(100)
 
 
 def test_gui_grid_guide_preserves_manual_scroll_on_tab_switch_and_smooth_jump(qtbot, isolated_config: ConfigManager):
     win = MainWindow(config_mgr=isolated_config)
     qtbot.addWidget(win)
 
-    try:
-        # Allow initial startup timer to finish
-        qtbot.wait(100)
-        win._guide_grid_initialized = True
-        bar = win.guide_grid_table.horizontalScrollBar()
+    # Allow initial startup timer to finish
+    qtbot.wait(100)
+    win._guide_grid_initialized = True
+    bar = win.guide_grid_table.horizontalScrollBar()
 
-        # 1. Simulate user manually scrolling the grid to a specific position (e.g. 1800)
-        bar.setValue(1800)
-        assert bar.value() == 1800
+    # 1. Simulate user manually scrolling the grid to a specific position (e.g. 1800)
+    bar.setValue(1800)
+    assert bar.value() == 1800
 
-        # 2. Switch away to Recordings tab (tab 1)
-        win.tabs.setCurrentIndex(1)
-        assert win.tabs.currentIndex() == 1
+    # 2. Switch away to Recordings tab (tab 1)
+    win.tabs.setCurrentIndex(1)
+    assert win.tabs.currentIndex() == 1
 
-        # 3. Switch back to Guide Browser tab (tab 0)
-        win.tabs.setCurrentIndex(0)
-        assert win.tabs.currentIndex() == 0
+    # 3. Switch back to Guide Browser tab (tab 0)
+    win.tabs.setCurrentIndex(0)
+    assert win.tabs.currentIndex() == 0
 
-        # Wait to ensure no delayed timer resets or teleports the scrollbar
-        qtbot.wait(120)
-        assert bar.value() == 1800  # Manual position is perfectly preserved!
+    # Wait to ensure no delayed timer resets or teleports the scrollbar
+    qtbot.wait(120)
+    assert bar.value() == 1800  # Manual position is perfectly preserved!
 
-        # 4. Test smooth scroll animation on explicit jump action
-        win.jump_guide_to_start(animate=True)
-        assert hasattr(win, "_grid_scroll_anim")
-        # Let animation complete
-        qtbot.waitUntil(lambda: bar.value() == 0, timeout=1000)
-        assert bar.value() == 0
-    finally:
-        win.close()
+    # 4. Test smooth scroll animation on explicit jump action
+    win.jump_guide_to_start(animate=True)
+    assert hasattr(win, "_grid_scroll_anim")
+    # Let animation complete
+    qtbot.waitUntil(lambda: bar.value() == 0, timeout=1000)
+    assert bar.value() == 0
 
 
 
