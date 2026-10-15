@@ -8293,6 +8293,14 @@ class MainWindow(QMainWindow):
 
     def _on_single_click_play_toggled(self, checked: bool):
         self.config_mgr.guide_single_click_play = checked
+        sel = getattr(self, "selected_grid_program", None) or self._get_active_selected_program()
+        if sel:
+            self._display_program_details(sel)
+        else:
+            if hasattr(self, "watch_guide_btn") and checked:
+                self.watch_guide_btn.setVisible(False)
+            if hasattr(self, "stop_timeshift_btn") and checked:
+                self.stop_timeshift_btn.setVisible(False)
 
     def _on_hide_time_line_toggled(self, checked: bool):
         self.config_mgr.guide_show_time_indicator = not checked
@@ -10911,8 +10919,12 @@ class MainWindow(QMainWindow):
         player_name = self.config_mgr.playback_player
         player_disp = "Player" if player_name == "system" else player_name.upper()
 
+        single_click = getattr(self.config_mgr, "guide_single_click_play", True)
+
         if hasattr(self, "watch_guide_btn"):
-            if state == "live":
+            if single_click:
+                self.watch_guide_btn.setVisible(False)
+            elif state == "live":
                 self.watch_guide_btn.setVisible(True)
                 self.watch_guide_btn.setText("Watch Live")
                 self.watch_guide_btn.setStyleSheet("font-weight: bold; background-color: #1976d2; color: #ffffff; padding: 4px 12px;")
@@ -10943,7 +10955,9 @@ class MainWindow(QMainWindow):
         sel_ch = (channel or "").strip().lower()
 
         if hasattr(self, "stop_timeshift_btn"):
-            if has_active_ts and (cur_ts_ch == sel_ch or state == "live"):
+            if single_click:
+                self.stop_timeshift_btn.setVisible(False)
+            elif has_active_ts and (cur_ts_ch == sel_ch or state == "live"):
                 self.stop_timeshift_btn.setVisible(True)
                 self.stop_timeshift_btn.setText(f"Stop Timeshift ({self._active_timeshift.get('channel')})")
             else:

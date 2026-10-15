@@ -901,6 +901,48 @@ def test_guide_context_menu_long_description_more_button(qtbot, isolated_config,
     win.close()
 
 
+def test_watch_and_timeshift_buttons_hidden_when_single_click_enabled(qtbot, isolated_config):
+    win = MainWindow(config_mgr=isolated_config)
+    qtbot.addWidget(win)
+    win.show()
+
+    prog = {
+        "id": 9910,
+        "show_title": "Live Morning News",
+        "kaffeine_channel": "Channel 4.1",
+        "start_iso": "2026-10-15T08:00:00",
+        "duration_iso": "01:00:00",
+        "summary": "Morning news.",
+        "_timing_state": "live",
+    }
+    win._active_timeshift = {"channel": "Channel 4.1", "process": None}
+
+    # 1. When single_click_play is True (default) -> Watch Live and Stop Timeshift are hidden
+    isolated_config.guide_single_click_play = True
+    win._display_program_details(prog)
+    assert win.watch_guide_btn.isVisible() is False
+    assert win.stop_timeshift_btn.isVisible() is False
+
+    # 2. When single_click_play is False -> Watch Live and Stop Timeshift are visible
+    isolated_config.guide_single_click_play = False
+    win._display_program_details(prog)
+    assert win.watch_guide_btn.isVisible() is True
+    assert win.watch_guide_btn.text() == "Watch Live"
+    assert win.stop_timeshift_btn.isVisible() is True
+    assert "Stop Timeshift" in win.stop_timeshift_btn.text()
+
+    # 3. Toggle via _on_single_click_play_toggled
+    win.selected_grid_program = prog
+    win._on_single_click_play_toggled(True)
+    assert win.watch_guide_btn.isVisible() is False
+    assert win.stop_timeshift_btn.isVisible() is False
+
+    win._on_single_click_play_toggled(False)
+    assert win.watch_guide_btn.isVisible() is True
+    assert win.stop_timeshift_btn.isVisible() is True
+    win.close()
+
+
 
 
 
