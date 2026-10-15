@@ -1141,6 +1141,64 @@ def test_selected_scheduled_program_border_is_red(qtbot, isolated_config):
     assert captured_border_colors[0] == "#e53935"
 
 
+def test_notification_settings_ui(qtbot, isolated_config):
+    win = MainWindow(config_mgr=isolated_config)
+    qtbot.addWidget(win)
+    win.show()
+
+    assert win.notify_check.text() == "Enable"
+    assert hasattr(win, "notify_persistent_check")
+    assert win.notify_persistent_check.text() == "Persistent"
+
+    # Default state
+    assert win.notify_check.isChecked() is True
+    assert win.notify_persistent_check.isChecked() is False
+    assert win.notify_persistent_check.isEnabled() is True
+    assert win.notify_lead_spin.isEnabled() is True
+
+    # When notify_check is disabled, persistent and lead spin disable
+    win.notify_check.setChecked(False)
+    assert win.notify_persistent_check.isEnabled() is False
+    assert win.notify_lead_spin.isEnabled() is False
+
+    # Toggle persistent and check auto-save / config sync
+    win.notify_check.setChecked(True)
+    win.notify_persistent_check.setChecked(True)
+    assert isolated_config.persistent_desktop_notifications is True
+
+    win.notify_persistent_check.setChecked(False)
+    assert isolated_config.persistent_desktop_notifications is False
+
+    win.close()
+
+
+def test_send_desktop_notification_persistence(monkeypatch):
+    import subprocess
+    from kaffeine_dvr.watcher import send_desktop_notification
+
+    calls = []
+    def mock_run(cmd, *args, **kwargs):
+        calls.append(cmd)
+
+    monkeypatch.setattr(subprocess, "run", mock_run)
+
+    # 1. Non-persistent (default): no '-t' '0'
+    send_desktop_notification("Morning News", "NBC", "8:00 AM", lead_mins=0, persistent=False)
+    assert len(calls) == 1
+    assert "-t" not in calls[0]
+    assert "0" not in calls[0]
+    assert "Recording Starting: Morning News" in calls[0]
+
+    # 2. Persistent: includes '-t' '0'
+    calls.clear()
+    send_desktop_notification("Evening News", "ABC", "6:00 PM", lead_mins=5, persistent=True)
+    assert len(calls) == 1
+    assert "-t" in calls[0]
+    t_idx = calls[0].index("-t")
+    assert calls[0][t_idx + 1] == "0"
+    assert "Recording Starting Soon: Evening News" in calls[0]
+
+
 
 
 

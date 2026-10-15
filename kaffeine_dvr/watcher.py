@@ -18,10 +18,11 @@ from .queue_manager import QueueManager
 from .storage_manager import StorageManager
 
 
-def send_desktop_notification(title: str, channel: str, start_display: str, lead_mins: int = 0):
+def send_desktop_notification(title: str, channel: str, start_display: str, lead_mins: int = 0, persistent: bool = False):
     """
-    Send a persistent desktop notification via notify-send.
-    -t 0 specifies zero timeout, persisting in the notification center until dismissed.
+    Send a desktop notification via notify-send.
+    If persistent is True, specifies -t 0 (zero timeout), persisting in the notification center until dismissed.
+    If persistent is False, follows the OS default notification expiration/dismissal behavior.
     """
     try:
         if lead_mins > 0:
@@ -35,10 +36,10 @@ def send_desktop_notification(title: str, channel: str, start_display: str, lead
             "-a", "Kaffeine DVR",
             "-i", "kaffeine",
             "-u", "normal",
-            "-t", "0",
-            summary,
-            body
         ]
+        if persistent:
+            cmd.extend(["-t", "0"])
+        cmd.extend([summary, body])
         subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except Exception as e:
         print(f"Error sending desktop notification: {e}", flush=True)
@@ -195,15 +196,16 @@ class Watcher:
         # Check and dispatch desktop notifications when recording is due to start
         if notify and cfg.enable_desktop_notifications:
             lead_mins = getattr(cfg, "notification_lead_time_mins", 0)
+            persistent = getattr(cfg, "persistent_desktop_notifications", False)
             notify_due = self.queue_mgr.get_due_for_notification(lead_time_mins=lead_mins)
             for nrec in notify_due:
                 n_title = nrec["title"]
                 n_channel = nrec["channel"]
                 n_start_local = nrec.get("start_time_local", nrec["start_iso"])
-                send_desktop_notification(n_title, n_channel, n_start_local, lead_mins=lead_mins)
+                send_desktop_notification(n_title, n_channel, n_start_local, lead_mins=lead_mins, persistent=persistent)
                 self.queue_mgr.mark_notified(nrec["id"])
                 now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                print(f"[{now_str}] Desktop notification sent for '{n_title}' on {n_channel} (lead: {lead_mins}m).", flush=True)
+                print(f"[{now_str}] Desktop notification sent for '{n_title}' on {n_channel} (lead: {lead_mins}m, persistent: {persistent}).", flush=True)
 
         # Update in-progress and completed statuses (archive finished to history)
         self.queue_mgr.update_statuses([], max_history=cfg.max_history_entries)

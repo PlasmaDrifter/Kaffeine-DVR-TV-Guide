@@ -6082,21 +6082,30 @@ class MainWindow(QMainWindow):
         self.notify_lead_spin.setFixedWidth(160)
         self.notify_lead_spin.setEnabled(self.config_mgr.enable_desktop_notifications)
 
-        self.notify_check = QCheckBox("Enable Desktop Notifications")
+        self.notify_check = QCheckBox("Enable")
         self.notify_check.setChecked(self.config_mgr.enable_desktop_notifications)
         self.notify_check.toggled.connect(self.notify_lead_spin.setEnabled)
+
+        self.notify_persistent_check = QCheckBox("Persistent")
+        self.notify_persistent_check.setChecked(self.config_mgr.persistent_desktop_notifications)
+        self.notify_persistent_check.setEnabled(self.config_mgr.enable_desktop_notifications)
+        self.notify_check.toggled.connect(self.notify_persistent_check.setEnabled)
 
         notify_row = QHBoxLayout()
         notify_row.addWidget(self.notify_lead_spin)
         notify_row.addSpacing(12)
         notify_row.addWidget(self.notify_check)
+        notify_row.addSpacing(8)
+        notify_row.addWidget(self.notify_persistent_check)
         notify_row.addStretch()
         dvr_layout.addRow(
             make_setting_label(
                 "Notification Lead Time (Mins):",
-                "Sends a persistent desktop notification via notify-send when a scheduled recording is starting.\n"
-                "• 0: Sends notification at the exact moment the recording begins.\n"
-                "• 1–999: Sends notification in advance before the recording starts."
+                "Sends a desktop notification via notify-send when a scheduled recording is starting.\n"
+                "• Enable: Activates desktop notification alerts.\n"
+                "• Persistent: When checked, notifications remain in the notification center until manually dismissed (-t 0). When unchecked, notifications follow OS default timeout behavior (auto-dismissed).\n"
+                "• Lead Time 0: Sends notification at the exact moment the recording begins.\n"
+                "• Lead Time 1–999: Sends notification in advance before the recording starts."
             ),
             notify_row
         )
@@ -6786,6 +6795,8 @@ class MainWindow(QMainWindow):
         if hasattr(self, "delete_timeshift_check"):
             self.delete_timeshift_check.stateChanged.connect(self._auto_save_automation_settings)
         self.notify_check.stateChanged.connect(self._auto_save_automation_settings)
+        if hasattr(self, "notify_persistent_check"):
+            self.notify_persistent_check.stateChanged.connect(self._auto_save_automation_settings)
         if hasattr(self, "notify_lead_spin"):
             self.notify_lead_spin.valueChanged.connect(self._auto_save_automation_settings)
 
@@ -7033,6 +7044,12 @@ class MainWindow(QMainWindow):
             self.notify_check.blockSignals(True)
             self.notify_check.setChecked(self.config_mgr.enable_desktop_notifications)
             self.notify_check.blockSignals(False)
+
+        if hasattr(self, "notify_persistent_check"):
+            self.notify_persistent_check.blockSignals(True)
+            self.notify_persistent_check.setChecked(self.config_mgr.persistent_desktop_notifications)
+            self.notify_persistent_check.setEnabled(self.config_mgr.enable_desktop_notifications)
+            self.notify_persistent_check.blockSignals(False)
 
         if hasattr(self, "notify_lead_spin"):
             self.notify_lead_spin.blockSignals(True)
@@ -8206,6 +8223,8 @@ class MainWindow(QMainWindow):
         if hasattr(self, "delete_timeshift_check"):
             self.config_mgr.delete_timeshift_on_exit = self.delete_timeshift_check.isChecked()
         self.config_mgr.enable_desktop_notifications = self.notify_check.isChecked()
+        if hasattr(self, "notify_persistent_check"):
+            self.config_mgr.persistent_desktop_notifications = self.notify_persistent_check.isChecked()
         if hasattr(self, "notify_lead_spin"):
             self.config_mgr.notification_lead_time_mins = self.notify_lead_spin.value()
         if hasattr(self, "grid_rows_spin"):

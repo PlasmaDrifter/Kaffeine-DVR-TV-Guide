@@ -484,6 +484,8 @@ class ConfigManager:
                         data["launch_mode"] = "taskbar" if data.get("launch_minimized", True) else "normal"
                     if "enable_desktop_notifications" not in data:
                         data["enable_desktop_notifications"] = True
+                    if "persistent_desktop_notifications" not in data:
+                        data["persistent_desktop_notifications"] = False
                     if "notification_lead_time_mins" not in data:
                         data["notification_lead_time_mins"] = 0
                     if "first_run_completed" not in data:
@@ -580,6 +582,7 @@ class ConfigManager:
             "launch_minimized": True,
             "launch_mode": "taskbar",
             "enable_desktop_notifications": True,
+            "persistent_desktop_notifications": False,
             "notification_lead_time_mins": 0,
             "country_code": "US",
             "guide_provider": "hybrid",
@@ -868,6 +871,15 @@ class ConfigManager:
     @enable_desktop_notifications.setter
     def enable_desktop_notifications(self, val: bool):
         self.data["enable_desktop_notifications"] = val
+        self.save()
+
+    @property
+    def persistent_desktop_notifications(self) -> bool:
+        return self.data.get("persistent_desktop_notifications", False)
+
+    @persistent_desktop_notifications.setter
+    def persistent_desktop_notifications(self, val: bool):
+        self.data["persistent_desktop_notifications"] = val
         self.save()
 
     @property
