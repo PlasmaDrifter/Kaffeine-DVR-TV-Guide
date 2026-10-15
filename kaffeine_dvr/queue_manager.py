@@ -70,15 +70,21 @@ class QueueManager:
                 start_iso TEXT,
                 duration_iso TEXT,
                 start_time_local TEXT,
-                completed_at TEXT
+                completed_at TEXT,
+                file_path TEXT
             )
         """)
+        cur.execute("PRAGMA table_info(recording_history)")
+        hist_cols = {col[1] for col in cur.fetchall()}
+        if "file_path" not in hist_cols:
+            cur.execute("ALTER TABLE recording_history ADD COLUMN file_path TEXT")
+
         cur.execute("CREATE INDEX IF NOT EXISTS idx_hist_start ON recording_history(start_iso)")
 
         # Migrate any legacy COMPLETED or PURGED records from recording_queue into history
         cur.execute("""
-            INSERT INTO recording_history (title, channel, start_iso, duration_iso, start_time_local, completed_at)
-            SELECT title, channel, start_iso, duration_iso, start_time_local, COALESCE(end_iso, datetime('now'))
+            INSERT INTO recording_history (title, channel, start_iso, duration_iso, start_time_local, completed_at, file_path)
+            SELECT title, channel, start_iso, duration_iso, start_time_local, COALESCE(end_iso, datetime('now')), file_path
             FROM recording_queue
             WHERE status IN ('COMPLETED', 'PURGED')
         """)
@@ -623,53 +629,67 @@ class QueueManager:
         cur.execute("SELECT * FROM recording_queue WHERE id = ?", (queue_id,))
         rec = cur.fetchone()
         if rec:
+            rec_dict = dict(rec)
             now_iso = datetime.now().isoformat()
             cur.execute("""
-                INSERT INTO recording_history (title, channel, start_iso, duration_iso, start_time_local, completed_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO recording_history (title, channel, start_iso, duration_iso, start_time_local, completed_at, file_path)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (
-                rec["title"], rec["channel"], rec["start_iso"],
-                rec["duration_iso"], rec["start_time_local"], now_iso
+                rec_dict.get("title", ""),
+                rec_dict.get("channel", ""),
+                rec_dict.get("start_iso", ""),
+                rec_dict.get("duration_iso", ""),
+                rec_dict.get("start_time_local", ""),
+                now_iso,
+                rec_dict.get("file_path")
             ))
             cur.execute("DELETE FROM recording_queue WHERE id = ?", (queue_id,))
             conn.commit()
         conn.close()
 
-    def update_statuses(self, active_kaffeine_keys: List[int], max_history: int = 50):
+    def update_statuses(self, active_kaffeine_keys: List[int], max_history: int = 50) -> Dict[str, int]:
         """
-        Transitions ARMED -> RECORDING, and when finished (now >= end_dt),
+        Transitions ARMED -> RECORDING when start_iso is reached, and when finished (now >= end_dt),
         archives recording to recording_history and removes from active recording_queue.
+        Returns a dictionary with transition counts: {"started": int, "archived": int}.
         """
         conn = self._get_connection()
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
-        cur.execute("SELECT * FROM recording_queue WHERE status IN ('ARMED', 'RECORDING')")
+        cur.execute("SELECT * FROM recording_queue WHERE status IN ('ARMED', 'RECORDING', 'QUEUED')")
         active = [dict(r) for r in cur.fetchall()]
         
         now = datetime.now()
+        started_count = 0
+        archived_count = 0
+
         for rec in active:
             try:
                 start_dt = datetime.fromisoformat(rec["start_iso"])
                 end_dt = datetime.fromisoformat(rec["end_iso"])
                 qid = rec["id"]
+                current_status = rec.get("status")
 
                 if now >= end_dt:
                     # Archive to history
                     cur.execute("""
-                        INSERT INTO recording_history (title, channel, start_iso, duration_iso, start_time_local, completed_at)
-                        VALUES (?, ?, ?, ?, ?, ?)
+                        INSERT INTO recording_history (title, channel, start_iso, duration_iso, start_time_local, completed_at, file_path)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
                     """, (
                         rec.get("title", ""),
                         rec.get("channel", ""),
                         rec.get("start_iso", ""),
                         rec.get("duration_iso", ""),
                         rec.get("start_time_local", ""),
-                        now.isoformat()
+                        now.isoformat(),
+                        rec.get("file_path")
                     ))
                     # Remove from active queue
                     cur.execute("DELETE FROM recording_queue WHERE id = ?", (qid,))
-                elif now >= start_dt:
+                    archived_count += 1
+                elif now >= start_dt and current_status == "ARMED":
                     cur.execute("UPDATE recording_queue SET status = 'RECORDING' WHERE id = ?", (qid,))
+                    started_count += 1
             except Exception as e:
                 print(f"Error updating status for recording {rec.get('id')}: {e}")
 
@@ -677,7 +697,10 @@ class QueueManager:
         conn.close()
 
         # Prune history to max configured limit
-        self.prune_history(max_history)
+        if archived_count > 0:
+            self.prune_history(max_history)
+
+        return {"started": started_count, "archived": archived_count}
 
     def toggle_protected(self, queue_id: int) -> bool:
         """Toggles the protected status of a recording."""
@@ -731,6 +754,7 @@ class QueueManager:
         duration_iso: str,
         start_time_local: str = "",
         completed_at: Optional[str] = None,
+        file_path: Optional[str] = None,
         max_entries: int = 50
     ) -> int:
         """Directly adds an entry into the recording history table."""
@@ -738,9 +762,9 @@ class QueueManager:
         conn = self._get_connection()
         cur = conn.cursor()
         cur.execute("""
-            INSERT INTO recording_history (title, channel, start_iso, duration_iso, start_time_local, completed_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (title, channel, start_iso, duration_iso, start_time_local, comp))
+            INSERT INTO recording_history (title, channel, start_iso, duration_iso, start_time_local, completed_at, file_path)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (title, channel, start_iso, duration_iso, start_time_local, comp, file_path))
         new_id = cur.lastrowid
         conn.commit()
         conn.close()

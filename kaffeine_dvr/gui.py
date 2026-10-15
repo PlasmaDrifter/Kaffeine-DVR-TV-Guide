@@ -4848,10 +4848,13 @@ class MainWindow(QMainWindow):
         if hasattr(self, "clock_widget"):
             self.clock_widget.setVisible(is_shown)
 
+        now = datetime.now()
+        # Periodically update recording statuses and active schedule every 2 seconds
+        if now.second % 2 == 0:
+            self._check_schedule_status_updates()
+
         if not is_shown:
             return
-
-        now = datetime.now()
         col_hex = self.config_mgr.category_colors.get("clock", DEFAULT_CATEGORY_COLORS.get("clock", "#38bdf8"))
         font_sz = getattr(self.config_mgr, "clock_font_size", 11)
         clock_str = now.strftime("%a, %b %-d  %-I:%M %p")
@@ -4914,7 +4917,7 @@ class MainWindow(QMainWindow):
         # Controls bar for Active Schedule
         ctrl_bar = QHBoxLayout()
         self.refresh_rec_btn = QPushButton("Refresh Schedule")
-        self.refresh_rec_btn.clicked.connect(self.refresh_recordings)
+        self.refresh_rec_btn.clicked.connect(lambda: self.refresh_recordings(force=True))
         ctrl_bar.addWidget(self.refresh_rec_btn)
 
         self.add_rec_btn = QPushButton("Add Manual Recording")
@@ -4960,7 +4963,7 @@ class MainWindow(QMainWindow):
 
         hist_ctrl_bar = QHBoxLayout()
         self.refresh_hist_btn = QPushButton("Refresh History")
-        self.refresh_hist_btn.clicked.connect(self.refresh_history)
+        self.refresh_hist_btn.clicked.connect(lambda: self.refresh_history(force=True))
         hist_ctrl_bar.addWidget(self.refresh_hist_btn)
 
         hist_ctrl_bar.addSpacing(10)
@@ -5002,7 +5005,7 @@ class MainWindow(QMainWindow):
         self.history_table.viewport().installEventFilter(self.history_table_resize_filter)
 
         self.recordings_subtabs.addTab(history_widget, "History")
-        self.recordings_subtabs.currentChanged.connect(lambda: self._adjust_table_columns())
+        self.recordings_subtabs.currentChanged.connect(self._on_recordings_subtab_changed)
 
         layout.addWidget(self.recordings_subtabs)
         return widget
@@ -8928,6 +8931,53 @@ class MainWindow(QMainWindow):
         self._guide_realtime_timer.timeout.connect(self._update_guide_realtime)
         self._guide_realtime_timer.start()
 
+    def _check_schedule_status_updates(self, force: bool = False):
+        """
+        Periodically runs every 2.5s to:
+        1. Transition ARMED -> RECORDING when start_iso is reached.
+        2. Transition finished recordings to recording_history when end_iso is reached.
+        3. Dynamically update Active Schedule and History tables without manual clicks.
+        4. Synchronize guide tiles / list REC badges if transitions occurred.
+        """
+        try:
+            from PyQt6 import sip
+            if sip.isdeleted(self) or (not force and not self.isVisible()):
+                return
+            if not hasattr(self, "tabs") or sip.isdeleted(self.tabs):
+                return
+            if not hasattr(self, "rec_table") or sip.isdeleted(self.rec_table):
+                return
+        except Exception:
+            return
+
+        try:
+            res = self.queue_mgr.update_statuses([], max_history=self.config_mgr.max_history_entries)
+            transitions = bool(res.get("started") or res.get("archived"))
+
+            from PyQt6 import sip
+            is_on_recordings_tab = (hasattr(self, "tabs") and not sip.isdeleted(self.tabs) and self.tabs.currentIndex() == 1)
+            subtabs = getattr(self, "recordings_subtabs", None)
+            is_active_schedule_visible = is_on_recordings_tab and (
+                subtabs is None or (not sip.isdeleted(subtabs) and subtabs.currentIndex() == 0)
+            )
+            is_history_visible = is_on_recordings_tab and (
+                subtabs is not None and not sip.isdeleted(subtabs) and subtabs.currentIndex() == 2
+            )
+
+            if transitions or is_active_schedule_visible:
+                self.refresh_recordings()
+
+            if transitions or is_history_visible:
+                self.refresh_history()
+
+            if transitions:
+                if hasattr(self, "guide_grid_table") and not sip.isdeleted(self.guide_grid_table) and self.guide_grid_table.rowCount() > 0:
+                    self.guide_grid_table.viewport().update()
+                if hasattr(self, "guide_table") and not sip.isdeleted(self.guide_table) and self.guide_table.rowCount() > 0:
+                    self._update_guide_realtime()
+        except Exception:
+            pass
+
     def is_viewing_today(self) -> bool:
         """Returns True if the current guide date selector is viewing today or all upcoming."""
         if not hasattr(self, "guide_date_combo"):
@@ -8962,6 +9012,8 @@ class MainWindow(QMainWindow):
             tile_bg = getattr(self.grid_tile_delegate, "_default_bg", QColor("#222838"))
             tile_bg_alt = getattr(self.grid_tile_delegate, "_default_bg_alt", QColor("#1e2332"))
             live_bg = self.grid_tile_delegate.get_category_color("live_bg") if hasattr(self, "grid_tile_delegate") else QColor("#132400")
+            grid_active_scheduled = self.queue_mgr.get_active_scheduled_map() if hasattr(self, "queue_mgr") else {}
+            grid_history_map = self.queue_mgr.get_history_map(limit=200) if hasattr(self, "queue_mgr") else {}
 
             for r in range(rows):
                 is_alt = (r % 2 == 1)
@@ -8972,6 +9024,11 @@ class MainWindow(QMainWindow):
                     p_copy = item.data(Qt.ItemDataRole.UserRole)
                     if not isinstance(p_copy, dict):
                         continue
+                    ch_key = (p_copy.get("kaffeine_channel") or "").strip().lower()
+                    iso_key = (p_copy.get("start_iso") or "")[:16]
+                    if ch_key and iso_key:
+                        p_copy["_scheduled_rec"] = grid_active_scheduled.get((ch_key, iso_key))
+                        p_copy["_history_rec"] = grid_history_map.get((ch_key, iso_key))
                     start_dt = p_copy.get("_parsed_start_dt")
                     end_dt = p_copy.get("_parsed_end_dt")
                     if start_dt is None:
@@ -9271,17 +9328,50 @@ class MainWindow(QMainWindow):
             import gc
             gc.collect()
 
-    def refresh_recordings(self):
+    def refresh_recordings(self, force: bool = False):
         # Update queue statuses (archives finished recordings to history)
         self.queue_mgr.update_statuses([], max_history=self.config_mgr.max_history_entries)
 
         # Active Schedule only shows QUEUED, ARMED, RECORDING
         queue = self.queue_mgr.list_queue(include_completed=False)
-        self.rec_table.setRowCount(len(queue))
         today = date.today()
+
+        queue_fp = (
+            today,
+            tuple(
+                (
+                    r.get("id"),
+                    r.get("status"),
+                    r.get("title"),
+                    r.get("channel"),
+                    r.get("start_iso"),
+                    r.get("duration_iso"),
+                    r.get("buffer_mins"),
+                    r.get("protected"),
+                )
+                for r in queue
+            ),
+        )
+        if not force and getattr(self, "_last_rec_fingerprint", None) == queue_fp:
+            return
+
+        self._last_rec_fingerprint = queue_fp
+
+        # Preserve selected row by QID
+        selected_qid = None
+        cur_row = self.rec_table.currentRow()
+        if cur_row >= 0:
+            it = self.rec_table.item(cur_row, 0)
+            if it:
+                selected_qid = it.data(Qt.ItemDataRole.UserRole)
+
+        self.rec_table.setRowCount(len(queue))
+        restored_row = -1
 
         for row, rec in enumerate(queue):
             qid = rec.get("id")
+            if selected_qid is not None and qid == selected_qid:
+                restored_row = row
             title = rec.get("title", "")
             channel = rec.get("channel", "")
             duration = rec.get("duration_iso", "")
@@ -9364,20 +9454,43 @@ class MainWindow(QMainWindow):
                 prot_item.setForeground(QColor("#a0aec0"))
             self.rec_table.setItem(row, 5, prot_item)
 
+        if restored_row >= 0:
+            self.rec_table.setCurrentCell(restored_row, 0)
+
         # Also refresh history table
-        self.refresh_history()
+        self.refresh_history(force=force)
 
     # ------------------ RECORDING HISTORY UI ------------------
 
-    def refresh_history(self):
+    def refresh_history(self, force: bool = False):
         """Populates the History table with recorded broadcast history."""
         if not hasattr(self, "history_table"):
             return
         hist = self.queue_mgr.list_history()
+
+        hist_fp = tuple(
+            (item.get("id"), item.get("title"), item.get("channel"), item.get("start_iso"), item.get("duration_iso"))
+            for item in hist
+        )
+        if not force and getattr(self, "_last_hist_fingerprint", None) == hist_fp:
+            return
+        self._last_hist_fingerprint = hist_fp
+
+        # Preserve selected history row by HID
+        selected_hid = None
+        cur_row = self.history_table.currentRow()
+        if cur_row >= 0:
+            it = self.history_table.item(cur_row, 0)
+            if it:
+                selected_hid = it.data(Qt.ItemDataRole.UserRole)
+
         self.history_table.setRowCount(len(hist))
+        restored_row = -1
 
         for row, item in enumerate(hist):
             hid = item.get("id")
+            if selected_hid is not None and hid == selected_hid:
+                restored_row = row
             title = item.get("title", "")
             channel = item.get("channel", "")
             duration = item.get("duration_iso", "")
@@ -9405,12 +9518,15 @@ class MainWindow(QMainWindow):
             self.history_table.setItem(row, 2, chan_item)
             self.history_table.setItem(row, 3, dur_item)
 
+        if restored_row >= 0:
+            self.history_table.setCurrentCell(restored_row, 0)
+
         self._adjust_table_columns()
 
     def on_max_history_changed(self, val: int):
         self.config_mgr.max_history_entries = val
         self.queue_mgr.prune_history(val)
-        self.refresh_history()
+        self.refresh_history(force=True)
 
     def clear_selected_history_entry(self):
         row = self.history_table.currentRow()
@@ -9423,7 +9539,7 @@ class MainWindow(QMainWindow):
         if hid:
             self.queue_mgr.delete_history_entry(int(hid))
             self.status_bar.showMessage(f"Removed '{title}' from history.", 3000)
-            self.refresh_history()
+            self.refresh_history(force=True)
 
     def clear_all_history(self):
         count = self.history_table.rowCount()
@@ -9437,7 +9553,7 @@ class MainWindow(QMainWindow):
         if confirm == QMessageBox.StandardButton.Yes:
             self.queue_mgr.clear_all_history()
             self.status_bar.showMessage("Recording history cleared.", 3000)
-            self.refresh_history()
+            self.refresh_history(force=True)
 
     def _on_rec_table_double_clicked(self, item):
         col = item.column()
@@ -9536,6 +9652,13 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 QMessageBox.critical(self, "Scheduling Error", str(e))
 
+    def _on_recordings_subtab_changed(self, index: int):
+        if index == 0:
+            self.refresh_recordings(force=True)
+        elif index == 2:
+            self.refresh_history(force=True)
+        self._adjust_table_columns()
+
     def _on_main_tab_changed(self, index: int):
         if index == 0:
             self.refresh_date_dropdown()
@@ -9546,6 +9669,10 @@ class MainWindow(QMainWindow):
             else:
                 QTimer.singleShot(60, self.jump_guide_to_noon)
         elif index == 1:
+            if getattr(self, "recordings_subtabs", None) and self.recordings_subtabs.currentIndex() == 2:
+                self.refresh_history(force=True)
+            else:
+                self.refresh_recordings(force=True)
             self._adjust_table_columns()
 
     def _update_time_jump_buttons_visibility(self):
