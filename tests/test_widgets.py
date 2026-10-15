@@ -1,5 +1,5 @@
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QTableWidgetItem
+from PyQt6.QtWidgets import QLabel, QMenu, QTableWidgetItem, QWidgetAction
 
 from kaffeine_dvr.gui import MainWindow, NumberStepper
 
@@ -653,6 +653,163 @@ def test_system_player_resolution_and_timeshift_poll(monkeypatch, tmp_path):
     MainWindow._poll_timeshift_session(mw)
     assert mw.stopped is False
     assert mw._active_timeshift is not None
+
+
+def test_guide_grid_context_menu_record_without_play_and_description(qtbot, isolated_config, monkeypatch):
+    isolated_config.guide_single_click_play = True
+    isolated_config.guide_detail_collapsed = True
+    win = MainWindow(config_mgr=isolated_config)
+    qtbot.addWidget(win)
+
+    assert win.guide_detail_text.isVisible() is False
+
+    table = win.guide_grid_table
+    table.setRowCount(1)
+    table.setColumnCount(4)
+
+    prog = {
+        "id": 9901,
+        "show_title": "Right Click Mystery",
+        "episode_title": "The Hidden Clue",
+        "kaffeine_channel": "Channel 5.1",
+        "start_iso": "2026-10-15T21:00:00",
+        "start_time_local": "2026-10-15 21:00:00",
+        "duration_iso": "01:00:00",
+        "summary": "A captivating mystery show where detectives uncover hidden clues.",
+        "_start_col": 0,
+        "_span": 2,
+    }
+    item = QTableWidgetItem("Right Click Mystery")
+    item.setData(Qt.ItemDataRole.UserRole, prog)
+    table.setItem(0, 0, item)
+
+    activated_progs = []
+    monkeypatch.setattr(win, "handle_program_activation", lambda p: activated_progs.append(p))
+
+    captured_menus = []
+    real_exec = QMenu.exec
+
+    def mock_exec(menu_self, *args, **kwargs):
+        captured_menus.append(menu_self)
+        return None
+
+    monkeypatch.setattr(QMenu, "exec", mock_exec)
+
+    # Simulate right click context menu on cell (0, 0)
+    vp = table.viewport()
+    pos = table.visualItemRect(item).center()
+    win._on_guide_grid_context_menu(pos)
+
+    # 1. Activation was NOT triggered
+    assert len(activated_progs) == 0
+
+    # 2. Program was selected
+    assert win.selected_grid_program is not None
+    assert win.selected_grid_program["show_title"] == "Right Click Mystery"
+
+    # 3. Description box was NOT uncollapsed
+    assert win.config_mgr.guide_detail_collapsed is True
+    assert win.guide_detail_text.isVisible() is False
+
+    # 4. Context menu was created and contains the description and Record action
+    assert len(captured_menus) == 1
+    menu = captured_menus[0]
+    action_texts = [a.text() for a in menu.actions() if a.text()]
+    assert "Record Program" in action_texts
+    assert "Record Series (Add Rule)..." in action_texts
+
+    # Find the header widget in the menu to verify description is shown
+    header_widget = None
+    for action in menu.actions():
+        if isinstance(action, QWidgetAction):
+            header_widget = action.defaultWidget()
+            break
+    assert header_widget is not None
+    labels = header_widget.findChildren(QLabel)
+    label_texts = " ".join(l.text() for l in labels)
+    assert "Right Click Mystery" in label_texts
+    assert "A captivating mystery show" in label_texts
+
+    # 5. Triggering "Record Program" records the show without starting playback
+    record_act = next(a for a in menu.actions() if a.text() == "Record Program")
+    record_act.trigger()
+
+    assert len(activated_progs) == 0
+    active_map = win.queue_mgr.get_active_scheduled_map()
+    assert ("channel 5.1", "2026-10-15T21:00") in active_map
+    assert win.guide_detail_text.isVisible() is False
+    win.close()
+
+
+def test_guide_grid_context_menu_when_already_scheduled(qtbot, isolated_config, monkeypatch):
+    win = MainWindow(config_mgr=isolated_config)
+    qtbot.addWidget(win)
+
+    table = win.guide_grid_table
+    table.setRowCount(1)
+    table.setColumnCount(2)
+
+    prog = {
+        "id": 9902,
+        "show_title": "Scheduled Movie",
+        "kaffeine_channel": "Channel 7.1",
+        "start_iso": "2026-10-15T22:00:00",
+        "duration_iso": "02:00:00",
+        "summary": "An epic adventure.",
+        "_start_col": 0,
+        "_span": 1,
+    }
+    item = QTableWidgetItem("Scheduled Movie")
+    item.setData(Qt.ItemDataRole.UserRole, prog)
+    table.setItem(0, 0, item)
+
+    # Pre-queue this program
+    win.queue_mgr.add_recording("Scheduled Movie", "Channel 7.1", "2026-10-15T22:00:00", "02:00:00", buffer_mins=10)
+
+    captured_menus = []
+    monkeypatch.setattr(QMenu, "exec", lambda m, *args, **kwargs: captured_menus.append(m))
+
+    pos = table.visualItemRect(item).center()
+    win._on_guide_grid_context_menu(pos)
+
+    assert len(captured_menus) == 1
+    action_texts = [a.text() for a in captured_menus[0].actions() if a.text()]
+    assert "Adjust Buffer (+10m)..." in action_texts
+    assert "Cancel Recording" in action_texts
+    assert "Record Program" not in action_texts
+    win.close()
+
+
+def test_guide_list_context_menu(qtbot, isolated_config, monkeypatch):
+    isolated_config.guide_detail_collapsed = True
+    win = MainWindow(config_mgr=isolated_config)
+    qtbot.addWidget(win)
+
+    prog = {
+        "id": 9903,
+        "show_title": "List View Drama",
+        "kaffeine_channel": "Channel 9.1",
+        "start_iso": "2026-10-15T23:00:00",
+        "duration_iso": "01:00:00",
+        "summary": "An intense courtroom drama.",
+    }
+    win.current_guide_items = [prog]
+    win.guide_table.setRowCount(1)
+    win.guide_table.setItem(0, 4, QTableWidgetItem("List View Drama"))
+
+    captured_menus = []
+    monkeypatch.setattr(QMenu, "exec", lambda m, *args, **kwargs: captured_menus.append(m))
+
+    pos = win.guide_table.visualItemRect(win.guide_table.item(0, 4)).center()
+    win._on_guide_list_context_menu(pos)
+
+    assert len(captured_menus) == 1
+    assert win.guide_detail_text.isVisible() is False
+    action_texts = [a.text() for a in captured_menus[0].actions() if a.text()]
+    assert "Record Program" in action_texts
+    win.close()
+
+
 
 
 

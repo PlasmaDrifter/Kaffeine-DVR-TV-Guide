@@ -34,6 +34,7 @@ from PyQt6.QtCore import (
 from PyQt6.QtGui import (
     QBrush,
     QColor,
+    QCursor,
     QFont,
     QFontMetrics,
     QIcon,
@@ -67,6 +68,7 @@ from PyQt6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPlainTextEdit,
     QProgressBar,
@@ -92,6 +94,7 @@ from PyQt6.QtWidgets import (
     QToolButton,
     QVBoxLayout,
     QWidget,
+    QWidgetAction,
 )
 
 try:
@@ -2970,6 +2973,9 @@ class GridPanFilter(QObject):
         if watched not in (vp, hdr_vp):
             return super().eventFilter(watched, event)
 
+        if evt_type == QEvent.Type.ContextMenu and self._dragging:
+            return True
+
         if evt_type == QEvent.Type.MouseButtonPress:
             if event.button() in (Qt.MouseButton.LeftButton, Qt.MouseButton.MiddleButton):
                 self._dragging = False
@@ -5165,6 +5171,8 @@ class MainWindow(QMainWindow):
         self.guide_grid_table.horizontalScrollBar().valueChanged.connect(self._on_grid_horizontal_scroll)
         self.guide_grid_table.cellClicked.connect(self.on_grid_cell_clicked)
         self.guide_grid_table.cellDoubleClicked.connect(self.on_grid_cell_double_clicked)
+        self.guide_grid_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.guide_grid_table.customContextMenuRequested.connect(self._on_guide_grid_context_menu)
         self.guide_stack.addWidget(self.guide_grid_table)
 
         # 2. Existing Detailed List Table
@@ -5194,6 +5202,8 @@ class MainWindow(QMainWindow):
         self.guide_table.cellClicked.connect(self.on_guide_list_cell_clicked)
         self.guide_table.itemSelectionChanged.connect(self.on_guide_selection_changed)
         self.guide_table.itemDoubleClicked.connect(self.on_guide_table_double_clicked)
+        self.guide_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.guide_table.customContextMenuRequested.connect(self._on_guide_list_context_menu)
         self.guide_stack.addWidget(self.guide_table)
 
         # Initialize guide zoom levels from settings (-3 to +5, default 0)
@@ -11568,6 +11578,198 @@ class MainWindow(QMainWindow):
             prog = self.current_guide_items[row]
             self._display_program_details(prog)
             self.handle_program_activation(prog)
+
+    def _on_guide_grid_context_menu(self, pos: QPoint):
+        row = self.guide_grid_table.rowAt(pos.y())
+        col = self.guide_grid_table.columnAt(pos.x())
+        if row < 0 or col < 0:
+            return
+
+        item = self.guide_grid_table.item(row, col)
+        if not item or not item.data(Qt.ItemDataRole.UserRole):
+            for c in range(col - 1, -1, -1):
+                it = self.guide_grid_table.item(row, c)
+                if it and it.data(Qt.ItemDataRole.UserRole):
+                    p_data = it.data(Qt.ItemDataRole.UserRole)
+                    p_span = p_data.get("_span", 1) if isinstance(p_data, dict) else 1
+                    if c + p_span > col:
+                        item = it
+                    break
+
+        if not item or not item.data(Qt.ItemDataRole.UserRole):
+            return
+
+        prog = item.data(Qt.ItemDataRole.UserRole)
+        root_col = prog.get("_start_col", col)
+        root_item = self.guide_grid_table.item(row, root_col)
+        self.guide_grid_table.clearSelection()
+        if root_item:
+            self.guide_grid_table.setCurrentCell(row, root_col)
+            root_item.setSelected(True)
+
+        self.selected_grid_program = prog
+        self._display_program_details(prog)
+        self.guide_grid_table.viewport().update()
+
+        global_pos = self.guide_grid_table.viewport().mapToGlobal(pos)
+        self._show_guide_program_context_menu(prog, global_pos)
+
+    def _on_guide_list_context_menu(self, pos: QPoint):
+        row = self.guide_table.rowAt(pos.y())
+        if row < 0 or row >= len(getattr(self, "current_guide_items", [])):
+            return
+
+        prog = self.current_guide_items[row]
+        self.guide_table.setCurrentCell(row, 0)
+        self.guide_table.selectRow(row)
+        self._last_clicked_guide_list_row = row
+        self._display_program_details(prog)
+
+        global_pos = self.guide_table.viewport().mapToGlobal(pos)
+        self._show_guide_program_context_menu(prog, global_pos)
+
+    def _show_guide_program_context_menu(self, prog: Dict[str, Any], global_pos: Optional[QPoint] = None):
+        if not prog:
+            return
+
+        menu = QMenu(self)
+
+        primary_title, secondary_sub = get_program_display_titles(prog)
+        channel = prog.get("kaffeine_channel") or prog.get("channel") or ""
+        start = prog.get("start_time_local", "")
+        season = prog.get("season")
+        number = prog.get("number")
+        summary = (prog.get("summary") or "").strip() or "No description available."
+        friendly_start = format_american_datetime(start) or str(start)
+
+        dur_iso = prog.get("duration_iso", "") or ""
+        dur_str = ""
+        if dur_iso:
+            parts = dur_iso.split(":")
+            if len(parts) >= 2:
+                try:
+                    h = int(parts[0])
+                    m = int(parts[1])
+                    if h > 0 and m > 0:
+                        dur_str = f"{h}h {m}m"
+                    elif h > 0:
+                        dur_str = f"{h}h"
+                    else:
+                        dur_str = f"{m}m"
+                except ValueError:
+                    dur_str = dur_iso
+
+        theme_key = getattr(self.config_mgr, "app_theme", "midnight")
+        tokens = APP_THEMES.get(theme_key, APP_THEMES.get("midnight", {}))
+        text_primary = tokens.get("text_primary", "#dce1e8")
+        text_secondary = tokens.get("text_secondary", "#8c9bb0")
+        border_color = tokens.get("border_color", "#333a4c")
+
+        cat = prog.get("_category") or classify_guide_category(prog)
+        cat_colors = getattr(self.config_mgr, "category_colors", {})
+        title_color_hex = cat_colors.get(cat, DEFAULT_CATEGORY_COLORS.get(cat, "#b9feff"))
+
+        container = QWidget()
+        container.setObjectName("guideContextMenuContainer")
+        container.setStyleSheet(
+            "QWidget#guideContextMenuContainer { background: transparent; } "
+            "QLabel { background: transparent; }"
+        )
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(12, 10, 12, 8)
+        layout.setSpacing(4)
+
+        title_lbl = QLabel()
+        title_lbl.setWordWrap(True)
+        title_lbl.setMaximumWidth(400)
+        escaped_title = html.escape(primary_title)
+        title_html = f"<span style='font-size: 13px; font-weight: bold; color: {title_color_hex};'>{escaped_title}</span>"
+        if season and number:
+            title_html += f" <span style='font-size: 11px; color: {text_secondary};'>(S{season:02d}E{number:02d})</span>"
+        title_lbl.setText(title_html)
+        layout.addWidget(title_lbl)
+
+        if secondary_sub and secondary_sub != primary_title:
+            sub_lbl = QLabel(f"&quot;{html.escape(secondary_sub)}&quot;")
+            sub_lbl.setStyleSheet(f"font-size: 11px; font-weight: 600; color: {text_secondary};")
+            sub_lbl.setWordWrap(True)
+            sub_lbl.setMaximumWidth(400)
+            layout.addWidget(sub_lbl)
+
+        meta_parts = []
+        if channel:
+            meta_parts.append(str(channel))
+        if friendly_start:
+            meta_parts.append(friendly_start)
+        if dur_str:
+            meta_parts.append(f"({dur_str})")
+        if meta_parts:
+            meta_lbl = QLabel(" • ".join(meta_parts))
+            meta_lbl.setStyleSheet(f"font-size: 11px; color: {text_secondary};")
+            meta_lbl.setWordWrap(True)
+            meta_lbl.setMaximumWidth(400)
+            layout.addWidget(meta_lbl)
+
+        divider = QFrame()
+        divider.setFrameShape(QFrame.Shape.HLine)
+        divider.setFrameShadow(QFrame.Shadow.Plain)
+        divider.setStyleSheet(f"color: {border_color}; background-color: {border_color}; max-height: 1px; margin-top: 2px; margin-bottom: 2px;")
+        layout.addWidget(divider)
+
+        display_summary = summary
+        has_more = False
+        if len(summary) > 420:
+            display_summary = summary[:417].rstrip() + "..."
+            has_more = True
+
+        desc_lbl = QLabel(display_summary)
+        desc_lbl.setWordWrap(True)
+        desc_lbl.setMaximumWidth(400)
+        desc_lbl.setStyleSheet(f"font-size: 11px; color: {text_primary}; line-height: 1.35;")
+        layout.addWidget(desc_lbl)
+
+        header_action = QWidgetAction(menu)
+        header_action.setDefaultWidget(container)
+        menu.addAction(header_action)
+
+        if has_more:
+            menu.addAction("Show Full Description...", lambda: QMessageBox.information(self, f"{primary_title} - Program Details", summary))
+
+        menu.addSeparator()
+
+        active_map = self.queue_mgr.get_active_scheduled_map()
+        ch_key = (channel or "").strip().lower()
+        iso_key = (prog.get("start_iso") or "")[:16]
+        rec_info = active_map.get((ch_key, iso_key))
+
+        if rec_info is None:
+            menu.addAction("Record Program", self.record_selected_guide_item)
+        else:
+            buf_val = rec_info.get("buffer_mins", 0) or 0
+            menu.addAction(f"Adjust Buffer (+{buf_val}m)...", self.record_selected_guide_item)
+            menu.addAction("Cancel Recording", self.cancel_selected_guide_recording)
+
+        menu.addAction("Record Series (Add Rule)...", self.add_rule_from_selected_guide_item)
+
+        menu.addSeparator()
+
+        timing_info = self._get_program_timing_state(prog)
+        state = timing_info.get("state", "upcoming")
+        if state == "live":
+            menu.addAction("Watch Live", lambda: self.handle_program_activation(prog))
+        elif state == "upcoming":
+            menu.addAction("Watch Channel", lambda: self.handle_program_activation(prog))
+        elif state == "past" and timing_info.get("recorded_file"):
+            menu.addAction("Play Recording", lambda: self.handle_program_activation(prog))
+
+        has_active_ts = bool(getattr(self, "_active_timeshift", None))
+        cur_ts_ch = (self._active_timeshift.get("channel") or "").strip().lower() if has_active_ts else ""
+        sel_ch = (channel or "").strip().lower()
+        if has_active_ts and (cur_ts_ch == sel_ch or state == "live"):
+            menu.addAction(f"Stop Timeshift ({self._active_timeshift.get('channel')})", self.stop_timeshift)
+
+        target_pos = global_pos if global_pos is not None else QCursor.pos()
+        menu.exec(target_pos)
 
     def cancel_selected_guide_recording(self):
         prog = self._get_active_selected_program()
