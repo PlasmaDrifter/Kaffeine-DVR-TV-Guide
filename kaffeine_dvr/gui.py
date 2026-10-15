@@ -2873,6 +2873,18 @@ class GuideGridVerticalHeader(QHeaderView):
         active_ts = getattr(mw, "_active_timeshift", None) if mw else None
         active_ch = (active_ts.get("channel") or "").strip().lower() if active_ts else ""
 
+        # Retrieve active theme tokens and guide category colors
+        cfg = getattr(mw, "config_mgr", None) if mw else None
+        app_theme_key = getattr(cfg, "app_theme", "midnight") if cfg else "midnight"
+        tokens = APP_THEMES.get(app_theme_key, APP_THEMES.get("midnight", {}))
+        cat_colors = getattr(cfg, "category_colors", {}) if cfg else {}
+
+        # Theme-derived color tokens
+        header_bg_hex = tokens.get("table_header_bg") or "#1e2330"
+        border_hex = tokens.get("border_color") or tokens.get("table_gridline") or "#332623"
+        text_primary_hex = tokens.get("text_primary") or "#ffffff"
+        accent_hex = tokens.get("accent_primary") or "#ea580c"
+
         # Retrieve channel name for this row
         channel_name = ""
         model = self.model()
@@ -2889,24 +2901,28 @@ class GuideGridVerticalHeader(QHeaderView):
         card_rect = rect.adjusted(3, 3, -3, -3)
 
         if is_playing:
-            # Active playing channel: vibrant dark emerald/cyan background with glowing green border
-            bg_color = QColor("#064e3b")
-            border_color = QColor("#22c55e")
+            # Active playing channel: harmonized with theme's live_badge or accent color
+            live_color_hex = cat_colors.get("live_badge") or cat_colors.get("live_title") or "#22c55e"
+            border_color = QColor(live_color_hex)
+            # Tinted background based on live color
+            bg_color = QColor(border_color.red() // 4, border_color.green() // 4, border_color.blue() // 4)
             border_width = 2
             text_color = QColor("#ffffff")
+            badge_color = border_color
         else:
-            # Pronounced distinct card background with clear dark slate border
+            # Follow application & guide theme
+            base_header_color = QColor(header_bg_hex)
             is_alt = (logical_index % 2 == 1)
-            bg_color = QColor("#1e293b") if is_alt else QColor("#162032")
-            border_color = QColor("#3b4861")
+            bg_color = compute_alternating_shade(base_header_color) if is_alt else base_header_color
+            border_color = QColor(border_hex)
             border_width = 1
-            text_color = QColor("#f8fafc")
+            text_color = QColor(text_primary_hex)
 
         # Fill background card
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setPen(QPen(border_color, border_width))
         painter.setBrush(bg_color)
-        painter.drawRoundedRect(card_rect, 5, 5)
+        painter.drawRoundedRect(card_rect, 4, 4)
 
         # Base font setup
         base_font = QFont(self.font())
@@ -2914,7 +2930,7 @@ class GuideGridVerticalHeader(QHeaderView):
         base_font.setPointSize(max(10, min(14, base_font.pointSize() or 11)))
 
         if is_playing:
-            # Reserve space for "● PLAYING" badge at the bottom of the square
+            # Reserve space for "PLAYING" badge at the bottom of the square
             badge_h = 14
             badge_w = min(card_rect.width() - 8, 56)
             title_rect = QRect(card_rect.left() + 2, card_rect.top() + 4, card_rect.width() - 4, max(12, card_rect.height() - badge_h - 9))
@@ -2922,11 +2938,11 @@ class GuideGridVerticalHeader(QHeaderView):
             painter.setPen(text_color)
             painter.drawText(title_rect, Qt.AlignmentFlag.AlignCenter, channel_name)
 
-            # Draw "● PLAYING" badge
+            # Draw "PLAYING" badge
             badge_x = card_rect.left() + (card_rect.width() - badge_w) // 2
             badge_rect = QRect(badge_x, card_rect.bottom() - badge_h - 4, badge_w, badge_h)
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor("#16a34a"))
+            painter.setBrush(badge_color)
             painter.drawRoundedRect(badge_rect, 3, 3)
 
             badge_font = QFont(base_font)
