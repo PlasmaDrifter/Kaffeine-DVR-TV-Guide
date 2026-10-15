@@ -5131,7 +5131,7 @@ class MainWindow(QMainWindow):
         reset_mapping_btn.clicked.connect(self.reset_channel_mapping_defaults)
         btn_row.addWidget(reset_mapping_btn)
 
-        scanner_btn = QPushButton("Scan Channels")
+        scanner_btn = QPushButton("Channel\nStrength Scan")
         scanner_btn.setObjectName("scannerActionBtn")
         scanner_btn.setToolTip("Open Channel Signal Health Scanner to test digital reception")
         scanner_btn.setStyleSheet(
@@ -5140,8 +5140,10 @@ class MainWindow(QMainWindow):
             "  border: 1.5px solid #3b82f6;"
             "  color: #eff6ff;"
             "  font-weight: bold;"
-            "  padding: 6px 14px;"
+            "  font-size: 11px;"
+            "  padding: 3px 8px;"
             "  border-radius: 5px;"
+            "  text-align: center;"
             "}"
             "QPushButton#scannerActionBtn:hover {"
             "  background-color: #2563eb;"
@@ -5238,11 +5240,6 @@ class MainWindow(QMainWindow):
         self.sort_alpha_btn = QPushButton("Sort A-Z")
         self.sort_alpha_btn.clicked.connect(self._sort_channels_alphabetical)
         order_ctrl_bar.addWidget(self.sort_alpha_btn)
-
-        order_scan_btn = QPushButton("Scan Channels")
-        order_scan_btn.setToolTip("Open Channel Signal Health Scanner to test digital reception")
-        order_scan_btn.clicked.connect(self.open_channel_health_dialog)
-        order_ctrl_bar.addWidget(order_scan_btn)
 
         order_layout.addLayout(order_ctrl_bar)
         lineup_panels.addWidget(order_box, 1)
