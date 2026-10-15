@@ -246,9 +246,8 @@ class KaffeineWebRequestHandler(http.server.BaseHTTPRequestHandler):
                 hist_out = []
                 for h in hist:
                     hid = h.get("id")
-                    file_info = self.server_obj.storage_mgr.check_history_file_availability(h)
-                    is_avail = file_info.get("available", False)
-                    size_str = file_info.get("size_str", "")
+                    is_avail, _, sz_bytes = self.server_obj.storage_mgr.check_history_file_availability(h)
+                    size_str = f"{round(sz_bytes / (1024 ** 3), 2)} GB" if sz_bytes > 0 else ""
                     hist_out.append({
                         "id": hid,
                         "title": h.get("title"),

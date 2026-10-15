@@ -364,7 +364,11 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
       tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 25px; color: var(--text-muted);">Fetching recordings...</td></tr>`;
       try {
         const resp = await apiFetch("/api/recordings");
-        if (!resp.ok) return;
+        if (!resp.ok) {
+          const errData = await resp.json().catch(() => ({}));
+          tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 25px; color: #ef4444;">Error ${resp.status}: ${escapeHtml(errData.error || "Failed to load recordings.")}</td></tr>`;
+          return;
+        }
         const data = await resp.json();
         const active = data.active || [];
         const history = data.history || [];
