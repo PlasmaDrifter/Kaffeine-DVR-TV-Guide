@@ -4934,6 +4934,12 @@ class MainWindow(QMainWindow):
 
         ctrl_bar.addStretch()
 
+        self.schedule_retention_hint_lbl = QLabel("Completed recordings are removed after 6 hours — always available in History")
+        self.schedule_retention_hint_lbl.setStyleSheet("color: #94a3b8; font-size: 11px; font-style: italic; padding: 0 4px;")
+        ctrl_bar.addWidget(self.schedule_retention_hint_lbl)
+
+        ctrl_bar.addStretch()
+
         self.cancel_rec_btn = QPushButton("Cancel Selected Recording")
         self.cancel_rec_btn.setStyleSheet("color: #ff5252; font-weight: bold;")
         self.cancel_rec_btn.clicked.connect(self.cancel_selected_recording)
@@ -4955,9 +4961,8 @@ class MainWindow(QMainWindow):
         self.rec_table.viewport().installEventFilter(self.rec_table_resize_filter)
 
         self.recordings_subtabs.addTab(active_widget, "Active Schedule")
-        self.recordings_subtabs.addTab(self.create_rules_tab(), "Auto-Record Rules")
 
-        # ----- SUBTAB 3: History -----
+        # ----- SUBTAB 2: History -----
         history_widget = QWidget()
         history_layout = QVBoxLayout(history_widget)
 
@@ -5005,6 +5010,7 @@ class MainWindow(QMainWindow):
         self.history_table.viewport().installEventFilter(self.history_table_resize_filter)
 
         self.recordings_subtabs.addTab(history_widget, "History")
+        self.recordings_subtabs.addTab(self.create_rules_tab(), "Auto-Record Rules")
         self.recordings_subtabs.currentChanged.connect(self._on_recordings_subtab_changed)
 
         layout.addWidget(self.recordings_subtabs)
@@ -8952,7 +8958,7 @@ class MainWindow(QMainWindow):
 
         try:
             res = self.queue_mgr.update_statuses([], max_history=self.config_mgr.max_history_entries)
-            transitions = bool(res.get("started") or res.get("archived"))
+            transitions = bool(res.get("started") or res.get("archived") or res.get("purged") or force)
 
             from PyQt6 import sip
             is_on_recordings_tab = (hasattr(self, "tabs") and not sip.isdeleted(self.tabs) and self.tabs.currentIndex() == 1)
@@ -8961,7 +8967,7 @@ class MainWindow(QMainWindow):
                 subtabs is None or (not sip.isdeleted(subtabs) and subtabs.currentIndex() == 0)
             )
             is_history_visible = is_on_recordings_tab and (
-                subtabs is not None and not sip.isdeleted(subtabs) and subtabs.currentIndex() == 2
+                subtabs is not None and not sip.isdeleted(subtabs) and subtabs.currentIndex() == 1
             )
 
             if transitions or is_active_schedule_visible:
@@ -9332,8 +9338,8 @@ class MainWindow(QMainWindow):
         # Update queue statuses (archives finished recordings to history)
         self.queue_mgr.update_statuses([], max_history=self.config_mgr.max_history_entries)
 
-        # Active Schedule only shows QUEUED, ARMED, RECORDING
-        queue = self.queue_mgr.list_queue(include_completed=False)
+        # Active Schedule shows QUEUED, ARMED, RECORDING, and recently COMPLETED (kept 6h)
+        queue = self.queue_mgr.list_queue(include_completed=True)
         today = date.today()
 
         queue_fp = (
@@ -9435,7 +9441,7 @@ class MainWindow(QMainWindow):
                 color = "#ff5252"
             elif status == "COMPLETED":
                 status_display = "Completed"
-                color = "#6c757d"
+                color = "#28a745"
             elif status == "PURGED":
                 status_display = "Purged (Auto-Deleted)"
                 color = "#8c98aa"
@@ -9655,7 +9661,7 @@ class MainWindow(QMainWindow):
     def _on_recordings_subtab_changed(self, index: int):
         if index == 0:
             self.refresh_recordings(force=True)
-        elif index == 2:
+        elif index == 1:
             self.refresh_history(force=True)
         self._adjust_table_columns()
 
@@ -9669,7 +9675,7 @@ class MainWindow(QMainWindow):
             else:
                 QTimer.singleShot(60, self.jump_guide_to_noon)
         elif index == 1:
-            if getattr(self, "recordings_subtabs", None) and self.recordings_subtabs.currentIndex() == 2:
+            if getattr(self, "recordings_subtabs", None) and self.recordings_subtabs.currentIndex() == 1:
                 self.refresh_history(force=True)
             else:
                 self.refresh_recordings(force=True)
@@ -12226,7 +12232,7 @@ class MainWindow(QMainWindow):
         self.refresh_rules()
         self.tabs.setCurrentIndex(1)
         if hasattr(self, "recordings_subtabs"):
-            self.recordings_subtabs.setCurrentIndex(1)
+            self.recordings_subtabs.setCurrentIndex(2)
         self.run_rules(silent=False)
 
     # ------------------ RULES LOGIC ------------------
@@ -12262,7 +12268,7 @@ class MainWindow(QMainWindow):
                 self.refresh_rules()
                 self.tabs.setCurrentIndex(1)
                 if hasattr(self, "recordings_subtabs"):
-                    self.recordings_subtabs.setCurrentIndex(1)
+                    self.recordings_subtabs.setCurrentIndex(2)
                 self.run_rules(silent=False)
 
     def edit_rule_dialog(self):

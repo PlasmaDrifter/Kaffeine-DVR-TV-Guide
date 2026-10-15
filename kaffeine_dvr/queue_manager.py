@@ -81,14 +81,13 @@ class QueueManager:
 
         cur.execute("CREATE INDEX IF NOT EXISTS idx_hist_start ON recording_history(start_iso)")
 
-        # Migrate any legacy COMPLETED or PURGED records from recording_queue into history
+        # Delete any legacy PURGED records or COMPLETED records older than 6 hours
+        cur.execute("DELETE FROM recording_queue WHERE status = 'PURGED'")
         cur.execute("""
-            INSERT INTO recording_history (title, channel, start_iso, duration_iso, start_time_local, completed_at, file_path)
-            SELECT title, channel, start_iso, duration_iso, start_time_local, COALESCE(end_iso, datetime('now')), file_path
-            FROM recording_queue
-            WHERE status IN ('COMPLETED', 'PURGED')
+            DELETE FROM recording_queue
+            WHERE status = 'COMPLETED'
+              AND datetime(end_iso) <= datetime('now', '-6 hours')
         """)
-        cur.execute("DELETE FROM recording_queue WHERE status IN ('COMPLETED', 'PURGED')")
 
         conn.commit()
         conn.close()
@@ -649,19 +648,23 @@ class QueueManager:
 
     def update_statuses(self, active_kaffeine_keys: List[int], max_history: int = 50) -> Dict[str, int]:
         """
-        Transitions ARMED -> RECORDING when start_iso is reached, and when finished (now >= end_dt),
-        archives recording to recording_history and removes from active recording_queue.
+        Transitions ARMED -> RECORDING when start_iso is reached.
+        When finished (now >= end_dt):
+        - Archives to recording_history upon completion (if not already archived).
+        - Keeps recording in recording_queue as 'COMPLETED' for 6 hours.
+        - Deletes from recording_queue after 6 hours from end_dt.
         Returns a dictionary with transition counts: {"started": int, "archived": int}.
         """
         conn = self._get_connection()
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
-        cur.execute("SELECT * FROM recording_queue WHERE status IN ('ARMED', 'RECORDING', 'QUEUED')")
+        cur.execute("SELECT * FROM recording_queue WHERE status IN ('ARMED', 'RECORDING', 'QUEUED', 'COMPLETED')")
         active = [dict(r) for r in cur.fetchall()]
         
         now = datetime.now()
         started_count = 0
         archived_count = 0
+        purged_count = 0
 
         for rec in active:
             try:
@@ -669,24 +672,31 @@ class QueueManager:
                 end_dt = datetime.fromisoformat(rec["end_iso"])
                 qid = rec["id"]
                 current_status = rec.get("status")
+                retention_cutoff = end_dt + timedelta(hours=6)
 
                 if now >= end_dt:
-                    # Archive to history
-                    cur.execute("""
-                        INSERT INTO recording_history (title, channel, start_iso, duration_iso, start_time_local, completed_at, file_path)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        rec.get("title", ""),
-                        rec.get("channel", ""),
-                        rec.get("start_iso", ""),
-                        rec.get("duration_iso", ""),
-                        rec.get("start_time_local", ""),
-                        now.isoformat(),
-                        rec.get("file_path")
-                    ))
-                    # Remove from active queue
-                    cur.execute("DELETE FROM recording_queue WHERE id = ?", (qid,))
-                    archived_count += 1
+                    if current_status != "COMPLETED":
+                        # Archive to history once
+                        cur.execute("""
+                            INSERT INTO recording_history (title, channel, start_iso, duration_iso, start_time_local, completed_at, file_path)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """, (
+                            rec.get("title", ""),
+                            rec.get("channel", ""),
+                            rec.get("start_iso", ""),
+                            rec.get("duration_iso", ""),
+                            rec.get("start_time_local", ""),
+                            now.isoformat(),
+                            rec.get("file_path")
+                        ))
+                        archived_count += 1
+
+                    # Remove from queue only after 6 hours from end_dt
+                    if now >= retention_cutoff:
+                        cur.execute("DELETE FROM recording_queue WHERE id = ?", (qid,))
+                        purged_count += 1
+                    elif current_status != "COMPLETED":
+                        cur.execute("UPDATE recording_queue SET status = 'COMPLETED' WHERE id = ?", (qid,))
                 elif now >= start_dt and current_status == "ARMED":
                     cur.execute("UPDATE recording_queue SET status = 'RECORDING' WHERE id = ?", (qid,))
                     started_count += 1
@@ -700,7 +710,7 @@ class QueueManager:
         if archived_count > 0:
             self.prune_history(max_history)
 
-        return {"started": started_count, "archived": archived_count}
+        return {"started": started_count, "archived": archived_count, "purged": purged_count}
 
     def toggle_protected(self, queue_id: int) -> bool:
         """Toggles the protected status of a recording."""
