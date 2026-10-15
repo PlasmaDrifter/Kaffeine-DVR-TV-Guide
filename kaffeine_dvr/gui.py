@@ -11665,13 +11665,15 @@ class MainWindow(QMainWindow):
         tokens = APP_THEMES.get(theme_key, APP_THEMES.get("midnight", {}))
         text_primary = tokens.get("text_primary", "#dce1e8")
         text_secondary = tokens.get("text_secondary", "#8c9bb0")
-        border_color = tokens.get("border_color", "#333a4c")
+        popup_bg = tokens.get("bg_button", "#272d3d")
+        popup_border = tokens.get("border_light", tokens.get("border_color", "#3d465c"))
+        item_hover_bg = tokens.get("bg_button_hover", tokens.get("menu_item_selected", "#333a50"))
 
         menu.setStyleSheet(f"""
             QMenu#guideContextMenu {{
-                background-color: {tokens.get("menu_bg", "#1c202e")};
+                background-color: {popup_bg};
                 color: {text_primary};
-                border: 1.5px solid {border_color};
+                border: 1.5px solid {popup_border};
                 border-radius: 10px;
                 padding: 8px 6px;
                 font-size: 14px;
@@ -11684,12 +11686,12 @@ class MainWindow(QMainWindow):
                 font-weight: 500;
             }}
             QMenu#guideContextMenu::item:selected {{
-                background-color: {tokens.get("menu_item_selected", "#2b3346")};
+                background-color: {item_hover_bg};
                 color: #ffffff;
             }}
             QMenu#guideContextMenu::separator {{
                 height: 1px;
-                background-color: {border_color};
+                background-color: {popup_border};
                 margin: 6px 10px;
             }}
         """)
@@ -11744,7 +11746,7 @@ class MainWindow(QMainWindow):
         divider = QFrame()
         divider.setFrameShape(QFrame.Shape.HLine)
         divider.setFrameShadow(QFrame.Shadow.Plain)
-        divider.setStyleSheet(f"color: {border_color}; background-color: {border_color}; max-height: 1px; margin-top: 4px; margin-bottom: 4px;")
+        divider.setStyleSheet(f"color: {popup_border}; background-color: {popup_border}; max-height: 1px; margin-top: 4px; margin-bottom: 4px;")
         layout.addWidget(divider)
 
         display_summary = summary
