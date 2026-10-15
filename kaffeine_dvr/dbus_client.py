@@ -583,7 +583,7 @@ class KaffeineDbusClient:
         target_dir.mkdir(parents=True, exist_ok=True)
 
         if base_user_dir.exists():
-            for fname in ["smplayer.ini", "device_info.ini", "hdpi.ini", "styles.ass", "mpv.conf"]:
+            for fname in ["smplayer.ini", "device_info.ini", "hdpi.ini", "styles.ass"]:
                 src = base_user_dir / fname
                 dst = target_dir / fname
                 if src.exists():
@@ -592,6 +592,10 @@ class KaffeineDbusClient:
                             shutil.copy2(src, dst)
                         except Exception:
                             pass
+        try:
+            (target_dir / "mpv.conf").unlink(missing_ok=True)
+        except Exception:
+            pass
 
         ini_path = target_dir / "smplayer.ini"
         if ini_path.exists():
@@ -663,10 +667,6 @@ class KaffeineDbusClient:
             resolved_cmd = resolve_system_default_player_command(file_path)
             if resolved_cmd:
                 cmd = resolved_cmd
-                # If resolved command is smplayer and standalone is True, inject standalone profile
-                if standalone and cmd and os.path.basename(cmd[0]).lower() == "smplayer":
-                    sm_profile = self._prepare_standalone_smplayer_profile()
-                    cmd = [cmd[0], "-config-path", str(sm_profile)] + cmd[1:]
             else:
                 # If desktop association resolution fails, check for common native media players
                 for candidate in ("smplayer", "mpv", "vlc", "celluloid", "haruna"):
