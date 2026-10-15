@@ -156,16 +156,16 @@ def test_web_video_streaming_and_http_range(web_test_env):
     conn.commit()
     conn.close()
 
-    # 1. Full stream request (200 OK)
-    with urllib.request.urlopen(f"{base_url}/api/stream/{hid}") as resp:
+    # 1. Full stream request with raw parameter (200 OK)
+    with urllib.request.urlopen(f"{base_url}/api/stream/{hid}?raw=1") as resp:
         assert resp.status == 200
         assert resp.headers.get("Accept-Ranges") == "bytes"
         assert int(resp.headers.get("Content-Length")) == 10000
         data = resp.read()
         assert len(data) == 10000
 
-    # 2. HTTP Range request for bytes 100-199 (206 Partial Content)
-    range_req = urllib.request.Request(f"{base_url}/api/stream/{hid}", headers={"Range": "bytes=100-199"})
+    # 2. HTTP Range request for bytes 100-199 with raw parameter (206 Partial Content)
+    range_req = urllib.request.Request(f"{base_url}/api/stream/{hid}?raw=1", headers={"Range": "bytes=100-199"})
     with urllib.request.urlopen(range_req) as resp:
         assert resp.status == 206
         assert resp.headers.get("Content-Range") == "bytes 100-199/10000"

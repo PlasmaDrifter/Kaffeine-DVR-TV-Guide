@@ -296,13 +296,69 @@ class KaffeineWebRequestHandler(http.server.BaseHTTPRequestHandler):
                     self._send_json({"error": "Access denied"}, status=403)
                     return
 
-                self._stream_file_with_range(resolved_target)
+                self._stream_file(resolved_target, parsed.query)
                 return
             except Exception as e:
                 self._send_json({"error": str(e)}, status=500)
                 return
 
         self._send_json({"error": "Not Found"}, status=404)
+
+    def _stream_file(self, file_path: Path, query_str: str = ""):
+        """Streams media file. If file is raw MPEG-2 TS (.m2t), transcodes on-the-fly to MP4 for browser compatibility."""
+        qs = urllib.parse.parse_qs(query_str)
+        is_raw_download = qs.get("raw", ["0"])[0] == "1"
+
+        # If already mp4 or webm, or raw download requested, use standard Range streaming
+        if is_raw_download or file_path.suffix.lower() in (".mp4", ".m4v", ".webm"):
+            self._stream_file_with_range(file_path)
+            return
+
+        # Check if ffmpeg is available on system
+        ffmpeg_bin = shutil.which("ffmpeg")
+        if not ffmpeg_bin:
+            self._stream_file_with_range(file_path)
+            return
+
+        start_time_sec = float(qs.get("t", ["0"])[0])
+
+        self.send_response(200)
+        self.send_header("Content-Type", "video/mp4")
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+
+        import subprocess
+        cmd = [
+            ffmpeg_bin,
+            "-hide_banner",
+            "-loglevel", "error",
+            "-ss", str(start_time_sec),
+            "-i", str(file_path),
+            "-c:v", "libx264",
+            "-preset", "ultrafast",
+            "-tune", "zerolatency",
+            "-crf", "23",
+            "-c:a", "aac",
+            "-b:a", "128k",
+            "-movflags", "frag_keyframe+empty_moov+default_base_moof",
+            "-f", "mp4",
+            "-"
+        ]
+
+        try:
+            with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL) as proc:
+                if proc.stdout:
+                    while True:
+                        chunk = proc.stdout.read(64 * 1024)
+                        if not chunk:
+                            break
+                        try:
+                            self.wfile.write(chunk)
+                        except (BrokenPipeError, ConnectionResetError):
+                            proc.kill()
+                            break
+        except Exception:
+            pass
 
     def _stream_file_with_range(self, file_path: Path):
         """Streams a media file supporting HTTP Range headers for seeking/scrubbing."""

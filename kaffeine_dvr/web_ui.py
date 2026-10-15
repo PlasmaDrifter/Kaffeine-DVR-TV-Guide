@@ -189,7 +189,10 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="modal-card" onclick="event.stopPropagation()">
       <div class="modal-header">
         <span id="videoModalTitle" class="modal-title">Watch Recording</span>
-        <button class="modal-close" onclick="closeVideoModal()">&times;</button>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <a id="videoDownloadLink" class="btn btn-sm" href="#" download style="text-decoration: none;">Download File</a>
+          <button class="modal-close" onclick="closeVideoModal()">&times;</button>
+        </div>
       </div>
       <div class="video-wrapper">
         <video id="html5VideoPlayer" controls autoplay preload="metadata">
@@ -428,10 +431,16 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
       if (!url) return;
       const modal = document.getElementById("videoModal");
       const video = document.getElementById("html5VideoPlayer");
+      const dlLink = document.getElementById("videoDownloadLink");
       document.getElementById("videoModalTitle").textContent = title || "Watch Recording";
-      // Append token query param if authenticated
-      const fullUrl = authToken ? `${url}?token=${encodeURIComponent(authToken)}` : url;
-      video.src = fullUrl;
+
+      // Stream URL (MP4 stream)
+      const streamUrl = authToken ? `${url}?token=${encodeURIComponent(authToken)}` : url;
+      // Direct raw file download URL
+      const rawUrl = authToken ? `${url}?raw=1&token=${encodeURIComponent(authToken)}` : `${url}?raw=1`;
+      dlLink.href = rawUrl;
+
+      video.src = streamUrl;
       modal.classList.add("active");
       video.play().catch(() => {});
     }
