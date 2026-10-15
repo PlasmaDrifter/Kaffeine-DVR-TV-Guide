@@ -7,8 +7,16 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QPushButton
 
 from kaffeine_dvr.config import ConfigManager
-from kaffeine_dvr.gui import MainWindow
+from kaffeine_dvr.gui import MainWindow, TableButtonCell, build_app_stylesheet
 from kaffeine_dvr.queue_manager import QueueManager
+
+
+def _extract_watch_button(cell_widget):
+    if cell_widget is None:
+        return None
+    if isinstance(cell_widget, QPushButton):
+        return cell_widget
+    return getattr(cell_widget, "button", cell_widget.findChild(QPushButton))
 
 
 def test_update_statuses_armed_to_recording(isolated_queue_mgr: QueueManager):
@@ -109,6 +117,16 @@ def test_history_pruning(isolated_queue_mgr: QueueManager):
     assert hist[4]["title"] == "Show 7"
 
 
+def test_table_watch_button_theming_and_fixed_dimensions():
+    # Verify stylesheet generation contains tableWatchBtn with theme tokens
+    sheet = build_app_stylesheet("midnight")
+    assert "QPushButton#tableWatchBtn" in sheet
+    assert "border-radius: 4px" in sheet
+
+    sheet_oled = build_app_stylesheet("oled_black")
+    assert "QPushButton#tableWatchBtn" in sheet_oled
+
+
 def test_gui_active_schedule_status_and_history_updates(qtbot, isolated_config: ConfigManager):
     win = MainWindow(config_mgr=isolated_config)
     qtbot.addWidget(win)
@@ -132,7 +150,7 @@ def test_gui_active_schedule_status_and_history_updates(qtbot, isolated_config: 
         q_fut_id = win.queue_mgr.add_recording("Future Queued", "NBC 12.1", future_iso, "01:00:00")
         win.refresh_recordings(force=True)
         assert win.rec_table.rowCount() == 1
-        assert win.rec_table.cellWidget(0, 1) is None
+        assert _extract_watch_button(win.rec_table.cellWidget(0, 1)) is None
         win.queue_mgr.remove_recording(q_fut_id)
 
         # Add an armed recording starting now
@@ -147,9 +165,12 @@ def test_gui_active_schedule_status_and_history_updates(qtbot, isolated_config: 
         # Active table should reflect transition to RECORDING
         assert win.rec_table.rowCount() == 1
         title_it = win.rec_table.item(0, 0)
-        watch_btn = win.rec_table.cellWidget(0, 1)
+        watch_btn = _extract_watch_button(win.rec_table.cellWidget(0, 1))
         assert isinstance(watch_btn, QPushButton)
         assert "Watch" in watch_btn.text()
+        assert watch_btn.objectName() == "tableWatchBtn"
+        assert watch_btn.maximumWidth() == 64 and watch_btn.maximumHeight() == 24
+        assert watch_btn.minimumWidth() == 64 and watch_btn.minimumHeight() == 24
 
         status_it = win.rec_table.item(0, 5)
         assert title_it.text() == "Active Breaking News"
@@ -172,9 +193,10 @@ def test_gui_active_schedule_status_and_history_updates(qtbot, isolated_config: 
         assert win.rec_table.rowCount() == 1
         assert win.rec_table.item(0, 0).text() == "Active Breaking News"
         # Watch button must still be available for completed recording
-        completed_watch_btn = win.rec_table.cellWidget(0, 1)
+        completed_watch_btn = _extract_watch_button(win.rec_table.cellWidget(0, 1))
         assert isinstance(completed_watch_btn, QPushButton)
         assert "Watch" in completed_watch_btn.text()
+        assert completed_watch_btn.objectName() == "tableWatchBtn"
 
         completed_status_it = win.rec_table.item(0, 5)
         assert completed_status_it.text() == "Completed"
@@ -183,9 +205,12 @@ def test_gui_active_schedule_status_and_history_updates(qtbot, isolated_config: 
         # History table should also contain the completed show and have Watch button
         assert win.history_table.rowCount() == 1
         assert win.history_table.item(0, 0).text() == "Active Breaking News"
-        hist_watch_btn = win.history_table.cellWidget(0, 1)
+        hist_watch_btn = _extract_watch_button(win.history_table.cellWidget(0, 1))
         assert isinstance(hist_watch_btn, QPushButton)
         assert "Watch" in hist_watch_btn.text()
+        assert hist_watch_btn.objectName() == "tableWatchBtn"
+        assert hist_watch_btn.maximumWidth() == 64 and hist_watch_btn.maximumHeight() == 24
+        assert hist_watch_btn.minimumWidth() == 64 and hist_watch_btn.minimumHeight() == 24
         assert win.history_table.item(0, 3).text() == "CNN 3.1"
 
         # Now simulate 6 hours passing (older end_iso beyond 6 hours)
@@ -221,7 +246,7 @@ def test_gui_watch_button_and_double_click_playback(qtbot, isolated_config: Conf
         win.refresh_recordings(force=True)
 
         assert win.rec_table.rowCount() == 1
-        watch_btn = win.rec_table.cellWidget(0, 1)
+        watch_btn = _extract_watch_button(win.rec_table.cellWidget(0, 1))
         assert isinstance(watch_btn, QPushButton)
 
         # Click the watch button
@@ -239,7 +264,7 @@ def test_gui_watch_button_and_double_click_playback(qtbot, isolated_config: Conf
         win.queue_mgr.add_history_entry("Historic Movie", "HBO 5.1", "2026-10-15T08:00:00", "02:00:00")
         win.refresh_history(force=True)
         assert win.history_table.rowCount() == 1
-        hist_watch_btn = win.history_table.cellWidget(0, 1)
+        hist_watch_btn = _extract_watch_button(win.history_table.cellWidget(0, 1))
         assert isinstance(hist_watch_btn, QPushButton)
 
         hist_watch_btn.click()

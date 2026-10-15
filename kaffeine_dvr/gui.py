@@ -2011,6 +2011,19 @@ class TableViewportResizeFilter(QObject):
         return super().eventFilter(obj, event)
 
 
+class TableButtonCell(QWidget):
+    """
+    Container widget to center a fixed-size button inside a table cell without stretching.
+    """
+    def __init__(self, button: QPushButton, parent: Optional[QWidget] = None):
+        super().__init__(parent)
+        self.button = button
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(button)
+
+
 class OpacitySliderPopup(QFrame):
     """
     Compact popup displaying an opacity percentage label, interactive horizontal slider,
@@ -3933,6 +3946,33 @@ QPushButton#dangerActionBtn:focus {{
 QPushButton#dangerActionBtn:pressed {{
     background-color: #5c1414;
     border: 1px solid #ef4444;
+}}
+
+/* Watch Action Buttons in Active Schedule & History */
+QPushButton#tableWatchBtn {{
+    background-color: {tokens["bg_button"]};
+    border: 1px solid {tokens["border_color"]};
+    border-radius: 4px;
+    color: {tokens["accent_primary"]};
+    font-size: 11px;
+    font-weight: bold;
+    padding: 0px;
+}}
+QPushButton#tableWatchBtn:hover {{
+    background-color: {tokens["accent_primary"]};
+    border: 1px solid {tokens["accent_hover"]};
+    color: #ffffff;
+}}
+QPushButton#tableWatchBtn:focus {{
+    background-color: {tokens["accent_primary"]};
+    border: 1px solid {tokens["accent_hover"]};
+    color: #ffffff;
+    outline: none;
+}}
+QPushButton#tableWatchBtn:pressed {{
+    background-color: {tokens["accent_pressed"]};
+    border-color: {tokens["accent_primary"]};
+    color: #ffffff;
 }}
 
 /* Checkboxes */
@@ -9416,25 +9456,13 @@ class MainWindow(QMainWindow):
 
             if status in ("RECORDING", "COMPLETED"):
                 watch_btn = QPushButton("▶ Watch")
+                watch_btn.setObjectName("tableWatchBtn")
+                watch_btn.setFixedSize(64, 24)
                 watch_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-                watch_btn.setStyleSheet("""
-                    QPushButton {
-                        background-color: #1e3a5f;
-                        color: #38bdf8;
-                        border: 1px solid #0284c7;
-                        border-radius: 4px;
-                        padding: 2px 4px;
-                        font-size: 11px;
-                        font-weight: bold;
-                    }
-                    QPushButton:hover {
-                        background-color: #0284c7;
-                        color: #ffffff;
-                    }
-                """)
                 rec_copy = dict(rec)
                 watch_btn.clicked.connect(lambda checked=False, r=rec_copy: self.play_recording_item(r))
-                self.rec_table.setCellWidget(row, 1, watch_btn)
+                cell = TableButtonCell(watch_btn)
+                self.rec_table.setCellWidget(row, 1, cell)
             else:
                 self.rec_table.removeCellWidget(row, 1)
                 empty_it = QTableWidgetItem("")
@@ -9543,26 +9571,14 @@ class MainWindow(QMainWindow):
             self.history_table.setItem(row, 0, title_item)
 
             watch_btn = QPushButton("▶ Watch")
+            watch_btn.setObjectName("tableWatchBtn")
+            watch_btn.setFixedSize(64, 24)
             watch_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            watch_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #1e3a5f;
-                    color: #38bdf8;
-                    border: 1px solid #0284c7;
-                    border-radius: 4px;
-                    padding: 2px 4px;
-                    font-size: 11px;
-                    font-weight: bold;
-                }
-                QPushButton:hover {
-                    background-color: #0284c7;
-                    color: #ffffff;
-                }
-            """)
             hist_copy = dict(item)
             hist_copy["status"] = "COMPLETED"
             watch_btn.clicked.connect(lambda checked=False, r=hist_copy: self.play_recording_item(r))
-            self.history_table.setCellWidget(row, 1, watch_btn)
+            cell = TableButtonCell(watch_btn)
+            self.history_table.setCellWidget(row, 1, cell)
 
             dt_item = QTableWidgetItem(date_time_str)
             chan_item = QTableWidgetItem(channel)
