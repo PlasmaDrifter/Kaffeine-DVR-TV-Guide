@@ -2011,6 +2011,50 @@ class TableViewportResizeFilter(QObject):
         return super().eventFilter(obj, event)
 
 
+class TableRowToggleFilter(QObject):
+    """
+    Event filter for QTableWidget viewports that enables toggle selection on single clicks:
+    - Click an unselected row: highlights/selects the row.
+    - Click an already-selected row again: unhighlights/clears the selection.
+    - Quick double click: selects the row and triggers double-click playback seamlessly.
+    - Click on empty table space: clears selection.
+    """
+    def __init__(self, table: QTableWidget, parent: Optional[QObject] = None):
+        super().__init__(parent or table)
+        self.table = table
+        self._was_selected = False
+        self._press_pos = None
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.MouseButtonPress and event.button() == Qt.MouseButton.LeftButton:
+            self._press_pos = event.pos()
+            row = self.table.rowAt(int(event.pos().y()))
+            if row < 0:
+                self.table.clearSelection()
+                self.table.setCurrentCell(-1, -1)
+                self._was_selected = False
+            else:
+                selected_rows = {idx.row() for idx in self.table.selectionModel().selectedRows()}
+                self._was_selected = (row in selected_rows)
+        elif event.type() == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton:
+            if self._press_pos is not None:
+                move_dist = (event.pos() - self._press_pos).manhattanLength()
+                self._press_pos = None
+                if move_dist <= QApplication.startDragDistance():
+                    row = self.table.rowAt(int(event.pos().y()))
+                    if row >= 0 and self._was_selected and row == self.table.currentRow():
+                        self.table.clearSelection()
+                        self.table.setCurrentCell(-1, -1)
+                        self._was_selected = False
+        elif event.type() == QEvent.Type.MouseButtonDblClick and event.button() == Qt.MouseButton.LeftButton:
+            row = self.table.rowAt(int(event.pos().y()))
+            if row >= 0:
+                self.table.selectRow(row)
+                col = self.table.columnAt(int(event.pos().x()))
+                self.table.setCurrentCell(row, max(0, col))
+        return super().eventFilter(obj, event)
+
+
 class TableButtonCell(QWidget):
     """
     Container widget to center a fixed-size button inside a table cell without stretching.
@@ -5014,6 +5058,8 @@ class MainWindow(QMainWindow):
         active_layout.addWidget(self.rec_table)
         self.rec_table_resize_filter = TableViewportResizeFilter(self._adjust_table_columns, self)
         self.rec_table.viewport().installEventFilter(self.rec_table_resize_filter)
+        self.rec_table_toggle_filter = TableRowToggleFilter(self.rec_table, self)
+        self.rec_table.viewport().installEventFilter(self.rec_table_toggle_filter)
 
         self.recordings_subtabs.addTab(active_widget, "Active Schedule")
 
@@ -5074,6 +5120,8 @@ class MainWindow(QMainWindow):
         history_layout.addWidget(self.history_table)
         self.history_table_resize_filter = TableViewportResizeFilter(self._adjust_table_columns, self)
         self.history_table.viewport().installEventFilter(self.history_table_resize_filter)
+        self.history_table_toggle_filter = TableRowToggleFilter(self.history_table, self)
+        self.history_table.viewport().installEventFilter(self.history_table_toggle_filter)
 
         self.recordings_subtabs.addTab(history_widget, "History")
         self.recordings_subtabs.addTab(self.create_rules_tab(), "Auto-Record Rules")
@@ -7293,7 +7341,7 @@ class MainWindow(QMainWindow):
             self.config_mgr.dismissed_update_version = self._latest_detected_version
 
     def check_monthly_updates_on_startup(self):
-        if not self.config_mgr.auto_check_updates:
+        if os.environ.get("PYTEST_CURRENT_TEST") or not self.config_mgr.auto_check_updates:
             return
         now = time.time()
         last_check = self.config_mgr.last_update_check_timestamp
@@ -7305,10 +7353,11 @@ class MainWindow(QMainWindow):
 
     def _load_initial_release_notes(self):
         """Asynchronously queries the latest release notes in the background for the dialog."""
+        if os.environ.get("PYTEST_CURRENT_TEST"):
+            return
         if not getattr(self, "_cached_release_notes", ""):
             self._initial_notes_worker = UpdateCheckWorker()
             self._initial_notes_worker.finished.connect(self._on_initial_notes_loaded)
-            self._initial_notes_worker.finished.connect(self._initial_notes_worker.deleteLater)
             self._initial_notes_worker.start()
 
     def _on_initial_notes_loaded(self, res: dict):
@@ -9709,13 +9758,15 @@ class MainWindow(QMainWindow):
             self.refresh_recordings(force=True)
 
     def _on_rec_table_double_clicked(self, item):
+        row = item.row()
+        self.rec_table.selectRow(row)
+        self.rec_table.setCurrentCell(row, item.column())
         col = item.column()
         if col == 4:  # Duration column
             self.adjust_selected_buffer()
         elif col == 6:  # Retain / Protect column
             self.toggle_protect_selected_recording()
         else:
-            row = item.row()
             title_it = self.rec_table.item(row, 1) or self.rec_table.item(row, 0)
             if not title_it:
                 return
@@ -9728,6 +9779,8 @@ class MainWindow(QMainWindow):
 
     def _on_history_table_double_clicked(self, item):
         row = item.row()
+        self.history_table.selectRow(row)
+        self.history_table.setCurrentCell(row, item.column())
         title_it = self.history_table.item(row, 1) or self.history_table.item(row, 0)
         if not title_it:
             return
@@ -9906,26 +9959,51 @@ class MainWindow(QMainWindow):
                 QMessageBox.critical(self, "Scheduling Error", str(e))
 
     def _on_recordings_subtab_changed(self, index: int):
+        # Clear selection on all recording tables when leaving/switching subtabs
+        if hasattr(self, "rec_table"):
+            self.rec_table.clearSelection()
+            self.rec_table.setCurrentCell(-1, -1)
+        if hasattr(self, "history_table"):
+            self.history_table.clearSelection()
+            self.history_table.setCurrentCell(-1, -1)
+
         if index == 0:
             self.refresh_recordings(force=True)
+            self.rec_table.clearSelection()
+            self.rec_table.setCurrentCell(-1, -1)
         elif index == 1:
             self.refresh_history(force=True)
+            self.history_table.clearSelection()
+            self.history_table.setCurrentCell(-1, -1)
         self._adjust_table_columns()
 
     def _on_main_tab_changed(self, index: int):
+        # Clear active and history table selections whenever leaving or switching main tabs
+        if hasattr(self, "rec_table"):
+            self.rec_table.clearSelection()
+            self.rec_table.setCurrentCell(-1, -1)
+        if hasattr(self, "history_table"):
+            self.history_table.clearSelection()
+            self.history_table.setCurrentCell(-1, -1)
+
         if index == 0:
             self.refresh_date_dropdown()
-            sel_date = self.guide_date_combo.currentData()
-            today_str = date.today().strftime("%Y-%m-%d")
-            if sel_date == today_str or sel_date is None:
-                QTimer.singleShot(60, self.jump_guide_to_now)
-            else:
-                QTimer.singleShot(60, self.jump_guide_to_noon)
+            if not os.environ.get("PYTEST_CURRENT_TEST"):
+                sel_date = self.guide_date_combo.currentData()
+                today_str = date.today().strftime("%Y-%m-%d")
+                if sel_date == today_str or sel_date is None:
+                    QTimer.singleShot(60, self, self.jump_guide_to_now)
+                else:
+                    QTimer.singleShot(60, self, self.jump_guide_to_noon)
         elif index == 1:
             if getattr(self, "recordings_subtabs", None) and self.recordings_subtabs.currentIndex() == 1:
                 self.refresh_history(force=True)
+                self.history_table.clearSelection()
+                self.history_table.setCurrentCell(-1, -1)
             else:
                 self.refresh_recordings(force=True)
+                self.rec_table.clearSelection()
+                self.rec_table.setCurrentCell(-1, -1)
             self._adjust_table_columns()
 
     def _update_time_jump_buttons_visibility(self):
@@ -12648,15 +12726,18 @@ class MainWindow(QMainWindow):
             )
             for w_name in worker_names:
                 w = getattr(self, w_name, None)
-                if w and hasattr(w, "isRunning") and w.isRunning():
+                if w:
                     try:
-                        w.disconnect()
-                    except Exception:
+                        if hasattr(w, "finished"):
+                            w.finished.disconnect()
+                    except (RuntimeError, Exception):
                         pass
                     try:
-                        w.quit()
-                        w.wait(200)
-                    except Exception:
+                        if hasattr(w, "isRunning") and w.isRunning():
+                            w.requestInterruption()
+                            w.quit()
+                            w.wait(400)
+                    except (RuntimeError, Exception):
                         pass
 
             if getattr(self, "_active_timeshift", None):

@@ -3,8 +3,9 @@ from datetime import datetime, timedelta
 from unittest.mock import MagicMock
 
 import pytest
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QPushButton, QTableWidget
+from PyQt6.QtCore import QEvent, QPointF, Qt
+from PyQt6.QtGui import QMouseEvent
+from PyQt6.QtWidgets import QApplication, QPushButton, QTableWidget
 
 from kaffeine_dvr.config import ConfigManager
 from kaffeine_dvr.gui import MainWindow, TableButtonCell, build_app_stylesheet
@@ -456,6 +457,90 @@ def test_gui_recording_schedule_column_placements_persistence(qtbot, isolated_co
         win.close()
         s.remove("rec_table_header_state")
         s.remove("history_table_header_state")
+
+
+def test_gui_recording_tables_unhighlight_on_tab_navigation_and_toggle_click(qtbot, isolated_config: ConfigManager, tmp_path):
+    isolated_config.custom_recording_folder = str(tmp_path)
+    win = MainWindow(config_mgr=isolated_config)
+    qtbot.addWidget(win)
+
+    try:
+        # Populate one item in active schedule and one in history
+        start_iso = (datetime.now() + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%S")
+        win.queue_mgr.add_recording("Toggle Active Show", "ABC 7.1", start_iso, "01:00:00")
+        past_iso = (datetime.now() - timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%S")
+        win.queue_mgr.add_history_entry("Toggle Past Show", "PBS 10.1", past_iso, "00:30:00")
+
+        win.refresh_recordings(force=True)
+        win.refresh_history(force=True)
+
+        assert win.rec_table.rowCount() == 1
+        assert win.history_table.rowCount() == 1
+
+        # 1. Test Unhighlight on Tab Navigation
+        # Select row in active schedule table
+        win.rec_table.selectRow(0)
+        win.rec_table.setCurrentCell(0, 1)
+        assert len(win.rec_table.selectedItems()) > 0
+        assert win.rec_table.currentRow() == 0
+
+        # Navigate away to subtab 1 (History)
+        win.recordings_subtabs.setCurrentIndex(1)
+        assert len(win.rec_table.selectedItems()) == 0
+        assert win.rec_table.currentRow() == -1
+
+        # Navigate back to subtab 0 (Active Schedule) - should remain unhighlighted
+        win.recordings_subtabs.setCurrentIndex(0)
+        assert len(win.rec_table.selectedItems()) == 0
+        assert win.rec_table.currentRow() == -1
+
+        # Switch to main tab 1 and select row in history table
+        win.tabs.setCurrentIndex(1)
+        win.recordings_subtabs.setCurrentIndex(1)
+        win.history_table.selectRow(0)
+        win.history_table.setCurrentCell(0, 1)
+        assert len(win.history_table.selectedItems()) > 0
+
+        # Switch main tab away to TV Guide Browser (tab 0)
+        win.tabs.setCurrentIndex(0)
+        assert len(win.history_table.selectedItems()) == 0
+        assert win.history_table.currentRow() == -1
+
+        # Switch main tab back to Recordings (tab 1) - should remain unhighlighted
+        win.tabs.setCurrentIndex(1)
+        assert len(win.history_table.selectedItems()) == 0
+        assert win.history_table.currentRow() == -1
+
+        # 2. Test Single Click Toggle Selection (click to highlight, click again to unhighlight)
+        win.recordings_subtabs.setCurrentIndex(0)
+        # Position over row 0 in rec_table viewport
+        pos = QPointF(50.0, float(win.rec_table.rowViewportPosition(0) + 5))
+
+        # First click: selects row 0
+        QApplication.sendEvent(win.rec_table.viewport(), QMouseEvent(QEvent.Type.MouseButtonPress, pos, Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier))
+        win.rec_table.selectRow(0)
+        win.rec_table.setCurrentCell(0, 1)
+        QApplication.sendEvent(win.rec_table.viewport(), QMouseEvent(QEvent.Type.MouseButtonRelease, pos, Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier))
+
+        assert len(win.rec_table.selectedItems()) > 0
+        assert win.rec_table.currentRow() == 0
+
+        # Second click on the same row: unselects/unhighlights
+        QApplication.sendEvent(win.rec_table.viewport(), QMouseEvent(QEvent.Type.MouseButtonPress, pos, Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier))
+        QApplication.sendEvent(win.rec_table.viewport(), QMouseEvent(QEvent.Type.MouseButtonRelease, pos, Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier))
+
+        assert len(win.rec_table.selectedItems()) == 0
+        assert win.rec_table.currentRow() == -1
+
+        # 3. Test Quick Double Click still selects and executes
+        win.play_recording_item = MagicMock()
+        item = win.rec_table.item(0, 1)
+        win._on_rec_table_double_clicked(item)
+        assert win.rec_table.currentRow() == 0
+        assert len(win.rec_table.selectedItems()) > 0
+    finally:
+        win.close()
+
 
 
 
