@@ -814,6 +814,54 @@ def test_guide_list_context_menu(qtbot, isolated_config, monkeypatch):
     win.close()
 
 
+def test_guide_context_menu_watch_upcoming_bypasses_upcoming_dialog(qtbot, isolated_config, monkeypatch):
+    win = MainWindow(config_mgr=isolated_config)
+    qtbot.addWidget(win)
+
+    prog = {
+        "id": 9904,
+        "show_title": "Future Show",
+        "kaffeine_channel": "Channel 11.1",
+        "start_iso": "2099-01-01T20:00:00",
+        "duration_iso": "01:00:00",
+        "summary": "Show in the future.",
+        "_start_col": 0,
+        "_span": 1,
+    }
+    table = win.guide_grid_table
+    table.setRowCount(1)
+    table.setColumnCount(2)
+    item = QTableWidgetItem("Future Show")
+    item.setData(Qt.ItemDataRole.UserRole, prog)
+    table.setItem(0, 0, item)
+
+    dialog_shown = []
+    from kaffeine_dvr import gui
+    monkeypatch.setattr(gui.UpcomingShowDialog, "exec", lambda self: dialog_shown.append(True))
+
+    started_timeshift = []
+    monkeypatch.setattr(win, "start_timeshift_playback", lambda p: started_timeshift.append(p))
+
+    captured_menus = []
+    monkeypatch.setattr(QMenu, "exec", lambda m, *args, **kwargs: captured_menus.append(m))
+
+    pos = table.visualItemRect(item).center()
+    win._on_guide_grid_context_menu(pos)
+
+    assert len(captured_menus) == 1
+    menu = captured_menus[0]
+    watch_act = next(a for a in menu.actions() if a.text() == "Watch Channel")
+    watch_act.trigger()
+
+    # Bypassed UpcomingShowDialog entirely
+    assert len(dialog_shown) == 0
+    # Started timeshift for channel directly
+    assert len(started_timeshift) == 1
+    assert started_timeshift[0]["kaffeine_channel"] == "Channel 11.1"
+    win.close()
+
+
+
 
 
 

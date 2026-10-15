@@ -11123,8 +11123,8 @@ class MainWindow(QMainWindow):
             print(f"Error finding live program for channel {ch}: {e}")
         return None
 
-    def watch_or_tune_selected_guide_item(self):
-        prog = self._get_active_selected_program()
+    def watch_or_tune_selected_guide_item(self, target_prog: Optional[Dict[str, Any]] = None):
+        prog = target_prog or self._get_active_selected_program()
         if not prog:
             QMessageBox.warning(self, "Selection Required", "Please select a program from the guide.")
             return
@@ -11770,15 +11770,15 @@ class MainWindow(QMainWindow):
 
         menu.addSeparator()
 
-        # 1. Watch / Tune action first
+        # 1. Watch / Tune action first (routes directly without intermediate UpcomingShowDialog)
         timing_info = self._get_program_timing_state(prog)
         state = timing_info.get("state", "upcoming")
         if state == "live":
-            menu.addAction("Watch Live", lambda: self.handle_program_activation(prog))
+            menu.addAction("Watch Live", lambda: self.watch_or_tune_selected_guide_item(prog))
         elif state == "upcoming":
-            menu.addAction("Watch Channel", lambda: self.handle_program_activation(prog))
+            menu.addAction("Watch Channel", lambda: self.watch_or_tune_selected_guide_item(prog))
         elif state == "past" and timing_info.get("recorded_file"):
-            menu.addAction("Play Recording", lambda: self.handle_program_activation(prog))
+            menu.addAction("Play Recording", lambda: self.watch_or_tune_selected_guide_item(prog))
 
         has_active_ts = bool(getattr(self, "_active_timeshift", None))
         cur_ts_ch = (self._active_timeshift.get("channel") or "").strip().lower() if has_active_ts else ""
@@ -11793,20 +11793,20 @@ class MainWindow(QMainWindow):
         rec_info = active_map.get((ch_key, iso_key))
 
         if rec_info is None:
-            menu.addAction("Record Program", self.record_selected_guide_item)
+            menu.addAction("Record Program", lambda: self.record_selected_guide_item(prog))
         else:
             buf_val = rec_info.get("buffer_mins", 0) or 0
-            menu.addAction(f"Adjust Buffer (+{buf_val}m)...", self.record_selected_guide_item)
-            menu.addAction("Cancel Recording", self.cancel_selected_guide_recording)
+            menu.addAction(f"Adjust Buffer (+{buf_val}m)...", lambda: self.record_selected_guide_item(prog))
+            menu.addAction("Cancel Recording", lambda: self.cancel_selected_guide_recording(prog))
 
         # 3. Record Series action third
-        menu.addAction("Record Series (Add Rule)...", self.add_rule_from_selected_guide_item)
+        menu.addAction("Record Series (Add Rule)...", lambda: self.add_rule_from_selected_guide_item(prog))
 
         target_pos = global_pos if global_pos is not None else QCursor.pos()
         menu.exec(target_pos)
 
-    def cancel_selected_guide_recording(self):
-        prog = self._get_active_selected_program()
+    def cancel_selected_guide_recording(self, target_prog: Optional[Dict[str, Any]] = None):
+        prog = target_prog or self._get_active_selected_program()
         if not prog:
             QMessageBox.warning(self, "Selection Required", "Please select a program from the guide.")
             return
@@ -11843,8 +11843,8 @@ class MainWindow(QMainWindow):
         else:
             self.filter_guide()
 
-    def record_selected_guide_item(self):
-        prog = self._get_active_selected_program()
+    def record_selected_guide_item(self, target_prog: Optional[Dict[str, Any]] = None):
+        prog = target_prog or self._get_active_selected_program()
         if not prog:
             QMessageBox.warning(self, "Selection Required", "Please select a program from the guide.")
             return
@@ -11910,8 +11910,8 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Error Queueing Recording", str(e))
 
-    def add_rule_from_selected_guide_item(self):
-        prog = self._get_active_selected_program()
+    def add_rule_from_selected_guide_item(self, target_prog: Optional[Dict[str, Any]] = None):
+        prog = target_prog or self._get_active_selected_program()
         if not prog:
             QMessageBox.warning(self, "Selection Required", "Please select a program first.")
             return
