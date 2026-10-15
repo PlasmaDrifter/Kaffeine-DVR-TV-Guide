@@ -11,7 +11,7 @@ import shutil
 import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 
 class StorageManager:
@@ -353,3 +353,72 @@ class StorageManager:
             return candidates[0][2]
 
         return None
+
+    def check_history_file_availability(self, entry: Dict[str, Any]) -> Tuple[bool, Optional[Path], int]:
+        """
+        Determines whether a video file corresponding to a history entry is still on the disk.
+        Returns: (is_available, file_path_obj, size_bytes).
+        Restricts searching strictly to the local recording folder (no recursive or network mount searches).
+        """
+        if not entry:
+            return False, None, 0
+
+        # 1. Direct check if recorded file_path exists and has positive size
+        fpath_str = entry.get("file_path")
+        if fpath_str:
+            p = Path(fpath_str)
+            try:
+                if p.is_file():
+                    st = p.stat()
+                    if st.st_size > 0:
+                        return True, p, st.st_size
+            except Exception:
+                pass
+
+        # 2. Check within the local recording folder for match
+        folder = self.get_recording_folder()
+        if not folder or not folder.exists():
+            return False, None, 0
+
+        title = entry.get("title") or ""
+        start_iso = entry.get("start_iso") or ""
+        date_str = start_iso[:10] if start_iso else ""
+
+        clean_title = re.sub(r'[^a-zA-Z0-9]', '', title).lower()
+        title_words = [w.lower() for w in re.findall(r'\w+', title) if len(w) > 3]
+
+        best_match = None
+        best_size = 0
+
+        try:
+            for item in folder.iterdir():
+                if item.is_file() and item.suffix.lower() in self.VIDEO_EXTENSIONS:
+                    try:
+                        st = item.stat()
+                        sz = st.st_size
+                        if sz == 0:
+                            continue
+                        fname_lower = item.name.lower()
+                        clean_fname = re.sub(r'[^a-zA-Z0-9]', '', item.name).lower()
+
+                        matched = False
+                        if clean_title and (clean_title in clean_fname or clean_fname in clean_title):
+                            matched = True
+                        elif title_words and all(w in fname_lower for w in title_words):
+                            matched = True
+                        elif date_str and date_str in fname_lower and any(w in fname_lower for w in title_words):
+                            matched = True
+
+                        if matched:
+                            best_match = item
+                            best_size = sz
+                            break
+                    except Exception:
+                        continue
+        except Exception:
+            pass
+
+        if best_match:
+            return True, best_match, best_size
+
+        return False, None, 0

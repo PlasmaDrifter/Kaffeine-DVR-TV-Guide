@@ -795,21 +795,60 @@ class QueueManager:
         conn.close()
         return rows
 
-    def delete_history_entry(self, history_id: int) -> bool:
-        """Deletes a single history entry by ID."""
+    def update_history_file_path(self, history_id: int, file_path_str: str) -> bool:
+        """Updates the recorded file path for a history record."""
         conn = self._get_connection()
         cur = conn.cursor()
+        cur.execute("UPDATE recording_history SET file_path = ? WHERE id = ?", (file_path_str, history_id))
+        updated = cur.rowcount > 0
+        conn.commit()
+        conn.close()
+        return updated
+
+    def delete_history_entry(self, history_id: int) -> bool:
+        """
+        Deletes a single history entry by ID.
+        Also clears the corresponding item from active schedule (recording_queue)
+        if it is currently in COMPLETED status (within the 6-hour retention window).
+        """
+        conn = self._get_connection()
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM recording_history WHERE id = ?", (history_id,))
+        hist_row = cur.fetchone()
+        if not hist_row:
+            conn.close()
+            return False
+
+        h_dict = dict(hist_row)
+        title = h_dict.get("title", "")
+        start_iso = h_dict.get("start_iso", "")
+
         cur.execute("DELETE FROM recording_history WHERE id = ?", (history_id,))
         deleted = cur.rowcount > 0
+
+        # Also clear from active schedule if present as COMPLETED
+        if title and start_iso:
+            cur.execute("""
+                DELETE FROM recording_queue
+                WHERE status = 'COMPLETED'
+                  AND title = ?
+                  AND start_iso = ?
+            """, (title, start_iso))
+
         conn.commit()
         conn.close()
         return deleted
 
     def clear_all_history(self) -> bool:
-        """Clears all records in recording history."""
+        """
+        Clears all records in recording history.
+        Also clears all COMPLETED entries from active schedule (recording_queue).
+        """
         conn = self._get_connection()
         cur = conn.cursor()
         cur.execute("DELETE FROM recording_history")
+        cur.execute("DELETE FROM recording_queue WHERE status = 'COMPLETED'")
         conn.commit()
         conn.close()
         return True

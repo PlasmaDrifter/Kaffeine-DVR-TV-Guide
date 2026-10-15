@@ -136,9 +136,10 @@ def test_gui_active_schedule_status_and_history_updates(qtbot, isolated_config: 
         assert win.rec_table.columnCount() == 7
         assert win.rec_table.horizontalHeaderItem(0).text() == "Watch"
         assert win.rec_table.horizontalHeaderItem(1).text() == "Title"
-        assert win.history_table.columnCount() == 5
+        assert win.history_table.columnCount() == 6
         assert win.history_table.horizontalHeaderItem(0).text() == "Watch"
         assert win.history_table.horizontalHeaderItem(1).text() == "Title"
+        assert win.history_table.horizontalHeaderItem(5).text() == "Status"
 
         # Initially empty
         win.refresh_recordings(force=True)
@@ -202,7 +203,7 @@ def test_gui_active_schedule_status_and_history_updates(qtbot, isolated_config: 
         assert completed_status_it.text() == "Completed"
         assert completed_status_it.foreground().color().name().lower() == "#28a745"
 
-        # History table should also contain the completed show and have Watch button
+        # History table should also contain the completed show
         assert win.history_table.rowCount() == 1
         assert win.history_table.item(0, 1).text() == "Active Breaking News"
         hist_watch_btn = _extract_watch_button(win.history_table.cellWidget(0, 0))
@@ -212,6 +213,9 @@ def test_gui_active_schedule_status_and_history_updates(qtbot, isolated_config: 
         assert hist_watch_btn.maximumWidth() == 78 and hist_watch_btn.maximumHeight() == 24
         assert hist_watch_btn.minimumWidth() == 78 and hist_watch_btn.minimumHeight() == 24
         assert win.history_table.item(0, 3).text() == "CNN 3.1"
+        # Status column reflects that no physical file exists on disk
+        assert "Deleted from Disk" in win.history_table.item(0, 5).text()
+        assert not hist_watch_btn.isEnabled()
 
         # Now simulate 6 hours passing (older end_iso beyond 6 hours)
         conn = win.queue_mgr._get_connection()
@@ -230,7 +234,8 @@ def test_gui_active_schedule_status_and_history_updates(qtbot, isolated_config: 
         win.close()
 
 
-def test_gui_watch_button_and_double_click_playback(qtbot, isolated_config: ConfigManager):
+def test_gui_watch_button_and_double_click_playback(qtbot, isolated_config: ConfigManager, tmp_path):
+    isolated_config.custom_recording_folder = str(tmp_path)
     win = MainWindow(config_mgr=isolated_config)
     qtbot.addWidget(win)
 
@@ -260,12 +265,16 @@ def test_gui_watch_button_and_double_click_playback(qtbot, isolated_config: Conf
         win._on_rec_table_double_clicked(item)
         assert win.play_recording_item.call_count == 2
 
-        # 2. History table row
-        win.queue_mgr.add_history_entry("Historic Movie", "HBO 5.1", "2026-10-15T08:00:00", "02:00:00")
+        # 2. History table row with simulated video file on disk
+        video_file = tmp_path / "Historic_Movie_20261015.m2t"
+        video_file.write_bytes(b"0" * 1024 * 500)
+
+        win.queue_mgr.add_history_entry("Historic Movie", "HBO 5.1", "2026-10-15T08:00:00", "02:00:00", file_path=str(video_file))
         win.refresh_history(force=True)
         assert win.history_table.rowCount() == 1
         hist_watch_btn = _extract_watch_button(win.history_table.cellWidget(0, 0))
         assert isinstance(hist_watch_btn, QPushButton)
+        assert hist_watch_btn.isEnabled()
 
         hist_watch_btn.click()
         assert win.play_recording_item.call_count == 3
@@ -318,3 +327,72 @@ def test_gui_recording_subtabs_order_and_hint_label(qtbot, isolated_config: Conf
         assert win.history_table.item(0, 1).text() == "Past Broadcast"
     finally:
         win.close()
+
+
+def test_history_disk_availability_and_sync_rules(qtbot, isolated_config: ConfigManager, tmp_path):
+    isolated_config.custom_recording_folder = str(tmp_path)
+    win = MainWindow(config_mgr=isolated_config)
+    qtbot.addWidget(win)
+
+    try:
+        # 1. Setup completed recording in both queue and history
+        start_iso = (datetime.now() - timedelta(minutes=45)).strftime("%Y-%m-%dT%H:%M:%S")
+        end_iso = (datetime.now() - timedelta(minutes=15)).strftime("%Y-%m-%dT%H:%M:%S")
+
+        qid = win.queue_mgr.add_recording("Sync Test Broadcast", "PBS 10.1", start_iso, "00:30:00")
+        conn = win.queue_mgr._get_connection()
+        cur = conn.cursor()
+        cur.execute("UPDATE recording_queue SET status = 'COMPLETED', end_iso = ? WHERE id = ?", (end_iso, qid))
+        conn.commit()
+        conn.close()
+
+        hid = win.queue_mgr.add_history_entry("Sync Test Broadcast", "PBS 10.1", start_iso, "00:30:00")
+
+        win.refresh_recordings(force=True)
+        win.refresh_history(force=True)
+
+        assert win.rec_table.rowCount() == 1
+        assert win.history_table.rowCount() == 1
+
+        # File does not exist yet -> "Deleted from Disk", watch button disabled
+        assert "Deleted from Disk" in win.history_table.item(0, 5).text()
+        hist_btn = _extract_watch_button(win.history_table.cellWidget(0, 0))
+        assert hist_btn is not None and not hist_btn.isEnabled()
+
+        # 2. Simulate video file creation on disk
+        video_file = tmp_path / "Sync_Test_Broadcast.m2t"
+        video_file.write_bytes(b"X" * (1024 * 1024 * 250))  # 250 MB
+
+        win.refresh_history(force=True)
+        assert "Available (250 MB)" in win.history_table.item(0, 5).text()
+        hist_btn = _extract_watch_button(win.history_table.cellWidget(0, 0))
+        assert hist_btn is not None and hist_btn.isEnabled()
+
+        # 3. Rule: Clearing item in history ALSO clears it from active schedule (if within 6 hours)
+        win.history_table.setCurrentCell(0, 1)
+        win.clear_selected_history_entry()
+
+        assert win.history_table.rowCount() == 0
+        assert win.rec_table.rowCount() == 0  # Active schedule was also cleared!
+
+        # 4. Rule: Clearing/canceling from active schedule does NOT remove from history
+        fut_iso = (datetime.now() + timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%S")
+        qid2 = win.queue_mgr.add_recording("Keep In History Show", "NBC 4.1", fut_iso, "00:30:00")
+        hid2 = win.queue_mgr.add_history_entry("Keep In History Show", "NBC 4.1", start_iso, "00:30:00")
+        win.refresh_recordings(force=True)
+        win.refresh_history(force=True)
+
+        assert win.rec_table.rowCount() == 1
+        assert win.history_table.rowCount() == 1
+
+        # Cancel/remove from active schedule
+        win.rec_table.setCurrentCell(0, 1)
+        win.cancel_selected_recording()
+
+        # Active schedule should be empty, but History must still retain the entry
+        assert win.rec_table.rowCount() == 0
+        assert win.history_table.rowCount() == 1
+        assert win.history_table.item(0, 1).text() == "Keep In History Show"
+    finally:
+        win.close()
+

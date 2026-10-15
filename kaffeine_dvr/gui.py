@@ -3974,6 +3974,11 @@ QPushButton#tableWatchBtn:pressed {{
     border-color: {tokens["accent_primary"]};
     color: #ffffff;
 }}
+QPushButton#tableWatchBtn:disabled {{
+    background-color: transparent;
+    border: 1px solid {tokens.get("border_color", "#334155")};
+    color: {tokens.get("text_muted", "#64748b")};
+}}
 
 /* Checkboxes */
 QCheckBox {{
@@ -5039,9 +5044,9 @@ class MainWindow(QMainWindow):
 
         # History Table
         self.history_table = QTableWidget()
-        self.history_table.setColumnCount(5)
-        self.history_table.setHorizontalHeaderLabels(["Watch", "Title", "Date / Time", "Channel", "Runtime"])
-        for i in range(5):
+        self.history_table.setColumnCount(6)
+        self.history_table.setHorizontalHeaderLabels(["Watch", "Title", "Date / Time", "Channel", "Runtime", "Status"])
+        for i in range(6):
             self.history_table.horizontalHeader().setSectionResizeMode(i, QHeaderView.ResizeMode.Interactive)
         self.history_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.history_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -8234,9 +8239,9 @@ class MainWindow(QMainWindow):
         if hasattr(self, "history_table"):
             hist_w = self.history_table.viewport().width()
             if hist_w > 100:
-                # Watch, Title, Date / Time, Channel, Runtime
-                min_widths = [90, 210, 160, 80, 90]
-                shares = [0.10, 0.36, 0.25, 0.14, 0.15]
+                # Watch, Title, Date / Time, Channel, Runtime, Status
+                min_widths = [90, 190, 150, 75, 85, 130]
+                shares = [0.09, 0.30, 0.22, 0.10, 0.11, 0.18]
                 allocated = [max(mw, int(hist_w * s)) for mw, s in zip(min_widths, shares)]
                 diff = hist_w - sum(allocated)
                 if diff > 0:
@@ -9533,9 +9538,20 @@ class MainWindow(QMainWindow):
             return
         hist = self.queue_mgr.list_history()
 
-        hist_fp = tuple(
-            (item.get("id"), item.get("title"), item.get("channel"), item.get("start_iso"), item.get("duration_iso"))
-            for item in hist
+        folder = self.storage_mgr.get_recording_folder()
+        folder_mtime = 0
+        try:
+            if folder and folder.exists():
+                folder_mtime = folder.stat().st_mtime
+        except Exception:
+            pass
+
+        hist_fp = (
+            folder_mtime,
+            tuple(
+                (item.get("id"), item.get("title"), item.get("channel"), item.get("start_iso"), item.get("duration_iso"), item.get("file_path"))
+                for item in hist
+            )
         )
         if not force and getattr(self, "_last_hist_fingerprint", None) == hist_fp:
             return
@@ -9570,13 +9586,26 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
+            # Check file availability on disk
+            is_avail, resolved_file, size_bytes = self.storage_mgr.check_history_file_availability(item)
+            if is_avail and resolved_file and item.get("file_path") != str(resolved_file):
+                self.queue_mgr.update_history_file_path(hid, str(resolved_file))
+                item["file_path"] = str(resolved_file)
+
             watch_btn = QPushButton("▶ Watch")
             watch_btn.setObjectName("tableWatchBtn")
             watch_btn.setFixedSize(78, 24)
-            watch_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            hist_copy = dict(item)
-            hist_copy["status"] = "COMPLETED"
-            watch_btn.clicked.connect(lambda checked=False, r=hist_copy: self.play_recording_item(r))
+
+            if is_avail:
+                watch_btn.setEnabled(True)
+                watch_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                hist_copy = dict(item)
+                hist_copy["status"] = "COMPLETED"
+                watch_btn.clicked.connect(lambda checked=False, r=hist_copy: self.play_recording_item(r))
+            else:
+                watch_btn.setEnabled(False)
+                watch_btn.setToolTip("Video file is no longer on the drive.")
+
             cell = TableButtonCell(watch_btn)
             self.history_table.setCellWidget(row, 0, cell)
             watch_item = QTableWidgetItem("")
@@ -9594,6 +9623,26 @@ class MainWindow(QMainWindow):
             self.history_table.setItem(row, 2, dt_item)
             self.history_table.setItem(row, 3, chan_item)
             self.history_table.setItem(row, 4, dur_item)
+
+            # Column 5: Status (Disk Availability)
+            if is_avail:
+                size_gb = size_bytes / (1024 ** 3)
+                if size_gb >= 1.0:
+                    status_text = f"Available ({size_gb:.1f} GB)"
+                else:
+                    size_mb = size_bytes / (1024 ** 2)
+                    status_text = f"Available ({size_mb:.0f} MB)"
+                status_color = "#28a745"
+                tooltip_text = f"File on drive: {resolved_file}\nSize: {status_text.split('(')[1][:-1]}"
+            else:
+                status_text = "Deleted from Disk"
+                status_color = "#8c98aa"
+                tooltip_text = "Video file was purged or removed from the recording drive."
+
+            status_item = QTableWidgetItem(status_text)
+            status_item.setForeground(QColor(status_color))
+            status_item.setToolTip(tooltip_text)
+            self.history_table.setItem(row, 5, status_item)
 
         if restored_row >= 0:
             self.history_table.setCurrentCell(restored_row, 1)
@@ -9618,6 +9667,7 @@ class MainWindow(QMainWindow):
             self.queue_mgr.delete_history_entry(int(hid))
             self.status_bar.showMessage(f"Removed '{title}' from history.", 3000)
             self.refresh_history(force=True)
+            self.refresh_recordings(force=True)
 
     def clear_all_history(self):
         count = self.history_table.rowCount()
@@ -9632,6 +9682,7 @@ class MainWindow(QMainWindow):
             self.queue_mgr.clear_all_history()
             self.status_bar.showMessage("Recording history cleared.", 3000)
             self.refresh_history(force=True)
+            self.refresh_recordings(force=True)
 
     def _on_rec_table_double_clicked(self, item):
         col = item.column()
@@ -9661,6 +9712,10 @@ class MainWindow(QMainWindow):
             hist_list = self.queue_mgr.list_history()
             h_rec = next((h for h in hist_list if h.get("id") == int(hid)), None)
             if h_rec:
+                is_avail, _, _ = self.storage_mgr.check_history_file_availability(h_rec)
+                if not is_avail:
+                    self.status_bar.showMessage(f"Cannot play '{h_rec.get('title')}': file is no longer on the drive.", 4000)
+                    return
                 h_copy = dict(h_rec)
                 h_copy["status"] = "COMPLETED"
                 self.play_recording_item(h_copy)
