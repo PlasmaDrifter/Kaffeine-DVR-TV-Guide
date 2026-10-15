@@ -5007,6 +5007,7 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
         rec_hdr.sectionMoved.connect(self._save_rec_table_header_state)
+        rec_hdr.sectionResized.connect(self._save_rec_table_header_state)
         self.rec_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.rec_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.rec_table.itemDoubleClicked.connect(self._on_rec_table_double_clicked)
@@ -5066,6 +5067,7 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
         hist_hdr.sectionMoved.connect(self._save_history_table_header_state)
+        hist_hdr.sectionResized.connect(self._save_history_table_header_state)
         self.history_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.history_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.history_table.itemDoubleClicked.connect(self._on_history_table_double_clicked)
@@ -8237,9 +8239,9 @@ class MainWindow(QMainWindow):
             self._apply_guide_zoom()
 
     def _adjust_table_columns(self):
-        """Dynamically distributes column widths proportionally based on available table viewport width."""
+        """Dynamically distributes column widths proportionally based on available table viewport width when no custom column sizes are saved."""
         # 1. Active Schedule Table
-        if hasattr(self, "rec_table"):
+        if hasattr(self, "rec_table") and not self.settings.contains("rec_table_header_state"):
             rec_w = self.rec_table.viewport().width()
             if rec_w > 100:
                 # Watch, Title, Schedule, Channel, Duration, Status, Retain
@@ -8256,7 +8258,7 @@ class MainWindow(QMainWindow):
                 h.blockSignals(False)
 
         # 2. History Table
-        if hasattr(self, "history_table"):
+        if hasattr(self, "history_table") and not self.settings.contains("history_table_header_state"):
             hist_w = self.history_table.viewport().width()
             if hist_w > 100:
                 # Watch, Title, Date / Time, Channel, Runtime, Status

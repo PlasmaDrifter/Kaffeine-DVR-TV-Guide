@@ -401,17 +401,19 @@ def test_gui_recording_schedule_column_placements_persistence(qtbot, isolated_co
     from PyQt6.QtCore import QSettings
 
     s = QSettings("KaffeineDVR", "TVGuide")
-    # Pre-populate custom header states in settings
+    # Pre-populate custom header states with both custom widths and custom placements
     mock_rec = QTableWidget(1, 7)
     rec_h = mock_rec.horizontalHeader()
     rec_h.setSectionsMovable(True)
     rec_h.moveSection(1, 3)
+    rec_h.resizeSection(2, 350)
     s.setValue("rec_table_header_state", rec_h.saveState())
 
     mock_hist = QTableWidget(1, 6)
     hist_h = mock_hist.horizontalHeader()
     hist_h.setSectionsMovable(True)
     hist_h.moveSection(3, 1)
+    hist_h.resizeSection(1, 275)
     s.setValue("history_table_header_state", hist_h.saveState())
 
     win = MainWindow(config_mgr=isolated_config)
@@ -422,19 +424,34 @@ def test_gui_recording_schedule_column_placements_persistence(qtbot, isolated_co
         assert win.rec_table.horizontalHeader().sectionsMovable() is True
         assert win.history_table.horizontalHeader().sectionsMovable() is True
 
-        # Verify that custom column placements were restored from settings
+        # Verify that custom column placements and widths were restored from settings
         assert win.rec_table.horizontalHeader().visualIndex(1) == 3
+        assert win.rec_table.horizontalHeader().sectionSize(2) == 350
+
         assert win.history_table.horizontalHeader().visualIndex(3) == 1
+        assert win.history_table.horizontalHeader().sectionSize(1) == 275
+
+        # Trigger _adjust_table_columns to ensure custom widths are preserved and not overwritten
+        win._adjust_table_columns()
+        assert win.rec_table.horizontalHeader().sectionSize(2) == 350
+        assert win.history_table.horizontalHeader().sectionSize(1) == 275
+
+        # Resize a column on history table and verify settings update
+        win.history_table.horizontalHeader().resizeSection(1, 410)
+        saved_hist_bytes = win.settings.value("history_table_header_state")
+        check_hist = QTableWidget(1, 6)
+        check_hist.horizontalHeader().restoreState(saved_hist_bytes)
+        assert check_hist.horizontalHeader().sectionSize(1) == 410
 
         # Move logical Column 1 to Visual Index 4, and check that settings value updates
         win.rec_table.horizontalHeader().moveSection(3, 4)
-        saved_bytes = win.settings.value("rec_table_header_state")
-        assert saved_bytes is not None
+        saved_rec_bytes = win.settings.value("rec_table_header_state")
+        assert saved_rec_bytes is not None
 
         # Verify dynamic update in settings reflects change
-        check_table = QTableWidget(1, 7)
-        check_table.horizontalHeader().restoreState(saved_bytes)
-        assert check_table.horizontalHeader().visualIndex(1) == 4
+        check_rec = QTableWidget(1, 7)
+        check_rec.horizontalHeader().restoreState(saved_rec_bytes)
+        assert check_rec.horizontalHeader().visualIndex(1) == 4
     finally:
         win.close()
         s.remove("rec_table_header_state")
