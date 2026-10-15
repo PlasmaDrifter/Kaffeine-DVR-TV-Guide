@@ -4996,8 +4996,17 @@ class MainWindow(QMainWindow):
         self.rec_table = QTableWidget()
         self.rec_table.setColumnCount(7)
         self.rec_table.setHorizontalHeaderLabels(["Watch", "Title", "Schedule", "Channel", "Duration", "Status", "Retain"])
+        rec_hdr = self.rec_table.horizontalHeader()
         for i in range(7):
-            self.rec_table.horizontalHeader().setSectionResizeMode(i, QHeaderView.ResizeMode.Interactive)
+            rec_hdr.setSectionResizeMode(i, QHeaderView.ResizeMode.Interactive)
+        rec_hdr.setSectionsMovable(True)
+        saved_rec_hdr = self.settings.value("rec_table_header_state")
+        if saved_rec_hdr:
+            try:
+                rec_hdr.restoreState(saved_rec_hdr)
+            except Exception:
+                pass
+        rec_hdr.sectionMoved.connect(self._save_rec_table_header_state)
         self.rec_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.rec_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.rec_table.itemDoubleClicked.connect(self._on_rec_table_double_clicked)
@@ -5046,8 +5055,17 @@ class MainWindow(QMainWindow):
         self.history_table = QTableWidget()
         self.history_table.setColumnCount(6)
         self.history_table.setHorizontalHeaderLabels(["Watch", "Title", "Date / Time", "Channel", "Runtime", "Status"])
+        hist_hdr = self.history_table.horizontalHeader()
         for i in range(6):
-            self.history_table.horizontalHeader().setSectionResizeMode(i, QHeaderView.ResizeMode.Interactive)
+            hist_hdr.setSectionResizeMode(i, QHeaderView.ResizeMode.Interactive)
+        hist_hdr.setSectionsMovable(True)
+        saved_hist_hdr = self.settings.value("history_table_header_state")
+        if saved_hist_hdr:
+            try:
+                hist_hdr.restoreState(saved_hist_hdr)
+            except Exception:
+                pass
+        hist_hdr.sectionMoved.connect(self._save_history_table_header_state)
         self.history_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.history_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.history_table.itemDoubleClicked.connect(self._on_history_table_double_clicked)
@@ -8232,8 +8250,10 @@ class MainWindow(QMainWindow):
                 if diff > 0:
                     allocated[1] += diff
                 h = self.rec_table.horizontalHeader()
+                h.blockSignals(True)
                 for i, fw in enumerate(allocated):
                     h.resizeSection(i, fw)
+                h.blockSignals(False)
 
         # 2. History Table
         if hasattr(self, "history_table"):
@@ -8247,8 +8267,10 @@ class MainWindow(QMainWindow):
                 if diff > 0:
                     allocated[1] += diff
                 h = self.history_table.horizontalHeader()
+                h.blockSignals(True)
                 for i, fw in enumerate(allocated):
                     h.resizeSection(i, fw)
+                h.blockSignals(False)
 
     def _auto_save_automation_settings(self):
         """Silently persist automation and storage retention settings whenever any control is changed."""
@@ -10961,6 +10983,16 @@ class MainWindow(QMainWindow):
         """Persists the user's custom column widths and section positions."""
         if hasattr(self, "guide_table") and hasattr(self, "settings"):
             self.settings.setValue("guide_table_header_state", self.guide_table.horizontalHeader().saveState())
+
+    def _save_rec_table_header_state(self, *args):
+        """Persists the user's custom column placements for the active schedule table."""
+        if hasattr(self, "rec_table") and hasattr(self, "settings"):
+            self.settings.setValue("rec_table_header_state", self.rec_table.horizontalHeader().saveState())
+
+    def _save_history_table_header_state(self, *args):
+        """Persists the user's custom column placements for the history table."""
+        if hasattr(self, "history_table") and hasattr(self, "settings"):
+            self.settings.setValue("history_table_header_state", self.history_table.horizontalHeader().saveState())
 
     def _scroll_list_to_first_active(self):
         """Scroll list guide table to the first live or upcoming show."""

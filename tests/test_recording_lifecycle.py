@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QPushButton
+from PyQt6.QtWidgets import QPushButton, QTableWidget
 
 from kaffeine_dvr.config import ConfigManager
 from kaffeine_dvr.gui import MainWindow, TableButtonCell, build_app_stylesheet
@@ -395,4 +395,50 @@ def test_history_disk_availability_and_sync_rules(qtbot, isolated_config: Config
         assert win.history_table.item(0, 1).text() == "Keep In History Show"
     finally:
         win.close()
+
+
+def test_gui_recording_schedule_column_placements_persistence(qtbot, isolated_config: ConfigManager):
+    from PyQt6.QtCore import QSettings
+
+    s = QSettings("KaffeineDVR", "TVGuide")
+    # Pre-populate custom header states in settings
+    mock_rec = QTableWidget(1, 7)
+    rec_h = mock_rec.horizontalHeader()
+    rec_h.setSectionsMovable(True)
+    rec_h.moveSection(1, 3)
+    s.setValue("rec_table_header_state", rec_h.saveState())
+
+    mock_hist = QTableWidget(1, 6)
+    hist_h = mock_hist.horizontalHeader()
+    hist_h.setSectionsMovable(True)
+    hist_h.moveSection(3, 1)
+    s.setValue("history_table_header_state", hist_h.saveState())
+
+    win = MainWindow(config_mgr=isolated_config)
+    qtbot.addWidget(win)
+
+    try:
+        # Check that sections are movable
+        assert win.rec_table.horizontalHeader().sectionsMovable() is True
+        assert win.history_table.horizontalHeader().sectionsMovable() is True
+
+        # Verify that custom column placements were restored from settings
+        assert win.rec_table.horizontalHeader().visualIndex(1) == 3
+        assert win.history_table.horizontalHeader().visualIndex(3) == 1
+
+        # Move logical Column 1 to Visual Index 4, and check that settings value updates
+        win.rec_table.horizontalHeader().moveSection(3, 4)
+        saved_bytes = win.settings.value("rec_table_header_state")
+        assert saved_bytes is not None
+
+        # Verify dynamic update in settings reflects change
+        check_table = QTableWidget(1, 7)
+        check_table.horizontalHeader().restoreState(saved_bytes)
+        assert check_table.horizontalHeader().visualIndex(1) == 4
+    finally:
+        win.close()
+        s.remove("rec_table_header_state")
+        s.remove("history_table_header_state")
+
+
 
