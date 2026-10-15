@@ -2752,7 +2752,8 @@ class ProgramTileDelegate(QStyledItemDelegate):
             default_border = self.COLOR_DEFAULT_BORDER_SCHED if has_rec_border else self.COLOR_DEFAULT_BORDER
 
         if is_selected:
-            border_color = self.get_category_color("highlight")
+            # If the selected program is scheduled to record (or past recorded), highlight with red recording border
+            border_color = default_border if has_rec_border else self.get_category_color("highlight")
             pen_width = 2
         else:
             border_color = default_border

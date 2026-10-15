@@ -1079,6 +1079,68 @@ def test_updates_tab_contact_row(qtbot, isolated_config):
     win.close()
 
 
+def test_selected_scheduled_program_border_is_red(qtbot, isolated_config):
+    from PyQt6.QtCore import QRect
+    from PyQt6.QtGui import QColor, QFont, QPainter, QPen, QPixmap
+    from PyQt6.QtWidgets import QStyleOptionViewItem, QTableWidget, QTableWidgetItem
+
+    from kaffeine_dvr.gui import ProgramTileDelegate
+
+    table = QTableWidget(1, 1)
+    qtbot.addWidget(table)
+    delegate = ProgramTileDelegate(table, config_mgr=isolated_config)
+
+    # 1. Unscheduled program when selected uses highlight color
+    prog_unscheduled = {
+        "show_title": "Upcoming Movie",
+        "_primary_title": "Upcoming Movie",
+        "_secondary_sub": "",
+        "_time_range": "8:00 PM - 9:00 PM",
+        "_category": "movies",
+        "_timing_state": "upcoming",
+        "_scheduled_rec": None,
+    }
+    item = QTableWidgetItem()
+    item.setData(Qt.ItemDataRole.UserRole, prog_unscheduled)
+    table.setItem(0, 0, item)
+    table.selectRow(0)
+
+    opt = QStyleOptionViewItem()
+    opt.rect = QRect(0, 0, 250, 70)
+    opt.font = QFont("Sans Serif", 10)
+
+    captured_border_colors = []
+    class MockPainter(QPainter):
+        def setPen(self, pen):
+            col = pen.color() if isinstance(pen, QPen) else (pen if isinstance(pen, QColor) else None)
+            if col:
+                captured_border_colors.append(col.name().lower())
+            super().setPen(pen)
+
+    pix = QPixmap(250, 70)
+    p = MockPainter(pix)
+    delegate.paint(p, opt, table.model().index(0, 0))
+    p.end()
+
+    highlight_hex = delegate.get_category_color("highlight").name().lower()
+    assert captured_border_colors[0] == highlight_hex
+
+    # 2. Scheduled program when selected uses red recording border (#e53935)
+    captured_border_colors.clear()
+    prog_scheduled = dict(prog_unscheduled)
+    prog_scheduled["_scheduled_rec"] = {"status": "QUEUED", "id": 101}
+    item.setData(Qt.ItemDataRole.UserRole, prog_scheduled)
+
+    pix2 = QPixmap(250, 70)
+    p2 = MockPainter(pix2)
+    delegate.paint(p2, opt, table.model().index(0, 0))
+    p2.end()
+
+    sched_border_hex = delegate.COLOR_DEFAULT_BORDER_SCHED.name().lower()
+    assert captured_border_colors[0] == sched_border_hex
+    assert captured_border_colors[0] == "#e53935"
+
+
 
 
 
