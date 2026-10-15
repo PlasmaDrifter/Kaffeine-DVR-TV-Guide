@@ -362,10 +362,10 @@ def test_history_disk_availability_and_sync_rules(qtbot, isolated_config: Config
 
         # 2. Simulate video file creation on disk
         video_file = tmp_path / "Sync_Test_Broadcast.m2t"
-        video_file.write_bytes(b"X" * (1024 * 1024 * 250))  # 250 MB
+        video_file.write_bytes(b"X" * (1024 * 1024 * 2))  # 2 MB
 
         win.refresh_history(force=True)
-        assert "Available (250 MB)" in win.history_table.item(0, 5).text()
+        assert "Available (2 MB)" in win.history_table.item(0, 5).text()
         hist_btn = _extract_watch_button(win.history_table.cellWidget(0, 0))
         assert hist_btn is not None and hist_btn.isEnabled()
 
@@ -540,6 +540,38 @@ def test_gui_recording_tables_unhighlight_on_tab_navigation_and_toggle_click(qtb
         assert len(win.rec_table.selectedItems()) > 0
     finally:
         win.close()
+
+
+def test_gui_tab_switch_between_recordings_and_guide_does_not_crash(qtbot, isolated_config: ConfigManager):
+    win = MainWindow(config_mgr=isolated_config)
+    qtbot.addWidget(win)
+
+    try:
+        # Start on Guide Browser (tab 0)
+        assert win.tabs.currentIndex() == 0
+
+        # Switch to Recordings tab (tab 1)
+        win.tabs.setCurrentIndex(1)
+        assert win.tabs.currentIndex() == 1
+
+        # Switch back to Guide Browser (tab 0)
+        win.tabs.setCurrentIndex(0)
+        assert win.tabs.currentIndex() == 0
+
+        # Wait for the timer to fire safely
+        qtbot.wait(100)
+
+        # Switch back to Recordings tab (tab 1)
+        win.tabs.setCurrentIndex(1)
+        assert win.tabs.currentIndex() == 1
+
+        # Switch back to Guide Browser (tab 0)
+        win.tabs.setCurrentIndex(0)
+        assert win.tabs.currentIndex() == 0
+        qtbot.wait(100)
+    finally:
+        win.close()
+
 
 
 

@@ -9988,13 +9988,20 @@ class MainWindow(QMainWindow):
 
         if index == 0:
             self.refresh_date_dropdown()
-            if not os.environ.get("PYTEST_CURRENT_TEST"):
-                sel_date = self.guide_date_combo.currentData()
-                today_str = date.today().strftime("%Y-%m-%d")
-                if sel_date == today_str or sel_date is None:
-                    QTimer.singleShot(60, self, self.jump_guide_to_now)
-                else:
-                    QTimer.singleShot(60, self, self.jump_guide_to_noon)
+            sel_date = self.guide_date_combo.currentData()
+            today_str = date.today().strftime("%Y-%m-%d")
+            if not hasattr(self, "_guide_jump_timer"):
+                self._guide_jump_timer = QTimer(self)
+                self._guide_jump_timer.setSingleShot(True)
+            try:
+                self._guide_jump_timer.timeout.disconnect()
+            except Exception:
+                pass
+            if sel_date == today_str or sel_date is None:
+                self._guide_jump_timer.timeout.connect(self.jump_guide_to_now)
+            else:
+                self._guide_jump_timer.timeout.connect(self.jump_guide_to_noon)
+            self._guide_jump_timer.start(60)
         elif index == 1:
             if getattr(self, "recordings_subtabs", None) and self.recordings_subtabs.currentIndex() == 1:
                 self.refresh_history(force=True)
@@ -12714,6 +12721,19 @@ class MainWindow(QMainWindow):
                 self._guide_realtime_timer.stop()
             if hasattr(self, "_save_indicator_timer") and self._save_indicator_timer and self._save_indicator_timer.isActive():
                 self._save_indicator_timer.stop()
+            if hasattr(self, "_guide_jump_timer") and self._guide_jump_timer and self._guide_jump_timer.isActive():
+                self._guide_jump_timer.stop()
+
+            if hasattr(self, "rec_table") and hasattr(self, "rec_table_toggle_filter"):
+                try:
+                    self.rec_table.viewport().removeEventFilter(self.rec_table_toggle_filter)
+                except Exception:
+                    pass
+            if hasattr(self, "history_table") and hasattr(self, "history_table_toggle_filter"):
+                try:
+                    self.history_table.viewport().removeEventFilter(self.history_table_toggle_filter)
+                except Exception:
+                    pass
 
             # Cleanly disconnect and terminate all active background workers
             worker_names = (
@@ -12742,6 +12762,15 @@ class MainWindow(QMainWindow):
 
             if getattr(self, "_active_timeshift", None):
                 self.stop_timeshift_session(user_initiated=False)
+
+            if hasattr(self, "status_bar"):
+                try:
+                    self.status_bar.clearMessage()
+                except Exception:
+                    pass
+
+            QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+            QApplication.processEvents()
         except Exception:
             pass
         super().closeEvent(event)

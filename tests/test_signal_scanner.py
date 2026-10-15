@@ -134,6 +134,7 @@ def test_channel_signal_scan_worker(qtbot):
 
         worker.start()
         qtbot.waitUntil(lambda: len(finished_events) > 0, timeout=5000)
+        worker.wait(2000)
 
         assert len(started_events) == 2
         assert len(result_events) == 2
@@ -180,6 +181,7 @@ def test_channel_signal_scan_worker_abort(qtbot):
         # Request abort immediately
         worker.request_stop()
         qtbot.waitUntil(lambda: len(finished_events) > 0, timeout=3000)
+        worker.wait(2000)
 
         assert len(finished_events) == 1
         # Should have stopped well before processing all 9 channels
