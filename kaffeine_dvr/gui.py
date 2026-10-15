@@ -4935,8 +4935,12 @@ class MainWindow(QMainWindow):
             self.clock_widget.setVisible(is_shown)
 
         now = datetime.now()
-        # Periodically update recording statuses and active schedule every 2 seconds
-        if now.second % 2 == 0:
+        # Option 2: Check schedule updates when viewing the Recordings tab (every 2s)
+        # or at minute and half-minute boundaries (:00 and :30) when in background
+        is_on_rec_tab = hasattr(self, "tabs") and self.tabs.currentIndex() == 1
+        if is_on_rec_tab and now.second % 2 == 0:
+            self._check_schedule_status_updates()
+        elif now.second in (0, 30):
             self._check_schedule_status_updates()
 
         if not is_shown:
