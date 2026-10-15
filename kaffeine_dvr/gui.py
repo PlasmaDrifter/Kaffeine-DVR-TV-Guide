@@ -5727,10 +5727,13 @@ class MainWindow(QMainWindow):
 
         dvr_layout.addRow(
             make_setting_label(
-                "Live TV Playback Player:",
-                "Select which media player opens live broadcasts from the Guide:\n"
-                "• External Player (SMPlayer, MPV, VLC, System Default, etc.): Records broadcast in background with Kaffeine minimized, buffers for a few seconds, then opens the stream in your selected player with full pause, rewind, and seek capabilities.\n"
-                "• Custom Command: Allows running a custom media player command template."
+                "Playback Player:",
+                "Select which media player opens TV broadcasts and recorded shows from the Guide:\n"
+                "• Unified Playback: Used for Live TV timeshift streams, continuous channel streaming, and recorded video files.\n"
+                "• Controls & Capabilities: Enables full pause, rewind, instant replay, and seek controls in your preferred external player.\n"
+                "• Instance Isolation: Players like SMPlayer launch as an independent window so they will never hijack or close separate video windows you have open.\n"
+                "• Auto-Stop & Tuner Release: Closing the player window during live timeshifting automatically stops background capture in Kaffeine and frees the tuner hardware.\n"
+                "• Supported Players: Automatically discovers native and Flatpak players (SMPlayer, MPV, VLC, MPC-Qt, Celluloid, Haruna) or accepts custom command templates ({file})."
             ),
             live_player_container
         )
@@ -5757,68 +5760,6 @@ class MainWindow(QMainWindow):
                 "When checked, temporary buffer files created during live TV timeshifting are automatically deleted upon stopping to avoid consuming disk space. Shows specifically scheduled to record are always preserved."
             ),
             self.delete_timeshift_check
-        )
-
-        # Recorded Video Playback Player
-        self.playback_player_combo = ThemedComboBox()
-        from kaffeine_dvr.dbus_client import (
-            SUPPORTED_PLAYERS,
-            detect_player_installation,
-        )
-
-        cur_player = self.config_mgr.playback_player
-
-        for key, pinfo in SUPPORTED_PLAYERS.items():
-            pname = pinfo["name"]
-            if key == "system":
-                self.playback_player_combo.addItem(pname, key)
-            else:
-                itype = detect_player_installation(key)
-                if itype == "native":
-                    self.playback_player_combo.addItem(f"{pname} (Installed)", key)
-                elif itype == "flatpak":
-                    self.playback_player_combo.addItem(f"{pname} (Flatpak)", key)
-                elif key == cur_player:
-                    self.playback_player_combo.addItem(f"{pname} (Not Detected)", key)
-
-        self.playback_player_combo.addItem("Custom Command...", "custom")
-        self.playback_player_combo.setFixedWidth(290)
-
-        player_idx = self.playback_player_combo.findData(cur_player)
-        if player_idx >= 0:
-            self.playback_player_combo.setCurrentIndex(player_idx)
-        else:
-            self.playback_player_combo.setCurrentIndex(0)
-
-        self.custom_player_edit = QLineEdit()
-        self.custom_player_edit.setPlaceholderText("e.g. mpv --fs {file}")
-        self.custom_player_edit.setText(self.config_mgr.custom_playback_player_cmd)
-        self.custom_player_edit.setFixedWidth(290)
-        self.custom_player_edit.setVisible(cur_player == "custom")
-
-        def _on_player_combo_changed(idx):
-            mode = self.playback_player_combo.itemData(idx)
-            self.custom_player_edit.setVisible(mode == "custom")
-
-        self.playback_player_combo.currentIndexChanged.connect(_on_player_combo_changed)
-
-        player_container = QWidget()
-        player_vbox = QVBoxLayout(player_container)
-        player_vbox.setContentsMargins(0, 0, 0, 0)
-        player_vbox.setSpacing(4)
-        player_vbox.addWidget(self.playback_player_combo)
-        player_vbox.addWidget(self.custom_player_edit)
-
-        dvr_layout.addRow(
-            make_setting_label(
-                "Recorded Video Player:",
-                "Select which media player opens recorded shows and Live TV timeshift streams from the Guide:\n"
-                "• Playback & Timeshift: Used to play completed recordings as well as timeshift live broadcasts with full pause, rewind, and seek capabilities.\n"
-                "• Instance Isolation: When timeshifting live TV, players like SMPlayer launch as an independent window (inheriting your configured GUI layout, theme, and skins from ~/.config/smplayer) so it will never hijack or close any separate videos you have open.\n"
-                "• Auto-Stop & Tuner Release: Closing the player window during live timeshifting automatically stops background capture in Kaffeine and releases the tuner hardware.\n"
-                "• Supported Players: Automatically discovers native and Flatpak players (SMPlayer, MPV, VLC, MPC-Qt, Celluloid, Haruna, Kaffeine) or accepts custom command templates ({file})."
-            ),
-            player_container
         )
 
         left_col.addWidget(dvr_group)
@@ -6377,10 +6318,6 @@ class MainWindow(QMainWindow):
             self.timeshift_buffer_spin.valueChanged.connect(self._auto_save_automation_settings)
         if hasattr(self, "delete_timeshift_check"):
             self.delete_timeshift_check.stateChanged.connect(self._auto_save_automation_settings)
-        if hasattr(self, "playback_player_combo"):
-            self.playback_player_combo.currentIndexChanged.connect(self._auto_save_automation_settings)
-        if hasattr(self, "custom_player_edit"):
-            self.custom_player_edit.textChanged.connect(self._auto_save_automation_settings)
         self.notify_check.stateChanged.connect(self._auto_save_automation_settings)
         if hasattr(self, "notify_lead_spin"):
             self.notify_lead_spin.valueChanged.connect(self._auto_save_automation_settings)
@@ -6625,18 +6562,6 @@ class MainWindow(QMainWindow):
             if idx >= 0:
                 self.launch_mode_combo.setCurrentIndex(idx)
             self.launch_mode_combo.blockSignals(False)
-
-        if hasattr(self, "playback_player_combo"):
-            self.playback_player_combo.blockSignals(True)
-            idx = self.playback_player_combo.findData(self.config_mgr.playback_player)
-            if idx >= 0:
-                self.playback_player_combo.setCurrentIndex(idx)
-            self.playback_player_combo.blockSignals(False)
-
-        if hasattr(self, "custom_player_edit"):
-            self.custom_player_edit.blockSignals(True)
-            self.custom_player_edit.setText(self.config_mgr.custom_playback_player_cmd)
-            self.custom_player_edit.blockSignals(False)
 
         if hasattr(self, "live_tv_mode_combo"):
             self.live_tv_mode_combo.blockSignals(True)
@@ -7785,17 +7710,17 @@ class MainWindow(QMainWindow):
         if hasattr(self, "guide_watch_combo"):
             self.config_mgr.guide_watch_mode = self.guide_watch_combo.currentData()
         if hasattr(self, "live_tv_mode_combo"):
-            self.config_mgr.live_tv_watch_mode = self.live_tv_mode_combo.currentData()
+            mode = self.live_tv_mode_combo.currentData()
+            self.config_mgr.live_tv_watch_mode = mode
+            self.config_mgr.playback_player = mode
         if hasattr(self, "custom_live_player_edit"):
-            self.config_mgr.custom_live_tv_player_cmd = self.custom_live_player_edit.text().strip()
+            cmd = self.custom_live_player_edit.text().strip()
+            self.config_mgr.custom_live_tv_player_cmd = cmd
+            self.config_mgr.custom_playback_player_cmd = cmd
         if hasattr(self, "timeshift_buffer_spin"):
             self.config_mgr.timeshift_buffer_seconds = self.timeshift_buffer_spin.value()
         if hasattr(self, "delete_timeshift_check"):
             self.config_mgr.delete_timeshift_on_exit = self.delete_timeshift_check.isChecked()
-        if hasattr(self, "playback_player_combo"):
-            self.config_mgr.playback_player = self.playback_player_combo.currentData()
-        if hasattr(self, "custom_player_edit"):
-            self.config_mgr.custom_playback_player_cmd = self.custom_player_edit.text().strip()
         self.config_mgr.enable_desktop_notifications = self.notify_check.isChecked()
         if hasattr(self, "notify_lead_spin"):
             self.config_mgr.notification_lead_time_mins = self.notify_lead_spin.value()

@@ -300,12 +300,6 @@ def test_live_tv_playback_player_settings(qtbot, isolated_config):
 
     assert hasattr(win, "live_tv_mode_combo")
     assert hasattr(win, "custom_live_player_edit")
-    assert hasattr(win, "playback_player_combo")
-
-    # Both combos have the exact same number of items and keys
-    live_keys = [win.live_tv_mode_combo.itemData(i) for i in range(win.live_tv_mode_combo.count())]
-    playback_keys = [win.playback_player_combo.itemData(i) for i in range(win.playback_player_combo.count())]
-    assert live_keys == playback_keys
 
     # Test toggling to custom shows custom_live_player_edit
     custom_idx = win.live_tv_mode_combo.findData("custom")
@@ -316,7 +310,9 @@ def test_live_tv_playback_player_settings(qtbot, isolated_config):
     win.custom_live_player_edit.setText("mpv --fs {file}")
     win._auto_save_automation_settings()
     assert win.config_mgr.live_tv_watch_mode == "custom"
+    assert win.config_mgr.playback_player == "custom"
     assert win.config_mgr.custom_live_tv_player_cmd == "mpv --fs {file}"
+    assert win.config_mgr.custom_playback_player_cmd == "mpv --fs {file}"
 
 
 def test_watch_or_tune_routing(qtbot, isolated_config, monkeypatch):
