@@ -6788,8 +6788,8 @@ class MainWindow(QMainWindow):
         color_layout.addLayout(cols_row)
         right_col.addWidget(color_box)
 
-        # ------------------ Guide Grid Themes Card (Below Grid Guide Options) ------------------
-        guide_theme_box = QGroupBox("Guide Grid Themes")
+        # ------------------ Themes & Styling Card (Consolidated Theming) ------------------
+        guide_theme_box = QGroupBox("Themes && Styling")
         guide_theme_layout = QVBoxLayout(guide_theme_box)
         guide_theme_layout.setContentsMargins(15, 15, 15, 15)
         guide_theme_layout.setSpacing(10)
@@ -6799,7 +6799,7 @@ class MainWindow(QMainWindow):
         self.theme_preset_combo.setVisible(False)
         self.theme_preset_combo.currentIndexChanged.connect(self._on_theme_preset_changed)
 
-        # Guide Grid Themes and Custom Themes side-by-side
+        # Guide Grid Themes, Custom Themes, and Application Themes side-by-side
         guide_themes_row = QHBoxLayout()
         guide_themes_row.setSpacing(18)
 
@@ -6828,7 +6828,7 @@ class MainWindow(QMainWindow):
         left_guide_layout.addStretch()
         guide_themes_row.addLayout(left_guide_layout, 0)
 
-        # Right: Custom Themes (next to the grid guide themes)
+        # Middle: Custom Themes (next to the grid guide themes)
         right_custom_layout = QVBoxLayout()
         right_custom_layout.setSpacing(6)
         hdr_custom_row = QHBoxLayout()
@@ -6884,25 +6884,11 @@ class MainWindow(QMainWindow):
         right_grid_wrap.addStretch()
         right_custom_layout.addLayout(right_grid_wrap)
         right_custom_layout.addStretch()
-        guide_themes_row.addLayout(right_custom_layout, 1)
+        guide_themes_row.addLayout(right_custom_layout, 0)
 
-        self._populate_theme_preset_combo()
-
-        guide_theme_layout.addLayout(guide_themes_row)
-
-        right_col.addWidget(guide_theme_box)
-
-        # ------------------ Themes & Styling Card (Below Guide Grid Themes) ------------------
-        theme_box = QGroupBox("Themes && Styling")
-        theme_layout = QVBoxLayout(theme_box)
-        theme_layout.setContentsMargins(15, 15, 15, 15)
-        theme_layout.setSpacing(10)
-
-        # Hidden combobox to preserve backward compatibility and signals
-        self.app_theme_combo = CenteredComboBox()
-        self.app_theme_combo.setVisible(False)
-
-        # Section: Application Theme Chips
+        # Right: Application Theme (moved from separate box into the red square area)
+        app_theme_layout = QVBoxLayout()
+        app_theme_layout.setSpacing(6)
         app_header_row = QHBoxLayout()
         lbl_app_theme = QLabel("<b>Application Theme</b>")
         lbl_app_theme.setStyleSheet("font-size: 13px; color: #e2e8f0;")
@@ -6911,7 +6897,12 @@ class MainWindow(QMainWindow):
         lbl_app_hint.setStyleSheet("font-size: 11px; color: #94a3b8;")
         app_header_row.addWidget(lbl_app_hint)
         app_header_row.addStretch()
-        theme_layout.addLayout(app_header_row)
+        app_theme_layout.addLayout(app_header_row)
+
+        # Hidden combobox to preserve backward compatibility and signals
+        self.app_theme_combo = CenteredComboBox()
+        self.app_theme_combo.setVisible(False)
+        self.app_theme_combo.currentIndexChanged.connect(self._on_app_theme_changed)
 
         self._app_theme_chips: Dict[str, ThemeChip] = {}
         self.app_theme_grid = QGridLayout()
@@ -6922,9 +6913,16 @@ class MainWindow(QMainWindow):
         app_grid_wrap.setContentsMargins(0, 0, 0, 0)
         app_grid_wrap.addLayout(self.app_theme_grid)
         app_grid_wrap.addStretch()
-        theme_layout.addLayout(app_grid_wrap)
+        app_theme_layout.addLayout(app_grid_wrap)
+        app_theme_layout.addStretch()
+        guide_themes_row.addLayout(app_theme_layout, 0)
+        guide_themes_row.addStretch(1)
 
-        right_col.addWidget(theme_box)
+        self._populate_theme_preset_combo()
+
+        guide_theme_layout.addLayout(guide_themes_row)
+
+        right_col.addWidget(guide_theme_box)
 
         # Application Window Dimensions (Under Themes & Styling)
         win_group = QGroupBox("Application Window Dimensions")
@@ -8694,7 +8692,7 @@ class MainWindow(QMainWindow):
         sorted_themes = sorted(APP_THEMES.items(), key=lambda item: item[1]["name"].lower())
         chip_w = get_theme_chip_fixed_width(self.font())
 
-        num_cols = 3
+        num_cols = 2
         for idx, (t_key, t_info) in enumerate(sorted_themes):
             self.app_theme_combo.addItem(t_info["name"], t_key)
             accent_dot = t_info.get("accent_primary", "#0284c7")
