@@ -4990,7 +4990,7 @@ class MainWindow(QMainWindow):
         # Active Schedule Table
         self.rec_table = QTableWidget()
         self.rec_table.setColumnCount(7)
-        self.rec_table.setHorizontalHeaderLabels(["Title", "Watch", "Schedule", "Channel", "Duration", "Status", "Retain"])
+        self.rec_table.setHorizontalHeaderLabels(["Watch", "Title", "Schedule", "Channel", "Duration", "Status", "Retain"])
         for i in range(7):
             self.rec_table.horizontalHeader().setSectionResizeMode(i, QHeaderView.ResizeMode.Interactive)
         self.rec_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -5040,7 +5040,7 @@ class MainWindow(QMainWindow):
         # History Table
         self.history_table = QTableWidget()
         self.history_table.setColumnCount(5)
-        self.history_table.setHorizontalHeaderLabels(["Title", "Watch", "Date / Time", "Channel", "Runtime"])
+        self.history_table.setHorizontalHeaderLabels(["Watch", "Title", "Date / Time", "Channel", "Runtime"])
         for i in range(5):
             self.history_table.horizontalHeader().setSectionResizeMode(i, QHeaderView.ResizeMode.Interactive)
         self.history_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -8219,13 +8219,13 @@ class MainWindow(QMainWindow):
         if hasattr(self, "rec_table"):
             rec_w = self.rec_table.viewport().width()
             if rec_w > 100:
-                # Title, Watch, Schedule, Channel, Duration, Status, Retain
-                min_widths = [190, 75, 130, 65, 110, 160, 55]
-                shares = [0.32, 0.08, 0.16, 0.07, 0.12, 0.19, 0.06]
+                # Watch, Title, Schedule, Channel, Duration, Status, Retain
+                min_widths = [90, 190, 130, 65, 110, 160, 55]
+                shares = [0.10, 0.30, 0.16, 0.07, 0.12, 0.19, 0.06]
                 allocated = [max(mw, int(rec_w * s)) for mw, s in zip(min_widths, shares)]
                 diff = rec_w - sum(allocated)
                 if diff > 0:
-                    allocated[0] += diff
+                    allocated[1] += diff
                 h = self.rec_table.horizontalHeader()
                 for i, fw in enumerate(allocated):
                     h.resizeSection(i, fw)
@@ -8234,13 +8234,13 @@ class MainWindow(QMainWindow):
         if hasattr(self, "history_table"):
             hist_w = self.history_table.viewport().width()
             if hist_w > 100:
-                # Title, Watch, Date / Time, Channel, Runtime
-                min_widths = [210, 75, 160, 80, 90]
-                shares = [0.38, 0.08, 0.25, 0.14, 0.15]
+                # Watch, Title, Date / Time, Channel, Runtime
+                min_widths = [90, 210, 160, 80, 90]
+                shares = [0.10, 0.36, 0.25, 0.14, 0.15]
                 allocated = [max(mw, int(hist_w * s)) for mw, s in zip(min_widths, shares)]
                 diff = hist_w - sum(allocated)
                 if diff > 0:
-                    allocated[0] += diff
+                    allocated[1] += diff
                 h = self.history_table.horizontalHeader()
                 for i, fw in enumerate(allocated):
                     h.resizeSection(i, fw)
@@ -9408,7 +9408,7 @@ class MainWindow(QMainWindow):
         selected_qid = None
         cur_row = self.rec_table.currentRow()
         if cur_row >= 0:
-            it = self.rec_table.item(cur_row, 0)
+            it = self.rec_table.item(cur_row, 1) or self.rec_table.item(cur_row, 0)
             if it:
                 selected_qid = it.data(Qt.ItemDataRole.UserRole)
 
@@ -9450,23 +9450,27 @@ class MainWindow(QMainWindow):
             except Exception:
                 schedule_text = full_date_text
 
-            title_item = QTableWidgetItem(title)
-            title_item.setData(Qt.ItemDataRole.UserRole, qid)
-            self.rec_table.setItem(row, 0, title_item)
-
             if status in ("RECORDING", "COMPLETED"):
                 watch_btn = QPushButton("▶ Watch")
                 watch_btn.setObjectName("tableWatchBtn")
-                watch_btn.setFixedSize(64, 24)
+                watch_btn.setFixedSize(78, 24)
                 watch_btn.setCursor(Qt.CursorShape.PointingHandCursor)
                 rec_copy = dict(rec)
                 watch_btn.clicked.connect(lambda checked=False, r=rec_copy: self.play_recording_item(r))
                 cell = TableButtonCell(watch_btn)
-                self.rec_table.setCellWidget(row, 1, cell)
+                self.rec_table.setCellWidget(row, 0, cell)
+                watch_item = QTableWidgetItem("")
+                watch_item.setData(Qt.ItemDataRole.UserRole, qid)
+                self.rec_table.setItem(row, 0, watch_item)
             else:
-                self.rec_table.removeCellWidget(row, 1)
+                self.rec_table.removeCellWidget(row, 0)
                 empty_it = QTableWidgetItem("")
-                self.rec_table.setItem(row, 1, empty_it)
+                empty_it.setData(Qt.ItemDataRole.UserRole, qid)
+                self.rec_table.setItem(row, 0, empty_it)
+
+            title_item = QTableWidgetItem(title)
+            title_item.setData(Qt.ItemDataRole.UserRole, qid)
+            self.rec_table.setItem(row, 1, title_item)
 
             sched_item = QTableWidgetItem(schedule_text)
             sched_item.setFont(QFont("", -1, QFont.Weight.Bold))
@@ -9541,7 +9545,7 @@ class MainWindow(QMainWindow):
         selected_hid = None
         cur_row = self.history_table.currentRow()
         if cur_row >= 0:
-            it = self.history_table.item(cur_row, 0)
+            it = self.history_table.item(cur_row, 1) or self.history_table.item(cur_row, 0)
             if it:
                 selected_hid = it.data(Qt.ItemDataRole.UserRole)
 
@@ -9566,19 +9570,22 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
-            title_item = QTableWidgetItem(title)
-            title_item.setData(Qt.ItemDataRole.UserRole, hid)
-            self.history_table.setItem(row, 0, title_item)
-
             watch_btn = QPushButton("▶ Watch")
             watch_btn.setObjectName("tableWatchBtn")
-            watch_btn.setFixedSize(64, 24)
+            watch_btn.setFixedSize(78, 24)
             watch_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             hist_copy = dict(item)
             hist_copy["status"] = "COMPLETED"
             watch_btn.clicked.connect(lambda checked=False, r=hist_copy: self.play_recording_item(r))
             cell = TableButtonCell(watch_btn)
-            self.history_table.setCellWidget(row, 1, cell)
+            self.history_table.setCellWidget(row, 0, cell)
+            watch_item = QTableWidgetItem("")
+            watch_item.setData(Qt.ItemDataRole.UserRole, hid)
+            self.history_table.setItem(row, 0, watch_item)
+
+            title_item = QTableWidgetItem(title)
+            title_item.setData(Qt.ItemDataRole.UserRole, hid)
+            self.history_table.setItem(row, 1, title_item)
 
             dt_item = QTableWidgetItem(date_time_str)
             chan_item = QTableWidgetItem(channel)
@@ -9589,7 +9596,7 @@ class MainWindow(QMainWindow):
             self.history_table.setItem(row, 4, dur_item)
 
         if restored_row >= 0:
-            self.history_table.setCurrentCell(restored_row, 0)
+            self.history_table.setCurrentCell(restored_row, 1)
 
         self._adjust_table_columns()
 
@@ -9604,8 +9611,9 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Selection Required", "Please select a history entry to clear.")
             return
 
-        hid = self.history_table.item(row, 0).data(Qt.ItemDataRole.UserRole)
-        title = self.history_table.item(row, 0).text()
+        it = self.history_table.item(row, 1) or self.history_table.item(row, 0)
+        hid = it.data(Qt.ItemDataRole.UserRole) if it else None
+        title = self.history_table.item(row, 1).text() if self.history_table.item(row, 1) else (it.text() if it else "")
         if hid:
             self.queue_mgr.delete_history_entry(int(hid))
             self.status_bar.showMessage(f"Removed '{title}' from history.", 3000)
@@ -9633,7 +9641,7 @@ class MainWindow(QMainWindow):
             self.toggle_protect_selected_recording()
         else:
             row = item.row()
-            title_it = self.rec_table.item(row, 0)
+            title_it = self.rec_table.item(row, 1) or self.rec_table.item(row, 0)
             if not title_it:
                 return
             qid = title_it.data(Qt.ItemDataRole.UserRole)
@@ -9645,7 +9653,7 @@ class MainWindow(QMainWindow):
 
     def _on_history_table_double_clicked(self, item):
         row = item.row()
-        title_it = self.history_table.item(row, 0)
+        title_it = self.history_table.item(row, 1) or self.history_table.item(row, 0)
         if not title_it:
             return
         hid = title_it.data(Qt.ItemDataRole.UserRole)
@@ -9731,8 +9739,9 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Selection Required", "Please select a recording to adjust its buffer.")
             return
 
-        qid = self.rec_table.item(row, 0).data(Qt.ItemDataRole.UserRole)
-        rec_title = self.rec_table.item(row, 0).text()
+        title_it = self.rec_table.item(row, 1) or self.rec_table.item(row, 0)
+        qid = title_it.data(Qt.ItemDataRole.UserRole) if title_it else None
+        rec_title = self.rec_table.item(row, 1).text() if self.rec_table.item(row, 1) else (title_it.text() if title_it else "")
 
         all_recs = self.queue_mgr.list_queue(include_completed=True)
         rec = next((r for r in all_recs if r.get("id") == int(qid)), None)
@@ -9762,8 +9771,9 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Selection Required", "Please select a recording to toggle protection.")
             return
 
-        qid = self.rec_table.item(row, 0).data(Qt.ItemDataRole.UserRole)
-        rec_title = self.rec_table.item(row, 0).text()
+        title_it = self.rec_table.item(row, 1) or self.rec_table.item(row, 0)
+        qid = title_it.data(Qt.ItemDataRole.UserRole) if title_it else None
+        rec_title = self.rec_table.item(row, 1).text() if self.rec_table.item(row, 1) else (title_it.text() if title_it else "")
         new_state = self.queue_mgr.toggle_protected(int(qid))
         state_str = "Protected (Keep Forever)" if new_state else "Standard (Auto-cleanup eligible)"
         self.status_bar.showMessage(f"'{rec_title}' is now {state_str}.", 4000)
@@ -9775,8 +9785,9 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Selection Required", "Please select a recording to cancel.")
             return
 
-        qid = self.rec_table.item(row, 0).data(Qt.ItemDataRole.UserRole)
-        rec_title = self.rec_table.item(row, 0).text()
+        title_it = self.rec_table.item(row, 1) or self.rec_table.item(row, 0)
+        qid = title_it.data(Qt.ItemDataRole.UserRole) if title_it else None
+        rec_title = self.rec_table.item(row, 1).text() if self.rec_table.item(row, 1) else (title_it.text() if title_it else "")
         rec_info = self.queue_mgr.remove_recording(int(qid))
         if rec_info:
             self.dbus_client.cancel_recording(
