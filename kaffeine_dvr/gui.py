@@ -4842,6 +4842,8 @@ class MainWindow(QMainWindow):
         self.selected_grid_program = None
         self.selected_list_program = None
         self._last_clicked_guide_list_row = -1
+        self._save_indicator_timer = None
+        self._grid_scroll_anim = None
 
         self.init_ui()
         self.setup_timers()

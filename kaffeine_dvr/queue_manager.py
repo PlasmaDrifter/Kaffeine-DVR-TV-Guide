@@ -139,7 +139,7 @@ class QueueManager:
         """, (channel, start_iso))
         existing = cur.fetchone()
         if existing:
-            existing_id, existing_status, existing_buf = existing
+            existing_id, existing_status, _ = existing
             if existing_status == 'QUEUED':
                 cur.execute("""
                     UPDATE recording_queue
@@ -222,8 +222,7 @@ class QueueManager:
 
         modified = []
 
-        for i in range(len(parsed)):
-            rec_a = parsed[i]
+        for i, rec_a in enumerate(parsed):
 
             for j in range(i + 1, len(parsed)):
                 rec_b = parsed[j]
@@ -568,8 +567,7 @@ class QueueManager:
                 start_dt = datetime.fromisoformat(rec["start_iso"])
                 end_dt = datetime.fromisoformat(rec["end_iso"])
                 lead = timedelta(minutes=rec.get("lead_time_mins", 5))
-                # Arm if we are within the lead time window before start, or if already started but before end
-                if (now >= start_dt - lead) and (now < end_dt):
+                if start_dt - lead <= now < end_dt:
                     due.append(rec)
             except Exception as e:
                 print(f"Error parsing queue timestamps: {e}")
@@ -606,7 +604,7 @@ class QueueManager:
                 start_dt = datetime.fromisoformat(rec["start_iso"])
                 end_dt = datetime.fromisoformat(rec["end_iso"])
                 lead = timedelta(minutes=max(0, lead_time_mins))
-                if (now >= start_dt - lead) and (now < end_dt):
+                if start_dt - lead <= now < end_dt:
                     due.append(rec)
             except Exception as e:
                 print(f"Error parsing timestamps for notification: {e}")
@@ -646,7 +644,7 @@ class QueueManager:
             conn.commit()
         conn.close()
 
-    def update_statuses(self, active_kaffeine_keys: List[int], max_history: int = 50) -> Dict[str, int]:
+    def update_statuses(self, active_kaffeine_keys: Optional[List[int]] = None, max_history: int = 50) -> Dict[str, int]:
         """
         Transitions ARMED -> RECORDING when start_iso is reached.
         When finished (now >= end_dt):
@@ -655,6 +653,7 @@ class QueueManager:
         - Deletes from recording_queue after 6 hours from end_dt.
         Returns a dictionary with transition counts: {"started": int, "archived": int}.
         """
+        del active_kaffeine_keys
         conn = self._get_connection()
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
