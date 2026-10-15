@@ -1,5 +1,5 @@
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QLabel, QMenu, QTableWidgetItem, QWidgetAction
+from PyQt6.QtWidgets import QLabel, QMenu, QPushButton, QTableWidgetItem, QWidgetAction
 
 from kaffeine_dvr.gui import MainWindow, NumberStepper
 
@@ -711,16 +711,17 @@ def test_guide_grid_context_menu_record_without_play_and_description(qtbot, isol
     assert win.config_mgr.guide_detail_collapsed is True
     assert win.guide_detail_text.isVisible() is False
 
-    # 4. Context menu was created and contains the description and ordered actions
+    # 4. Context menu was created and contains the description and ordered pill buttons
     assert len(captured_menus) == 1
     menu = captured_menus[0]
-    action_texts = [a.text() for a in menu.actions() if a.text()]
-    assert "Record Program" in action_texts
-    assert "Record Series (Add Rule)..." in action_texts
-    watch_idx = next(i for i, t in enumerate(action_texts) if "Watch" in t or "Play" in t)
-    rec_idx = action_texts.index("Record Program")
-    rule_idx = action_texts.index("Record Series (Add Rule)...")
-    assert watch_idx < rec_idx < rule_idx
+    pills = menu.findChildren(QPushButton)
+    pill_texts = [b.text() for b in pills]
+    assert "Record Program" in pill_texts
+    assert "Record Series" in pill_texts
+    watch_idx = next(i for i, t in enumerate(pill_texts) if "Watch" in t or "Play" in t)
+    rec_idx = pill_texts.index("Record Program")
+    series_idx = pill_texts.index("Record Series")
+    assert watch_idx < rec_idx < series_idx
 
     # Find the header widget in the menu to verify description is shown
     header_widget = None
@@ -735,8 +736,8 @@ def test_guide_grid_context_menu_record_without_play_and_description(qtbot, isol
     assert "A captivating mystery show" in label_texts
 
     # 5. Triggering "Record Program" records the show without starting playback
-    record_act = next(a for a in menu.actions() if a.text() == "Record Program")
-    record_act.trigger()
+    record_btn = next(b for b in pills if b.text() == "Record Program")
+    record_btn.click()
 
     assert len(activated_progs) == 0
     active_map = win.queue_mgr.get_active_scheduled_map()
@@ -777,10 +778,11 @@ def test_guide_grid_context_menu_when_already_scheduled(qtbot, isolated_config, 
     win._on_guide_grid_context_menu(pos)
 
     assert len(captured_menus) == 1
-    action_texts = [a.text() for a in captured_menus[0].actions() if a.text()]
-    assert "Adjust Buffer (+10m)..." in action_texts
-    assert "Cancel Recording" in action_texts
-    assert "Record Program" not in action_texts
+    pills = captured_menus[0].findChildren(QPushButton)
+    pill_texts = [b.text() for b in pills]
+    assert any("Buffer (+10m)" in t for t in pill_texts)
+    assert any("Cancel Rec" in t for t in pill_texts)
+    assert "Record Program" not in pill_texts
     win.close()
 
 
@@ -809,8 +811,9 @@ def test_guide_list_context_menu(qtbot, isolated_config, monkeypatch):
 
     assert len(captured_menus) == 1
     assert win.guide_detail_text.isVisible() is False
-    action_texts = [a.text() for a in captured_menus[0].actions() if a.text()]
-    assert "Record Program" in action_texts
+    pills = captured_menus[0].findChildren(QPushButton)
+    pill_texts = [b.text() for b in pills]
+    assert "Record Program" in pill_texts
     win.close()
 
 
@@ -850,14 +853,51 @@ def test_guide_context_menu_watch_upcoming_bypasses_upcoming_dialog(qtbot, isola
 
     assert len(captured_menus) == 1
     menu = captured_menus[0]
-    watch_act = next(a for a in menu.actions() if a.text() == "Watch Channel")
-    watch_act.trigger()
+    pills = menu.findChildren(QPushButton)
+    watch_btn = next(b for b in pills if "Watch Channel" in b.text())
+    watch_btn.click()
 
     # Bypassed UpcomingShowDialog entirely
     assert len(dialog_shown) == 0
     # Started timeshift for channel directly
     assert len(started_timeshift) == 1
     assert started_timeshift[0]["kaffeine_channel"] == "Channel 11.1"
+    win.close()
+
+
+def test_guide_context_menu_long_description_more_button(qtbot, isolated_config, monkeypatch):
+    win = MainWindow(config_mgr=isolated_config)
+    qtbot.addWidget(win)
+
+    long_summary = "A" * 500
+    prog = {
+        "id": 9905,
+        "show_title": "Long Story",
+        "kaffeine_channel": "Channel 12.1",
+        "start_iso": "2026-10-15T20:00:00",
+        "duration_iso": "01:00:00",
+        "summary": long_summary,
+        "_start_col": 0,
+        "_span": 1,
+    }
+    table = win.guide_grid_table
+    table.setRowCount(1)
+    table.setColumnCount(2)
+    item = QTableWidgetItem("Long Story")
+    item.setData(Qt.ItemDataRole.UserRole, prog)
+    table.setItem(0, 0, item)
+
+    captured_menus = []
+    monkeypatch.setattr(QMenu, "exec", lambda m, *args, **kwargs: captured_menus.append(m))
+
+    pos = table.visualItemRect(item).center()
+    win._on_guide_grid_context_menu(pos)
+
+    assert len(captured_menus) == 1
+    menu = captured_menus[0]
+    pills = menu.findChildren(QPushButton)
+    more_btns = [b for b in pills if "full description" in b.text().lower()]
+    assert len(more_btns) == 1
     win.close()
 
 

@@ -11702,8 +11702,8 @@ class MainWindow(QMainWindow):
 
         container = QWidget()
         container.setObjectName("guideContextMenuContainer")
-        container.setMinimumWidth(460)
-        container.setMaximumWidth(520)
+        container.setMinimumWidth(480)
+        container.setMaximumWidth(540)
         container.setStyleSheet(
             "QWidget#guideContextMenuContainer { background: transparent; } "
             "QLabel { background: transparent; }"
@@ -11714,7 +11714,7 @@ class MainWindow(QMainWindow):
 
         title_lbl = QLabel()
         title_lbl.setWordWrap(True)
-        title_lbl.setMaximumWidth(500)
+        title_lbl.setMaximumWidth(520)
         escaped_title = html.escape(primary_title)
         title_html = f"<span style='font-size: 16px; font-weight: bold; color: {title_color_hex};'>{escaped_title}</span>"
         if season and number:
@@ -11726,7 +11726,7 @@ class MainWindow(QMainWindow):
             sub_lbl = QLabel(f"&quot;{html.escape(secondary_sub)}&quot;")
             sub_lbl.setStyleSheet(f"font-size: 13px; font-weight: 600; color: {text_secondary};")
             sub_lbl.setWordWrap(True)
-            sub_lbl.setMaximumWidth(500)
+            sub_lbl.setMaximumWidth(520)
             layout.addWidget(sub_lbl)
 
         meta_parts = []
@@ -11740,7 +11740,7 @@ class MainWindow(QMainWindow):
             meta_lbl = QLabel(" • ".join(meta_parts))
             meta_lbl.setStyleSheet(f"font-size: 12px; color: {text_secondary};")
             meta_lbl.setWordWrap(True)
-            meta_lbl.setMaximumWidth(500)
+            meta_lbl.setMaximumWidth(520)
             layout.addWidget(meta_lbl)
 
         divider = QFrame()
@@ -11757,50 +11757,107 @@ class MainWindow(QMainWindow):
 
         desc_lbl = QLabel(display_summary)
         desc_lbl.setWordWrap(True)
-        desc_lbl.setMaximumWidth(500)
+        desc_lbl.setMaximumWidth(520)
         desc_lbl.setStyleSheet(f"font-size: 13px; color: {text_primary}; line-height: 1.4;")
         layout.addWidget(desc_lbl)
 
-        header_action = QWidgetAction(menu)
-        header_action.setDefaultWidget(container)
-        menu.addAction(header_action)
-
         if has_more:
-            menu.addAction("Show Full Description...", lambda: QMessageBox.information(self, f"{primary_title} - Program Details", summary))
+            more_btn = QPushButton("Show full description...")
+            more_btn.setObjectName("guidePillMoreDesc")
+            more_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            more_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: transparent;
+                    color: {tokens.get('accent_color', '#3b82f6')};
+                    font-size: 11.5px;
+                    font-weight: 600;
+                    border: none;
+                    text-align: left;
+                    padding: 2px 0px;
+                }}
+                QPushButton:hover {{
+                    text-decoration: underline;
+                }}
+            """)
+            more_btn.clicked.connect(lambda: (menu.close(), QMessageBox.information(self, f"{primary_title} - Program Details", summary)))
+            layout.addWidget(more_btn)
 
-        menu.addSeparator()
+        # Pill buttons row at bottom of card
+        divider_bottom = QFrame()
+        divider_bottom.setFrameShape(QFrame.Shape.HLine)
+        divider_bottom.setFrameShadow(QFrame.Shadow.Plain)
+        divider_bottom.setStyleSheet(f"color: {popup_border}; background-color: {popup_border}; max-height: 1px; margin-top: 8px; margin-bottom: 6px;")
+        layout.addWidget(divider_bottom)
 
-        # 1. Watch / Tune action first (routes directly without intermediate UpcomingShowDialog)
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        btn_row.setContentsMargins(0, 2, 0, 2)
+
+        def _add_pill(text, bg_color, hover_color, pressed_color, callback, obj_name=""):
+            btn = QPushButton(text)
+            if obj_name:
+                btn.setObjectName(obj_name)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            btn.setMinimumHeight(34)
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {bg_color};
+                    color: #ffffff;
+                    font-size: 12.5px;
+                    font-weight: 600;
+                    border-radius: 17px;
+                    padding: 6px 12px;
+                    border: 1px solid rgba(255, 255, 255, 0.12);
+                }}
+                QPushButton:hover {{
+                    background-color: {hover_color};
+                }}
+                QPushButton:pressed {{
+                    background-color: {pressed_color};
+                }}
+            """)
+            btn.clicked.connect(lambda checked=False, cb=callback: (menu.close(), cb()))
+            btn_row.addWidget(btn)
+            return btn
+
+        # 1. Watch / Tune pill first
         timing_info = self._get_program_timing_state(prog)
         state = timing_info.get("state", "upcoming")
         if state == "live":
-            menu.addAction("Watch Live", lambda: self.watch_or_tune_selected_guide_item(prog))
+            _add_pill("Watch Live", "#2563eb", "#1d4ed8", "#1e40af", lambda: self.watch_or_tune_selected_guide_item(prog), "guidePillWatch")
         elif state == "upcoming":
-            menu.addAction("Watch Channel", lambda: self.watch_or_tune_selected_guide_item(prog))
+            _add_pill("Watch Channel", "#2563eb", "#1d4ed8", "#1e40af", lambda: self.watch_or_tune_selected_guide_item(prog), "guidePillWatch")
         elif state == "past" and timing_info.get("recorded_file"):
-            menu.addAction("Play Recording", lambda: self.watch_or_tune_selected_guide_item(prog))
+            _add_pill("Play Recording", "#2563eb", "#1d4ed8", "#1e40af", lambda: self.watch_or_tune_selected_guide_item(prog), "guidePillWatch")
 
         has_active_ts = bool(getattr(self, "_active_timeshift", None))
         cur_ts_ch = (self._active_timeshift.get("channel") or "").strip().lower() if has_active_ts else ""
         sel_ch = (channel or "").strip().lower()
         if has_active_ts and (cur_ts_ch == sel_ch or state == "live"):
-            menu.addAction(f"Stop Timeshift ({self._active_timeshift.get('channel')})", self.stop_timeshift)
+            _add_pill(f"Stop Timeshift ({self._active_timeshift.get('channel')})", "#475569", "#334155", "#1e293b", self.stop_timeshift, "guidePillStopTimeshift")
 
-        # 2. Record Program action second
+        # 2. Record Program pill second
         active_map = self.queue_mgr.get_active_scheduled_map()
         ch_key = (channel or "").strip().lower()
         iso_key = (prog.get("start_iso") or "")[:16]
         rec_info = active_map.get((ch_key, iso_key))
 
         if rec_info is None:
-            menu.addAction("Record Program", lambda: self.record_selected_guide_item(prog))
+            _add_pill("Record Program", "#dc2626", "#b91c1c", "#991b1b", lambda: self.record_selected_guide_item(prog), "guidePillRecord")
         else:
             buf_val = rec_info.get("buffer_mins", 0) or 0
-            menu.addAction(f"Adjust Buffer (+{buf_val}m)...", lambda: self.record_selected_guide_item(prog))
-            menu.addAction("Cancel Recording", lambda: self.cancel_selected_guide_recording(prog))
+            _add_pill(f"Buffer (+{buf_val}m)", "#d97706", "#b45309", "#92400e", lambda: self.record_selected_guide_item(prog), "guidePillAdjustBuffer")
+            _add_pill("Cancel Rec", "#991b1b", "#7f1d1d", "#5c1313", lambda: self.cancel_selected_guide_recording(prog), "guidePillCancelRecord")
 
-        # 3. Record Series action third
-        menu.addAction("Record Series (Add Rule)...", lambda: self.add_rule_from_selected_guide_item(prog))
+        # 3. Record Series pill third
+        _add_pill("Record Series", "#6366f1", "#4f46e5", "#4338ca", lambda: self.add_rule_from_selected_guide_item(prog), "guidePillRecordSeries")
+
+        layout.addLayout(btn_row)
+
+        header_action = QWidgetAction(menu)
+        header_action.setDefaultWidget(container)
+        menu.addAction(header_action)
 
         target_pos = global_pos if global_pos is not None else QCursor.pos()
         menu.exec(target_pos)
