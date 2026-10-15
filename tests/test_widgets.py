@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta
+
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QLabel, QMenu, QPushButton, QTableWidgetItem, QWidgetAction
 
@@ -906,11 +908,13 @@ def test_watch_and_timeshift_buttons_hidden_when_single_click_enabled(qtbot, iso
     qtbot.addWidget(win)
     win.show()
 
+    now = datetime.now()
+    start_dt = now - timedelta(minutes=10)
     prog = {
         "id": 9910,
         "show_title": "Live Morning News",
         "kaffeine_channel": "Channel 4.1",
-        "start_iso": "2026-10-15T08:00:00",
+        "start_iso": start_dt.strftime("%Y-%m-%dT%H:%M:%S"),
         "duration_iso": "01:00:00",
         "summary": "Morning news.",
         "_timing_state": "live",
@@ -940,6 +944,60 @@ def test_watch_and_timeshift_buttons_hidden_when_single_click_enabled(qtbot, iso
     win._on_single_click_play_toggled(False)
     assert win.watch_guide_btn.isVisible() is True
     assert win.stop_timeshift_btn.isVisible() is True
+    win.close()
+
+
+def test_guide_list_single_click_and_double_click_actions(qtbot, isolated_config, monkeypatch):
+    win = MainWindow(config_mgr=isolated_config)
+    qtbot.addWidget(win)
+    win.show()
+
+    prog = {
+        "id": 9920,
+        "channel_id": "ch5",
+        "kaffeine_channel": "Channel 5.1",
+        "show_title": "List Single Click Show",
+        "start_iso": "2026-10-15T19:00:00",
+        "duration_iso": "01:00:00",
+        "start_time_local": "7:00 PM",
+        "summary": "Testing list single click activation.",
+    }
+    win.current_guide_items = [prog]
+    win.guide_table.setRowCount(1)
+    for c in range(6):
+        win.guide_table.setItem(0, c, QTableWidgetItem(f"Col {c}"))
+
+    # Switch to list view
+    win.guide_stack.setCurrentIndex(1)
+
+    activated_progs = []
+    monkeypatch.setattr(win, "handle_program_activation", lambda p: activated_progs.append(p))
+
+    # 1. When guide_single_click_play is True: single click activates program immediately
+    isolated_config.guide_single_click_play = True
+    win.on_guide_list_cell_clicked(0, 0)
+    assert len(activated_progs) == 1
+    assert activated_progs[0]["show_title"] == "List Single Click Show"
+    assert win._get_active_selected_program() is prog
+    assert "List Single Click Show" in win.guide_detail_title.text()
+
+    # Re-click toggles unhighlight
+    win.on_guide_list_cell_clicked(0, 0)
+    assert win._get_active_selected_program() is None
+    assert len(activated_progs) == 1  # No new activation on unhighlight
+
+    # 2. When guide_single_click_play is False: single click only selects, double click activates
+    isolated_config.guide_single_click_play = False
+    win.on_guide_list_cell_clicked(0, 0)
+    assert len(activated_progs) == 1  # Still 1, did not activate on single click
+    assert win._get_active_selected_program() is prog
+
+    # Double click activates
+    item = win.guide_table.item(0, 0)
+    win.on_guide_table_double_clicked(item)
+    assert len(activated_progs) == 2
+    assert activated_progs[1]["show_title"] == "List Single Click Show"
+
     win.close()
 
 

@@ -4749,6 +4749,7 @@ class MainWindow(QMainWindow):
         self.day_nav_offset = 0
         self._active_timeshift = None
         self.selected_grid_program = None
+        self.selected_list_program = None
         self._last_clicked_guide_list_row = -1
 
         self.init_ui()
@@ -10779,6 +10780,7 @@ class MainWindow(QMainWindow):
         the guide grid and list views, resetting the program detail panel.
         """
         self.selected_grid_program = None
+        self.selected_list_program = None
         self._last_clicked_guide_list_row = -1
 
         if hasattr(self, "guide_grid_table") and self.guide_grid_table:
@@ -10964,33 +10966,70 @@ class MainWindow(QMainWindow):
                 self.stop_timeshift_btn.setVisible(False)
 
     def on_guide_list_cell_clicked(self, row: int, col: int):
-        if getattr(self, "_last_clicked_guide_list_row", -1) == row:
+        if row < 0 or row >= len(getattr(self, "current_guide_items", [])):
             self.clear_guide_selection()
-        else:
-            self._last_clicked_guide_list_row = row
-            if getattr(self.config_mgr, "guide_single_click_play", True):
-                if 0 <= row < len(getattr(self, "current_guide_items", [])):
-                    prog = self.current_guide_items[row]
-                    self.handle_program_activation(prog)
+            return
+
+        prog = self.current_guide_items[row]
+        cur_sel = getattr(self, "selected_list_program", None)
+        if cur_sel is not None:
+            is_same = False
+            if cur_sel is prog or cur_sel == prog:
+                is_same = True
+            elif cur_sel.get("id") is not None and prog.get("id") is not None:
+                is_same = (cur_sel.get("id") == prog.get("id"))
+            else:
+                cur_ch = (cur_sel.get("kaffeine_channel") or cur_sel.get("channel") or cur_sel.get("channel_id") or "").strip().lower()
+                prog_ch = (prog.get("kaffeine_channel") or prog.get("channel") or prog.get("channel_id") or "").strip().lower()
+                cur_start = cur_sel.get("start_iso") or ""
+                prog_start = prog.get("start_iso") or ""
+                if cur_ch and prog_ch and cur_ch == prog_ch and cur_start and prog_start and cur_start == prog_start:
+                    is_same = True
+
+            if is_same:
+                self.clear_guide_selection()
+                return
+
+        self.selected_list_program = prog
+        self._last_clicked_guide_list_row = row
+        self.guide_table.selectRow(row)
+        self._display_program_details(prog)
+
+        if getattr(self.config_mgr, "guide_single_click_play", True):
+            self.handle_program_activation(prog)
 
     def on_guide_selection_changed(self):
+        # Ignore during active mouse click so on_guide_list_cell_clicked can handle selection & activation
+        app = QApplication.instance()
+        if app and app.mouseButtons() != Qt.MouseButton.NoButton:
+            return
+
+        if not hasattr(self, "guide_table") or not self.guide_table.selectedItems():
+            self.selected_list_program = None
+            self._last_clicked_guide_list_row = -1
+            return
+
         row = self.guide_table.currentRow()
         if row < 0 or row >= len(getattr(self, "current_guide_items", [])):
             self.clear_guide_selection()
             return
 
-        self._last_clicked_guide_list_row = row
         prog = self.current_guide_items[row]
+        self.selected_list_program = prog
+        self._last_clicked_guide_list_row = row
         self._display_program_details(prog)
 
     def _get_active_selected_program(self) -> Optional[Dict[str, Any]]:
         if self.guide_stack.currentIndex() == 0:
             return getattr(self, "selected_grid_program", None)
         else:
-            row = self.guide_table.currentRow()
-            if row >= 0 and row < len(getattr(self, "current_guide_items", [])):
-                return self.current_guide_items[row]
-        return None
+            if not hasattr(self, "guide_table") or not self.guide_table.selectedItems():
+                return None
+            return getattr(self, "selected_list_program", None) or (
+                self.current_guide_items[self.guide_table.currentRow()]
+                if 0 <= self.guide_table.currentRow() < len(getattr(self, "current_guide_items", []))
+                else None
+            )
 
     def _get_program_timing_state(self, prog: Dict[str, Any], check_files: bool = True) -> Dict[str, Any]:
         """
@@ -11613,6 +11652,9 @@ class MainWindow(QMainWindow):
         row = item.row()
         if 0 <= row < len(getattr(self, "current_guide_items", [])):
             prog = self.current_guide_items[row]
+            self.selected_list_program = prog
+            self._last_clicked_guide_list_row = row
+            self.guide_table.selectRow(row)
             self._display_program_details(prog)
             self.handle_program_activation(prog)
 
@@ -11659,6 +11701,7 @@ class MainWindow(QMainWindow):
         prog = self.current_guide_items[row]
         self.guide_table.setCurrentCell(row, 0)
         self.guide_table.selectRow(row)
+        self.selected_list_program = prog
         self._last_clicked_guide_list_row = row
         self._display_program_details(prog)
 
