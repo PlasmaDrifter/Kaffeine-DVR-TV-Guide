@@ -188,14 +188,16 @@ class KaffeineWebRequestHandler(http.server.BaseHTTPRequestHandler):
                 self._send_json({"error": str(e)}, status=500)
                 return
 
-        # TV Guide listings: GET /api/guide?date=YYYY-MM-DD
+        # TV Guide listings: GET /api/guide?date=YYYY-MM-DD&trim=0|1
         if path == "/api/guide":
             try:
                 qs = urllib.parse.parse_qs(parsed.query)
                 target_date = qs.get("date", [""])[0] or time.strftime("%Y-%m-%d")
+                trim_param = qs.get("trim", ["0"])[0]
+                trim_ended = trim_param == "1"
                 programs = self.server_obj.guide_svc.search_programs(
                     airdate=target_date,
-                    trim_ended=False,
+                    trim_ended=trim_ended,
                     include_overhang=True
                 )
 
@@ -208,13 +210,23 @@ class KaffeineWebRequestHandler(http.server.BaseHTTPRequestHandler):
                     ch_key = ch_name.strip().lower()
                     iso_key = (p.get("start_iso") or "")[:16]
                     is_sched = (ch_key, iso_key) in scheduled_map
+                    dur_iso = p.get("duration_iso") or "00:30:00"
+                    rt_mins = p.get("runtime_mins")
+                    if not rt_mins:
+                        try:
+                            dparts = [int(x) for x in dur_iso.split(":")]
+                            rt_mins = dparts[0] * 60 + dparts[1]
+                        except Exception:
+                            rt_mins = 30
                     out.append({
                         "id": p.get("id"),
                         "title": p.get("show_title") or p.get("title") or "Untitled",
                         "episode_title": p.get("episode_title") or "",
                         "channel": ch_name,
                         "start_iso": p.get("start_iso"),
-                        "duration_iso": p.get("duration_iso"),
+                        "duration_iso": dur_iso,
+                        "runtime_mins": rt_mins,
+                        "summary": p.get("summary") or "",
                         "category": p.get("_category") or "",
                         "is_scheduled": is_sched
                     })

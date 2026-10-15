@@ -38,7 +38,7 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
     .nav-btn:hover { background: #2d3748; }
     .nav-btn.active { background: #0284c7; border-color: #0284c7; color: #fff; }
 
-    main { flex: 1; padding: 18px 20px; max-width: 1200px; width: 100%; margin: 0 auto; }
+    main { flex: 1; padding: 18px 20px; max-width: 100%; width: 100%; margin: 0 auto; }
 
     .view-panel { display: none; }
     .view-panel.active { display: block; }
@@ -51,14 +51,175 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
 
     .btn { background: #0284c7; color: #fff; border: none; padding: 7px 14px; border-radius: 6px; cursor: pointer; font-size: 0.88rem; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; transition: background 0.15s; }
     .btn:hover { background: var(--accent-hover); }
+    .btn-secondary { background: #374151; color: #d1d5db; }
+    .btn-secondary:hover { background: #4b5563; color: #fff; }
     .btn-danger { background: var(--danger); }
     .btn-danger:hover { background: var(--danger-hover); }
     .btn-sm { padding: 4px 10px; font-size: 0.8rem; }
+
+    .view-mode-toggle { display: inline-flex; border: 1px solid var(--card-border); border-radius: 6px; overflow: hidden; }
+    .view-mode-toggle button { border: none; border-radius: 0; background: #1e2638; color: var(--text-muted); cursor: pointer; padding: 5px 12px; font-size: 0.82rem; font-weight: 600; transition: background 0.15s; }
+    .view-mode-toggle button:hover { background: #2d3748; color: #fff; }
+    .view-mode-toggle button.active { background: #0284c7; color: #fff; }
 
     .grid-table { width: 100%; border-collapse: collapse; margin-top: 8px; background: var(--card-bg); border-radius: 8px; overflow: hidden; border: 1px solid var(--card-border); }
     .grid-table th { background: #141a24; padding: 10px 14px; text-align: left; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); border-bottom: 1px solid var(--card-border); }
     .grid-table td { padding: 12px 14px; border-bottom: 1px solid #232b38; font-size: 0.9rem; vertical-align: middle; }
     .grid-table tr:hover { background: #202836; }
+
+    /* EPG Grid Styles */
+    .epg-wrapper {
+      position: relative;
+      width: 100%;
+      overflow-x: auto;
+      overflow-y: auto;
+      max-height: calc(100vh - 210px);
+      min-height: 480px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+    }
+    .epg-header {
+      display: flex;
+      position: sticky;
+      top: 0;
+      z-index: 25;
+      background: #141a24;
+      border-bottom: 2px solid var(--card-border);
+      height: 38px;
+    }
+    .epg-channel-header {
+      position: sticky;
+      left: 0;
+      z-index: 30;
+      width: 160px;
+      min-width: 160px;
+      background: #111620;
+      border-right: 2px solid var(--card-border);
+      padding: 8px 12px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+    }
+    .epg-timeline-header {
+      display: flex;
+      position: relative;
+    }
+    .epg-time-slot {
+      width: 150px;
+      min-width: 150px;
+      padding: 8px 10px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      border-right: 1px solid #283244;
+      box-sizing: border-box;
+      white-space: nowrap;
+    }
+    .epg-row {
+      display: flex;
+      position: relative;
+      height: 64px;
+      border-bottom: 1px solid #232b38;
+    }
+    .epg-row:hover {
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .epg-channel-col {
+      position: sticky;
+      left: 0;
+      z-index: 15;
+      width: 160px;
+      min-width: 160px;
+      background: #141a24;
+      border-right: 2px solid var(--card-border);
+      padding: 8px 12px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      box-sizing: border-box;
+    }
+    .epg-channel-name {
+      font-weight: 700;
+      font-size: 0.88rem;
+      color: #fff;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .epg-track {
+      position: relative;
+      height: 100%;
+    }
+    .epg-program-tile {
+      position: absolute;
+      top: 4px;
+      bottom: 4px;
+      box-sizing: border-box;
+      background: #1e2638;
+      border: 1px solid #334155;
+      border-radius: 5px;
+      padding: 5px 8px;
+      cursor: pointer;
+      overflow: hidden;
+      transition: background 0.15s, border-color 0.15s;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .epg-program-tile:hover {
+      background: #2a354c;
+      border-color: var(--accent);
+      z-index: 10;
+    }
+    .epg-program-tile.scheduled {
+      border-left: 4px solid #ef4444;
+      background: #2b1f2e;
+    }
+    .epg-program-tile.airing-now {
+      border-color: #38bdf8;
+    }
+    .epg-tile-title {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: #f1f5f9;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      line-height: 1.2;
+    }
+    .epg-tile-time {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 3px;
+    }
+    .epg-now-line {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: #ef4444;
+      z-index: 20;
+      pointer-events: none;
+    }
+    .epg-now-line::before {
+      content: "NOW";
+      position: absolute;
+      top: 2px;
+      left: -13px;
+      background: #ef4444;
+      color: #fff;
+      font-size: 0.62rem;
+      font-weight: bold;
+      padding: 1px 3px;
+      border-radius: 3px;
+    }
 
     .badge { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 0.72rem; font-weight: bold; text-transform: uppercase; }
     .badge-recording { background: #ef4444; color: #fff; }
@@ -133,26 +294,44 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
           <label style="font-size: 0.85rem; color: var(--text-muted);">Broadcast Date:</label>
           <select id="guideDateSelect" onchange="loadGuide()"></select>
           <button class="btn btn-sm" onclick="loadGuide()">Refresh Listings</button>
+          <div class="view-mode-toggle">
+            <button id="viewGridBtn" class="active" onclick="setGuideViewMode('grid')">Grid View</button>
+            <button id="viewListBtn" onclick="setGuideViewMode('list')">List View</button>
+          </div>
+          <button id="jumpNowBtn" class="btn btn-sm btn-secondary" onclick="scrollToCurrentTime()">Jump to Now</button>
         </div>
         <div class="toolbar-group">
-          <input type="text" id="guideSearchInput" placeholder="Filter by show or channel..." oninput="filterGuideTable()">
+          <label id="trimPassedWrapper" style="font-size: 0.82rem; color: var(--text-muted); display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none;">
+            <input type="checkbox" id="trimPassedCheckbox" checked onchange="renderGuide()"> Trim Passed Shows
+          </label>
+          <input type="text" id="guideSearchInput" placeholder="Filter by show or channel..." oninput="renderGuide()">
         </div>
       </div>
 
-      <table class="grid-table">
-        <thead>
-          <tr>
-            <th>Time</th>
-            <th>Channel</th>
-            <th>Program Title</th>
-            <th>Duration</th>
-            <th style="text-align: right;">Action</th>
-          </tr>
-        </thead>
-        <tbody id="guideTableBody">
-          <tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 30px;">Loading TV Guide listings...</td></tr>
-        </tbody>
-      </table>
+      <!-- EPG Grid View Container -->
+      <div id="guideGridContainer" style="display: block;">
+        <div id="epgGridWrapper" class="epg-wrapper">
+          <div style="text-align: center; color: var(--text-muted); padding: 40px;">Loading TV Guide Grid...</div>
+        </div>
+      </div>
+
+      <!-- List View Container -->
+      <div id="guideListContainer" style="display: none;">
+        <table class="grid-table">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Channel</th>
+              <th>Program Title</th>
+              <th>Duration</th>
+              <th style="text-align: right;">Action</th>
+            </tr>
+          </thead>
+          <tbody id="guideTableBody">
+            <tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 30px;">Loading TV Guide listings...</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <!-- Recordings View -->
@@ -184,6 +363,25 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
     </div>
   </main>
 
+  <!-- Program Details Modal -->
+  <div id="programModal" class="modal-overlay" onclick="closeProgramModal(event)">
+    <div class="modal-card" onclick="event.stopPropagation()" style="max-width: 520px;">
+      <div class="modal-header">
+        <span id="progModalTitle" class="modal-title">Program Details</span>
+        <button class="modal-close" onclick="closeProgramModal()">&times;</button>
+      </div>
+      <div style="padding: 18px 20px;">
+        <div id="progModalSubtitle" style="font-size: 0.95rem; font-weight: 600; color: var(--accent); margin-bottom: 8px;"></div>
+        <div id="progModalMeta" style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px;"></div>
+        <div id="progModalSummary" style="font-size: 0.88rem; line-height: 1.5; color: #cbd5e1; max-height: 200px; overflow-y: auto; margin-bottom: 20px; background: #0f131a; padding: 12px; border-radius: 6px; border: 1px solid var(--card-border);"></div>
+        <div style="display: flex; justify-content: flex-end; gap: 10px;">
+          <button class="btn btn-secondary" onclick="closeProgramModal()">Close</button>
+          <button id="progModalActionBtn" class="btn" onclick="handleProgModalAction()">Schedule Recording</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Video Playback Modal -->
   <div id="videoModal" class="modal-overlay" onclick="closeVideoModal(event)">
     <div class="modal-card" onclick="event.stopPropagation()">
@@ -205,6 +403,35 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
   <script>
     let authToken = localStorage.getItem("kaffeine_web_token") || "";
     let guideItems = [];
+    let currentGuideViewMode = localStorage.getItem("kaffeine_guide_view_mode") || "grid";
+    let selectedProgForModal = null;
+    const SLOT_WIDTH = 150;
+    const TOTAL_SLOTS = 56;
+    const TRACK_WIDTH = TOTAL_SLOTS * SLOT_WIDTH;
+
+    function setGuideViewMode(mode) {
+      currentGuideViewMode = mode;
+      localStorage.setItem("kaffeine_guide_view_mode", mode);
+      updateGuideViewControls();
+      renderGuide();
+    }
+
+    function updateGuideViewControls() {
+      const isGrid = currentGuideViewMode === "grid";
+      const gridBtn = document.getElementById("viewGridBtn");
+      const listBtn = document.getElementById("viewListBtn");
+      const gridBox = document.getElementById("guideGridContainer");
+      const listBox = document.getElementById("guideListContainer");
+      const nowBtn = document.getElementById("jumpNowBtn");
+      const trimWrapper = document.getElementById("trimPassedWrapper");
+
+      if (gridBtn) gridBtn.className = isGrid ? "active" : "";
+      if (listBtn) listBtn.className = !isGrid ? "active" : "";
+      if (gridBox) gridBox.style.display = isGrid ? "block" : "none";
+      if (listBox) listBox.style.display = isGrid ? "none" : "block";
+      if (nowBtn) nowBtn.style.display = isGrid ? "inline-flex" : "none";
+      if (trimWrapper) trimWrapper.style.display = isGrid ? "none" : "inline-flex";
+    }
 
     async function apiFetch(endpoint, options = {}) {
       options.headers = options.headers || {};
@@ -289,54 +516,268 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
       const dateElem = document.getElementById("guideDateSelect");
       const selDate = dateElem ? dateElem.value : "";
       const tbody = document.getElementById("guideTableBody");
-      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding: 25px; color: var(--text-muted);">Fetching schedule for ${selDate || "today"}...</td></tr>`;
+      const epgWrapper = document.getElementById("epgGridWrapper");
+
+      if (tbody) tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding: 25px; color: var(--text-muted);">Fetching schedule for ${selDate || "today"}...</td></tr>`;
+      if (epgWrapper) epgWrapper.innerHTML = `<div style="text-align:center; color: var(--text-muted); padding: 40px;">Fetching schedule for ${selDate || "today"}...</div>`;
+
       try {
         const resp = await apiFetch(`/api/guide?date=${encodeURIComponent(selDate)}`);
         if (!resp.ok) {
           const errData = await resp.json().catch(() => ({}));
-          tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding: 25px; color: #ef4444;">Error ${resp.status}: ${escapeHtml(errData.error || "Failed to load TV guide.")}</td></tr>`;
+          const errMsg = `Error ${resp.status}: ${escapeHtml(errData.error || "Failed to load TV guide.")}`;
+          if (tbody) tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding: 25px; color: #ef4444;">${errMsg}</td></tr>`;
+          if (epgWrapper) epgWrapper.innerHTML = `<div style="text-align:center; color: #ef4444; padding: 40px;">${errMsg}</div>`;
           return;
         }
         guideItems = await resp.json();
-        renderGuideTable(guideItems);
+        renderGuide();
+
+        const now = new Date();
+        const todayStr = now.toISOString().split("T")[0];
+        if (selDate === todayStr && currentGuideViewMode === "grid") {
+          setTimeout(scrollToCurrentTime, 120);
+        }
       } catch (e) {
-        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding: 25px; color: #ef4444;">${escapeHtml(e.message || "Failed to load TV guide.")}</td></tr>`;
+        const errMsg = escapeHtml(e.message || "Failed to load TV guide.");
+        if (tbody) tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding: 25px; color: #ef4444;">${errMsg}</td></tr>`;
+        if (epgWrapper) epgWrapper.innerHTML = `<div style="text-align:center; color: #ef4444; padding: 40px;">${errMsg}</div>`;
+      }
+    }
+
+    function renderGuide() {
+      const q = (document.getElementById("guideSearchInput").value || "").toLowerCase().trim();
+      let items = guideItems || [];
+      if (q) {
+        items = items.filter(p =>
+          (p.title && p.title.toLowerCase().includes(q)) ||
+          (p.channel && p.channel.toLowerCase().includes(q)) ||
+          (p.episode_title && p.episode_title.toLowerCase().includes(q))
+        );
+      }
+
+      if (currentGuideViewMode === "grid") {
+        renderEPGGrid(items);
+      } else {
+        renderGuideTable(items);
       }
     }
 
     function renderGuideTable(items) {
       const tbody = document.getElementById("guideTableBody");
+      if (!tbody) return;
       if (!items || items.length === 0) {
         tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding: 25px; color: var(--text-muted);">No broadcast listings found for this date.</td></tr>`;
         return;
       }
-      tbody.innerHTML = items.map(p => {
-        const start = p.start_iso ? p.start_iso.substring(11, 16) : "--:--";
+
+      const selDate = document.getElementById("guideDateSelect") ? document.getElementById("guideDateSelect").value : "";
+      const now = new Date();
+      const todayStr = now.toISOString().split("T")[0];
+      const isToday = selDate === todayStr;
+      const trimCheckbox = document.getElementById("trimPassedCheckbox");
+      const shouldTrim = isToday && trimCheckbox && trimCheckbox.checked;
+
+      let displayItems = items;
+      if (shouldTrim) {
+        displayItems = items.filter(p => {
+          if (!p.start_iso) return true;
+          const startDt = new Date(p.start_iso);
+          const durMins = p.runtime_mins || 30;
+          const endDt = new Date(startDt.getTime() + durMins * 60000);
+          return endDt >= now;
+        });
+      }
+
+      if (displayItems.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding: 25px; color: var(--text-muted);">No upcoming programs remaining for today. Uncheck "Trim Passed Shows" to view earlier broadcasts.</td></tr>`;
+        return;
+      }
+
+      window.filteredGuideList = displayItems;
+
+      tbody.innerHTML = displayItems.map((p, idx) => {
+        const startDt = p.start_iso ? new Date(p.start_iso) : null;
+        const durMins = p.runtime_mins || 30;
+        const endDt = startDt ? new Date(startDt.getTime() + durMins * 60000) : null;
+        const isNow = startDt && endDt && (startDt <= now && now < endDt);
+        const startStr = p.start_iso ? p.start_iso.substring(11, 16) : "--:--";
+
+        let timeCell = `<span style="font-weight: 600; color: var(--accent);">${escapeHtml(startStr)}</span>`;
+        if (isNow) {
+          timeCell += ` <span class="badge" style="background:#0284c7; color:#fff; font-size:0.68rem; margin-left:4px;">On Now</span>`;
+        }
+
         const isScheduled = !!p.is_scheduled;
         const btnHtml = isScheduled
           ? `<span class="badge badge-armed">Scheduled</span>`
-          : `<button class="btn btn-sm" onclick='scheduleShow(${JSON.stringify(p)})'>Record</button>`;
+          : `<button class="btn btn-sm" onclick="scheduleShowByIndex(${idx})">Record</button>`;
+
+        let titleHtml = `<b>${escapeHtml(p.title || "Untitled")}</b>`;
+        if (p.episode_title) {
+          titleHtml += `<div style="font-size:0.8rem; color:var(--text-muted);">${escapeHtml(p.episode_title)}</div>`;
+        }
+
         return `<tr>
-          <td style="font-weight: 600; color: var(--accent);">${escapeHtml(start)}</td>
+          <td>${timeCell}</td>
           <td><b>${escapeHtml(p.channel || "")}</b></td>
-          <td>${escapeHtml(p.title || "Untitled")}</td>
+          <td>${titleHtml}</td>
           <td>${escapeHtml(p.duration_iso || "00:30:00")}</td>
           <td style="text-align: right;">${btnHtml}</td>
         </tr>`;
       }).join("");
     }
 
-    function filterGuideTable() {
-      const q = (document.getElementById("guideSearchInput").value || "").toLowerCase().trim();
-      if (!q) {
-        renderGuideTable(guideItems);
+    function renderEPGGrid(items) {
+      const container = document.getElementById("epgGridWrapper");
+      if (!container) return;
+      if (!items || items.length === 0) {
+        container.innerHTML = `<div style="text-align:center; color:var(--text-muted); padding:40px;">No broadcast listings found for this date.</div>`;
         return;
       }
-      const filtered = guideItems.filter(p =>
-        (p.title && p.title.toLowerCase().includes(q)) ||
-        (p.channel && p.channel.toLowerCase().includes(q))
-      );
-      renderGuideTable(filtered);
+
+      // Group by channel in order
+      const channelMap = new Map();
+      for (const p of items) {
+        const ch = p.channel || "Unknown";
+        if (!channelMap.has(ch)) {
+          channelMap.set(ch, []);
+        }
+        channelMap.get(ch).push(p);
+      }
+
+      const selDate = document.getElementById("guideDateSelect") ? document.getElementById("guideDateSelect").value : "";
+      const dayStart = new Date(selDate + "T00:00:00");
+      const now = new Date();
+      const todayStr = now.toISOString().split("T")[0];
+      const isToday = selDate === todayStr;
+
+      // Build Timeline Header slots
+      let slotsHtml = "";
+      for (let s = 0; s < TOTAL_SLOTS; s++) {
+        const slotMins = s * 30;
+        const slotDate = new Date(dayStart.getTime() + slotMins * 60000);
+        const timeLabel = slotDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+        slotsHtml += `<div class="epg-time-slot">${escapeHtml(timeLabel)}</div>`;
+      }
+
+      // Now indicator line
+      let nowLineHtml = "";
+      if (isToday) {
+        const diffMins = (now - dayStart) / 60000;
+        if (diffMins >= 0 && diffMins <= TOTAL_SLOTS * 30) {
+          const nowPx = Math.round((diffMins / 30) * SLOT_WIDTH);
+          nowLineHtml = `<div class="epg-now-line" style="left: ${nowPx}px;"></div>`;
+        }
+      }
+
+      let rowsHtml = "";
+      channelMap.forEach((progs, chName) => {
+        let tilesHtml = "";
+        for (const p of progs) {
+          const pIdx = guideItems.indexOf(p);
+          if (!p.start_iso) continue;
+          const startDt = new Date(p.start_iso);
+          const diffMins = Math.round((startDt - dayStart) / 60000);
+          const durMins = p.runtime_mins || 30;
+          if (diffMins + durMins <= 0 || diffMins >= TOTAL_SLOTS * 30) continue;
+
+          const clampedStartMins = Math.max(0, diffMins);
+          const clampedDurMins = durMins - (diffMins < 0 ? Math.abs(diffMins) : 0);
+          const leftPx = Math.round((clampedStartMins / 30) * SLOT_WIDTH);
+          const widthPx = Math.max(40, Math.round((clampedDurMins / 30) * SLOT_WIDTH) - 2);
+
+          const isSched = !!p.is_scheduled;
+          const endDt = new Date(startDt.getTime() + durMins * 60000);
+          const isAiringNow = isToday && (startDt <= now && now < endDt);
+
+          const timeRange = `${p.start_iso.substring(11, 16)} - ${endDt.toTimeString().substring(0, 5)}`;
+          const tileClass = `epg-program-tile ${isSched ? 'scheduled' : ''} ${isAiringNow ? 'airing-now' : ''}`;
+
+          tilesHtml += `<div class="${tileClass}" style="left: ${leftPx}px; width: ${widthPx}px;" onclick="openProgramModal(${pIdx})" title="${escapeHtml(p.title)}: ${escapeHtml(p.summary || '')}">
+            <div class="epg-tile-title">${isSched ? '🔴 ' : ''}${escapeHtml(p.title || 'Untitled')}</div>
+            <div class="epg-tile-time">${escapeHtml(timeRange)}</div>
+          </div>`;
+        }
+
+        rowsHtml += `<div class="epg-row">
+          <div class="epg-channel-col"><div class="epg-channel-name" title="${escapeHtml(chName)}">${escapeHtml(chName)}</div></div>
+          <div class="epg-track" style="width: ${TRACK_WIDTH}px;">
+            ${nowLineHtml}
+            ${tilesHtml}
+          </div>
+        </div>`;
+      });
+
+      container.innerHTML = `
+        <div class="epg-header">
+          <div class="epg-channel-header">Channels</div>
+          <div class="epg-timeline-header" style="width: ${TRACK_WIDTH}px;">
+            ${nowLineHtml}
+            ${slotsHtml}
+          </div>
+        </div>
+        <div class="epg-body">
+          ${rowsHtml}
+        </div>
+      `;
+    }
+
+    function scrollToCurrentTime() {
+      const container = document.getElementById("epgGridWrapper");
+      if (!container) return;
+      const selDate = document.getElementById("guideDateSelect") ? document.getElementById("guideDateSelect").value : "";
+      const dayStart = new Date(selDate + "T00:00:00");
+      const now = new Date();
+      const diffMins = (now - dayStart) / 60000;
+      if (diffMins >= 0 && diffMins <= TOTAL_SLOTS * 30) {
+        const nowPx = Math.round((diffMins / 30) * SLOT_WIDTH);
+        container.scrollTo({ left: Math.max(0, nowPx - 260), behavior: 'smooth' });
+      } else {
+        container.scrollTo({ left: 0, behavior: 'smooth' });
+      }
+    }
+
+    function openProgramModal(idx) {
+      const p = (guideItems || [])[idx];
+      if (!p) return;
+      selectedProgForModal = p;
+
+      document.getElementById("progModalTitle").textContent = p.title || "Untitled";
+      document.getElementById("progModalSubtitle").textContent = p.episode_title || "";
+      document.getElementById("progModalMeta").textContent = `${p.channel || ""} • ${p.start_iso ? p.start_iso.replace('T', ' ') : ''} (${p.duration_iso || '00:30:00'})`;
+      document.getElementById("progModalSummary").textContent = p.summary || "No description provided in TV Guide listing.";
+
+      const actBtn = document.getElementById("progModalActionBtn");
+      if (p.is_scheduled) {
+        actBtn.textContent = "Already Scheduled";
+        actBtn.className = "btn btn-secondary";
+        actBtn.disabled = true;
+      } else {
+        actBtn.textContent = "Schedule Recording";
+        actBtn.className = "btn";
+        actBtn.disabled = false;
+      }
+
+      document.getElementById("programModal").classList.add("active");
+    }
+
+    function closeProgramModal(e) {
+      document.getElementById("programModal").classList.remove("active");
+      selectedProgForModal = null;
+    }
+
+    async function handleProgModalAction() {
+      if (!selectedProgForModal) return;
+      const p = selectedProgForModal;
+      closeProgramModal();
+      await scheduleShow(p);
+    }
+
+    async function scheduleShowByIndex(idx) {
+      const p = (window.filteredGuideList || [])[idx];
+      if (!p) return;
+      await scheduleShow(p);
     }
 
     async function scheduleShow(prog) {
@@ -353,7 +794,7 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
         });
         if (resp.ok) {
           prog.is_scheduled = true;
-          filterGuideTable();
+          renderGuide();
         } else {
           alert("Failed to schedule recording.");
         }
@@ -482,6 +923,7 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
 
     function initApp() {
       populateDateDropdown();
+      updateGuideViewControls();
       checkStatus();
       loadGuide();
       setInterval(checkStatus, 15000);

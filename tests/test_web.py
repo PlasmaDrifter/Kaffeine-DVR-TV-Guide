@@ -134,6 +134,24 @@ def test_web_schedule_and_recordings_api(web_test_env):
 
     assert len(q_mgr.list_queue()) == 0
 
+    # Test /api/guide endpoint with runtime_mins and summary
+    g_conn = web_test_env["guide_svc"]._get_connection()
+    g_cur = g_conn.cursor()
+    g_cur.execute("""
+        INSERT INTO guide_programs (show_title, episode_title, kaffeine_channel, start_time_local, start_iso, duration_iso, runtime_mins, summary, airdate)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, ("Morning Show", "Pilot", "KSTP-DT", "8:00 AM", "2026-10-15T08:00:00", "01:00:00", 60, "Fun morning news", "2026-10-15"))
+    g_conn.commit()
+    g_conn.close()
+
+    with urllib.request.urlopen(f"{base_url}/api/guide?date=2026-10-15&trim=0") as resp:
+        assert resp.status == 200
+        progs = json.loads(resp.read().decode("utf-8"))
+        assert len(progs) >= 1
+        assert progs[0]["title"] == "Morning Show"
+        assert progs[0]["runtime_mins"] == 60
+        assert progs[0]["summary"] == "Fun morning news"
+
 
 def test_web_video_streaming_and_http_range(web_test_env):
     base_url = web_test_env["base_url"]
