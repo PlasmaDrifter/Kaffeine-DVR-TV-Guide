@@ -5131,47 +5131,70 @@ class MainWindow(QMainWindow):
         reset_mapping_btn.clicked.connect(self.reset_channel_mapping_defaults)
         btn_row.addWidget(reset_mapping_btn)
 
+        scanner_btn = QPushButton("Scan Channels")
+        scanner_btn.setObjectName("scannerActionBtn")
+        scanner_btn.setToolTip("Open Channel Signal Health Scanner to test digital reception")
+        scanner_btn.setStyleSheet(
+            "QPushButton#scannerActionBtn {"
+            "  background-color: #1e3a8a;"
+            "  border: 1.5px solid #3b82f6;"
+            "  color: #eff6ff;"
+            "  font-weight: bold;"
+            "  padding: 6px 14px;"
+            "  border-radius: 5px;"
+            "}"
+            "QPushButton#scannerActionBtn:hover {"
+            "  background-color: #2563eb;"
+            "  border-color: #60a5fa;"
+            "  color: #ffffff;"
+            "}"
+            "QPushButton#scannerActionBtn:pressed {"
+            "  background-color: #1d4ed8;"
+            "}"
+        )
+        scanner_btn.clicked.connect(self.open_channel_health_dialog)
+        btn_row.addWidget(scanner_btn)
+
         btn_row.addStretch()
         map_layout.addLayout(btn_row)
 
         health_row = QHBoxLayout()
-        health_btn = QPushButton("Check Channel Health")
-        health_btn.clicked.connect(self.open_channel_health_dialog)
-        health_row.addWidget(health_btn)
-
         self.channel_health_badge = QLabel("")
-        self.channel_health_badge.setStyleSheet("font-size: 11px; padding-left: 6px;")
+        self.channel_health_badge.setStyleSheet("font-size: 11px;")
         health_row.addWidget(self.channel_health_badge)
         health_row.addStretch()
         map_layout.addLayout(health_row)
 
-        self.mapping_text = QTextEdit()
-        mapping_str = "\n".join([f"{k} = {v}" for k, v in self.config_mgr.channel_map.items()])
-        self.mapping_text.setPlainText(mapping_str)
-        self.mapping_text.setMinimumHeight(200)
-
-        # In-box explainer label
-        self.mapping_tip_lbl = QLabel(self.mapping_text)
-        self.mapping_tip_lbl.setTextFormat(Qt.TextFormat.RichText)
-        self.mapping_tip_lbl.setText(
-            "<b>Want to rename how a channel appears in your guide? Do it here.</b><br>"
-            "This connects your guide display names to your scanned Kaffeine channels.<br>"
-            "Format: <span style='color: #52b788;'>Guide Name = Tuned Channel</span>.<br>"
-            "Example: <span style='color: #52b788;'>Fox = KSAZ-HD</span> displays 'Fox' while tuning KSAZ-HD.<br>"
-            "If you renamed them already, leave as <span style='color: #52b788;'>Fox = Fox</span>.<br><br>"
-            "<i>Channels are typically imported automatically during the initial Welcome Wizard.<br>"
-            "If you skipped that, or recently scanned new channels in Kaffeine, click<br>"
-            "<span style='color: #52b788;'>Import Channels from Kaffeine</span> above to load your lineup.</i>"
+        # Non-overlapping tip frame
+        tip_frame = QFrame()
+        tip_frame.setStyleSheet(
+            "QFrame {"
+            "  background-color: rgba(255, 255, 255, 0.02);"
+            "  border: 1px solid rgba(255, 255, 255, 0.06);"
+            "  border-radius: 4px;"
+            "  padding: 4px 8px;"
+            "}"
         )
-        self.mapping_tip_lbl.setStyleSheet("color: #8a99ad; font-size: 13px; line-height: 1.5; background: transparent;")
-        self.mapping_tip_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        tip_layout = QVBoxLayout(tip_frame)
+        tip_layout.setContentsMargins(6, 4, 6, 4)
+        tip_layout.setSpacing(2)
+        tip_lbl = QLabel(
+            "<span style='color: #8a99ad; font-size: 11px;'>"
+            "<b>Format:</b> Guide Name = Tuned Channel (e.g. <code>Fox = KSAZ-HD</code>). "
+            "Colored dots show live reception: "
+            "<span style='color: #4ade80; font-weight: bold;'>● Locked</span> &nbsp; "
+            "<span style='color: #facc15; font-weight: bold;'>● Weak</span> &nbsp; "
+            "<span style='color: #f87171; font-weight: bold;'>● No Signal</span> &nbsp; "
+            "<span style='color: #64748b;'>● Untested</span>"
+            "</span>"
+        )
+        tip_lbl.setTextFormat(Qt.TextFormat.RichText)
+        tip_lbl.setWordWrap(True)
+        tip_layout.addWidget(tip_lbl)
+        map_layout.addWidget(tip_frame)
 
-        mapping_tip_layout = QHBoxLayout(self.mapping_text)
-        mapping_tip_layout.addStretch(1)
-        mapping_tip_layout.addWidget(self.mapping_tip_lbl, 1)
-        mapping_tip_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        mapping_tip_layout.setContentsMargins(20, 15, 20, 20)
-
+        self.mapping_text = QTextEdit()
+        self.mapping_text.setMinimumHeight(200)
         map_layout.addWidget(self.mapping_text)
         lineup_panels.addWidget(map_box, 1)
 
@@ -5216,10 +5239,16 @@ class MainWindow(QMainWindow):
         self.sort_alpha_btn.clicked.connect(self._sort_channels_alphabetical)
         order_ctrl_bar.addWidget(self.sort_alpha_btn)
 
+        order_scan_btn = QPushButton("Scan Channels")
+        order_scan_btn.setToolTip("Open Channel Signal Health Scanner to test digital reception")
+        order_scan_btn.clicked.connect(self.open_channel_health_dialog)
+        order_ctrl_bar.addWidget(order_scan_btn)
+
         order_layout.addLayout(order_ctrl_bar)
         lineup_panels.addWidget(order_box, 1)
         layout.addLayout(lineup_panels)
 
+        self.populate_channel_mapping_text()
         self.refresh_channel_order_list()
         self.refresh_channel_health_badge()
         return widget
@@ -5263,6 +5292,28 @@ class MainWindow(QMainWindow):
         else:
             self.channel_health_badge.setText("<span style='color: #8c98aa;'>Signal health not yet scanned</span>")
 
+    def populate_channel_mapping_text(self):
+        if not hasattr(self, "mapping_text"):
+            return
+        health_data = self.config_mgr.channel_health
+        lines_html = []
+        for k, v in self.config_mgr.channel_map.items():
+            # Check health of tuned channel v, then fallback to guide name k
+            h = health_data.get(v) or health_data.get(k)
+            if h:
+                if h.get("locked"):
+                    dot_color = "#4ade80"  # Green
+                elif h.get("has_signal") or h.get("has_carrier"):
+                    dot_color = "#facc15"  # Yellow
+                else:
+                    dot_color = "#f87171"  # Red
+            else:
+                dot_color = "#64748b"      # Slate / Untested
+            lines_html.append(f"<span style='color: {dot_color}; font-weight: bold;'>●</span> {html.escape(k)} = {html.escape(v)}")
+
+        html_content = "<div style='font-family: monospace; font-size: 13px; line-height: 1.6;'>" + "<br>".join(lines_html) + "</div>"
+        self.mapping_text.setHtml(html_content)
+
     def open_channel_health_dialog(self):
         channels = self.config_mgr.get_scanned_kaffeine_channels()
         if not channels:
@@ -5281,6 +5332,7 @@ class MainWindow(QMainWindow):
             return
         dlg = ChannelSignalHealthDialog(channels, config_mgr=self.config_mgr, parent=self)
         dlg.exec()
+        self.populate_channel_mapping_text()
         self.refresh_channel_order_list()
 
     def refresh_channel_order_list(self):
@@ -7191,9 +7243,8 @@ class MainWindow(QMainWindow):
                 cur_map[st_name] = st_name
         self.config_mgr.channel_map = cur_map
         self.guide_service.set_channel_map(cur_map)
-        mapping_str = "\n".join([f"{k} = {v}" for k, v in cur_map.items()])
         if hasattr(self, "mapping_text"):
-            self.mapping_text.setPlainText(mapping_str)
+            self.populate_channel_mapping_text()
 
         self.update_tvpassport_notice()
         self.refresh_channel_dropdowns()
@@ -7213,13 +7264,14 @@ class MainWindow(QMainWindow):
         raw_text = self.mapping_text.toPlainText()
         new_map = {}
         for line in raw_text.splitlines():
-            line = line.strip()
+            line = re.sub(r"^[●\s]+", "", line).strip()
             if "=" in line:
                 k, v = line.split("=", 1)
                 if k.strip() and v.strip():
                     new_map[k.strip()] = v.strip()
         self.config_mgr.channel_map = new_map
         self.guide_service.set_channel_map(new_map)
+        self.populate_channel_mapping_text()
         self.update_tvpassport_notice()
         self.refresh_channel_order_list()
         self.refresh_channel_dropdowns()
@@ -7246,8 +7298,7 @@ class MainWindow(QMainWindow):
 
         self.config_mgr.channel_map = current_map
         self.guide_service.set_channel_map(current_map)
-        mapping_str = "\n".join([f"{k} = {v}" for k, v in current_map.items()])
-        self.mapping_text.setPlainText(mapping_str)
+        self.populate_channel_mapping_text()
         self.update_tvpassport_notice()
         self.refresh_channel_order_list()
         self.refresh_channel_dropdowns()

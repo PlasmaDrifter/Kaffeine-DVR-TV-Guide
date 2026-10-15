@@ -282,5 +282,18 @@ def test_channel_order_signal_icons_and_badge(qtbot, isolated_config):
     assert "1 Weak" in badge_text
     assert "1 No Signal" in badge_text
 
+    # Check mapping text has colored dots
+    mapping_html = win.mapping_text.toHtml()
+    assert "#4ade80" in mapping_html  # Green dot for KATU
+    assert "#facc15" in mapping_html  # Yellow dot for KOIN
+    assert "#f87171" in mapping_html  # Red dot for KGW
+    assert "#64748b" in mapping_html  # Slate dot for KPTV
+
+    # Test saving channel mapping with dots strips them cleanly
+    with patch("PyQt6.QtWidgets.QMessageBox.information"):
+        win.save_channel_mapping()
+    assert isolated_config.channel_map["ABC"] == "2.1 KATU"
+    assert isolated_config.channel_map["NBC"] == "6.1 KOIN"
+
     win.close()
 
