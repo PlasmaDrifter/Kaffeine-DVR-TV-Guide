@@ -312,18 +312,16 @@ def test_gui_recording_subtabs_order_and_hint_label(qtbot, isolated_config: Conf
 
         # Switch to Recordings Schedule tab (index 1)
         win.tabs.setCurrentIndex(1)
-        win._on_main_tab_changed(1)
 
         assert win.rec_table.rowCount() == 1
         assert win.rec_table.item(0, 1).text() == "Future Show"
 
         # Switch subtab to History (index 1)
         win.recordings_subtabs.setCurrentIndex(1)
-        win._on_recordings_subtab_changed(1)
 
         # Insert entry in history
         win.queue_mgr.add_history_entry("Past Broadcast", "ABC 7.1", "2026-10-15T10:00:00", "00:30:00")
-        win._on_recordings_subtab_changed(1)
+        win.refresh_history(force=True)
         assert win.history_table.rowCount() == 1
         assert win.history_table.item(0, 1).text() == "Past Broadcast"
     finally:
@@ -571,6 +569,43 @@ def test_gui_tab_switch_between_recordings_and_guide_does_not_crash(qtbot, isola
         qtbot.wait(100)
     finally:
         win.close()
+
+
+def test_gui_grid_guide_preserves_manual_scroll_on_tab_switch_and_smooth_jump(qtbot, isolated_config: ConfigManager):
+    win = MainWindow(config_mgr=isolated_config)
+    qtbot.addWidget(win)
+
+    try:
+        # Allow initial startup timer to finish
+        qtbot.wait(100)
+        win._guide_grid_initialized = True
+        bar = win.guide_grid_table.horizontalScrollBar()
+
+        # 1. Simulate user manually scrolling the grid to a specific position (e.g. 1800)
+        bar.setValue(1800)
+        assert bar.value() == 1800
+
+        # 2. Switch away to Recordings tab (tab 1)
+        win.tabs.setCurrentIndex(1)
+        assert win.tabs.currentIndex() == 1
+
+        # 3. Switch back to Guide Browser tab (tab 0)
+        win.tabs.setCurrentIndex(0)
+        assert win.tabs.currentIndex() == 0
+
+        # Wait to ensure no delayed timer resets or teleports the scrollbar
+        qtbot.wait(120)
+        assert bar.value() == 1800  # Manual position is perfectly preserved!
+
+        # 4. Test smooth scroll animation on explicit jump action
+        win.jump_guide_to_start(animate=True)
+        assert hasattr(win, "_grid_scroll_anim")
+        # Let animation complete
+        qtbot.waitUntil(lambda: bar.value() == 0, timeout=1000)
+        assert bar.value() == 0
+    finally:
+        win.close()
+
 
 
 

@@ -18,10 +18,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from PyQt6.QtCore import (
     QByteArray,
+    QEasingCurve,
     QEvent,
     QObject,
     QPoint,
     QPointF,
+    QPropertyAnimation,
     QRect,
     QRectF,
     QSettings,
@@ -9988,20 +9990,24 @@ class MainWindow(QMainWindow):
 
         if index == 0:
             self.refresh_date_dropdown()
-            sel_date = self.guide_date_combo.currentData()
-            today_str = date.today().strftime("%Y-%m-%d")
-            if not hasattr(self, "_guide_jump_timer"):
-                self._guide_jump_timer = QTimer(self)
-                self._guide_jump_timer.setSingleShot(True)
-            try:
-                self._guide_jump_timer.timeout.disconnect()
-            except Exception:
-                pass
-            if sel_date == today_str or sel_date is None:
-                self._guide_jump_timer.timeout.connect(self.jump_guide_to_now)
-            else:
-                self._guide_jump_timer.timeout.connect(self.jump_guide_to_noon)
-            self._guide_jump_timer.start(60)
+            # If the guide grid has already been initialized and positioned in this session,
+            # preserve the user's manual scroll position instead of jolting/jumping back to now.
+            if not getattr(self, "_guide_grid_initialized", False):
+                self._guide_grid_initialized = True
+                sel_date = self.guide_date_combo.currentData()
+                today_str = date.today().strftime("%Y-%m-%d")
+                if not hasattr(self, "_guide_jump_timer"):
+                    self._guide_jump_timer = QTimer(self)
+                    self._guide_jump_timer.setSingleShot(True)
+                try:
+                    self._guide_jump_timer.timeout.disconnect()
+                except Exception:
+                    pass
+                if sel_date == today_str or sel_date is None:
+                    self._guide_jump_timer.timeout.connect(lambda: self.jump_guide_to_now(animate=False))
+                else:
+                    self._guide_jump_timer.timeout.connect(lambda: self.jump_guide_to_noon(animate=False))
+                self._guide_jump_timer.start(60)
         elif index == 1:
             if getattr(self, "recordings_subtabs", None) and self.recordings_subtabs.currentIndex() == 1:
                 self.refresh_history(force=True)
@@ -10033,23 +10039,45 @@ class MainWindow(QMainWindow):
         if not self.grid_view_btn.isChecked():
             QTimer.singleShot(0, self._scroll_list_to_first_active)
 
-    def _scroll_grid_to_slot(self, slot: int, center: bool = False):
+    def _smooth_scroll_grid(self, target_val: int, duration_ms: int = 250):
+        bar = self.guide_grid_table.horizontalScrollBar()
+        start_val = bar.value()
+        if start_val == target_val:
+            return
+
+        if not hasattr(self, "_grid_scroll_anim") or self._grid_scroll_anim is None:
+            self._grid_scroll_anim = QPropertyAnimation(bar, b"value", self)
+            self._grid_scroll_anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
+        else:
+            if self._grid_scroll_anim.state() == QPropertyAnimation.State.Running:
+                self._grid_scroll_anim.stop()
+
+        self._grid_scroll_anim.setDuration(duration_ms)
+        self._grid_scroll_anim.setStartValue(start_val)
+        self._grid_scroll_anim.setEndValue(target_val)
+        self._grid_scroll_anim.start()
+
+    def _scroll_grid_to_slot(self, slot: int, center: bool = False, animate: bool = False):
         bar = self.guide_grid_table.horizontalScrollBar()
         col_width = self.guide_grid_table.horizontalHeader().defaultSectionSize() or 200
         is_pixel = (self.guide_grid_table.horizontalScrollMode() == QAbstractItemView.ScrollMode.ScrollPerPixel)
 
         if not center or slot <= 0:
-            target_val = (slot * col_width) if is_pixel else slot
-            bar.setValue(max(0, min(bar.maximum(), target_val)))
-            return
+            target_col = slot
+        else:
+            vp_width = self.guide_grid_table.viewport().width()
+            cols_visible = max(1, vp_width // col_width)
+            target_col = max(0, slot - (cols_visible // 2))
 
-        vp_width = self.guide_grid_table.viewport().width()
-        cols_visible = max(1, vp_width // col_width)
-        target_col = max(0, slot - (cols_visible // 2))
         target_val = (target_col * col_width) if is_pixel else target_col
-        bar.setValue(max(0, min(bar.maximum(), target_val)))
+        final_val = max(0, min(bar.maximum(), target_val))
 
-    def jump_guide_to_now(self):
+        if animate and abs(bar.value() - final_val) > 2:
+            self._smooth_scroll_grid(final_val)
+        else:
+            bar.setValue(final_val)
+
+    def jump_guide_to_now(self, *args, animate: bool = True, **kwargs):
         # If currently viewing a future or past date, switch back to Today first
         if hasattr(self, "guide_date_combo"):
             today_str = date.today().strftime("%Y-%m-%d")
@@ -10067,25 +10095,25 @@ class MainWindow(QMainWindow):
             adv_min = getattr(self.config_mgr, "guide_auto_advance_minute", 50) if hasattr(self, "config_mgr") else 50
             effective_hour = (now.hour + 1) if now.minute >= adv_min else now.hour
             target_slot = min(47, effective_hour * 2)
-            self._scroll_grid_to_slot(target_slot, center=False)
+            self._scroll_grid_to_slot(target_slot, center=False, animate=animate)
         else:
             self._scroll_list_to_first_active()
 
-    def jump_guide_to_start(self):
-        self._scroll_grid_to_slot(0, center=False)
+    def jump_guide_to_start(self, *args, animate: bool = True, **kwargs):
+        self._scroll_grid_to_slot(0, center=False, animate=animate)
 
-    def jump_guide_to_noon(self):
+    def jump_guide_to_noon(self, *args, animate: bool = True, **kwargs):
         # 12:00 PM (Noon) is hour 12 -> slot 24
-        self._scroll_grid_to_slot(24, center=False)
+        self._scroll_grid_to_slot(24, center=False, animate=animate)
 
-    def jump_guide_to_0400(self):
+    def jump_guide_to_0400(self, *args, animate: bool = True, **kwargs):
         # 4:00 AM (0400) is hour 4 -> slot 8
-        self._scroll_grid_to_slot(8, center=False)
+        self._scroll_grid_to_slot(8, center=False, animate=animate)
 
-    def jump_guide_to_primetime(self):
+    def jump_guide_to_primetime(self, *args, animate: bool = True, **kwargs):
         if self._is_grid_view_active():
             # 7:00 PM (19:00) is hour 19 -> slot 38
-            self._scroll_grid_to_slot(38, center=False)
+            self._scroll_grid_to_slot(38, center=False, animate=animate)
         else:
             self._scroll_list_to_primetime()
 
@@ -11276,18 +11304,20 @@ class MainWindow(QMainWindow):
         target_pos = getattr(self, "_target_grid_scroll_position", None)
         self._target_grid_scroll_position = None
 
+        self._guide_grid_initialized = True
+
         if target_pos in ("0400", "04:00", "4am", "start"):
-            QTimer.singleShot(60, self.jump_guide_to_0400)
+            QTimer.singleShot(60, lambda: self.jump_guide_to_0400(animate=False))
         elif target_pos == "end":
-            QTimer.singleShot(60, lambda: self._scroll_grid_to_slot(48, center=False))
+            QTimer.singleShot(60, lambda: self._scroll_grid_to_slot(48, center=False, animate=False))
         elif keep_scroll:
             self.guide_grid_table.horizontalScrollBar().setValue(saved_h)
             self.guide_grid_table.verticalScrollBar().setValue(saved_v)
         else:
             if target_date_str == today.strftime("%Y-%m-%d"):
-                QTimer.singleShot(60, self.jump_guide_to_now)
+                QTimer.singleShot(60, lambda: self.jump_guide_to_now(animate=False))
             else:
-                QTimer.singleShot(60, self.jump_guide_to_noon)
+                QTimer.singleShot(60, lambda: self.jump_guide_to_noon(animate=False))
 
     def clear_guide_selection(self):
         """
@@ -12706,6 +12736,11 @@ class MainWindow(QMainWindow):
         super().keyPressEvent(event)
 
     def closeEvent(self, event):
+        if getattr(self, "_is_closed", False):
+            event.accept()
+            return
+        self._is_closed = True
+
         try:
             self.settings.setValue("geometry", self.saveGeometry())
             self._auto_save_automation_settings()
@@ -12723,6 +12758,12 @@ class MainWindow(QMainWindow):
                 self._save_indicator_timer.stop()
             if hasattr(self, "_guide_jump_timer") and self._guide_jump_timer and self._guide_jump_timer.isActive():
                 self._guide_jump_timer.stop()
+            if hasattr(self, "_grid_scroll_anim") and self._grid_scroll_anim:
+                try:
+                    if self._grid_scroll_anim.state() == QPropertyAnimation.State.Running:
+                        self._grid_scroll_anim.stop()
+                except Exception:
+                    pass
 
             if hasattr(self, "rec_table") and hasattr(self, "rec_table_toggle_filter"):
                 try:
