@@ -621,6 +621,7 @@ class ConfigManager:
             "time_line_opacity": 100,
             "show_clock": True,
             "clock_font_size": 11,
+            "guide_single_click_play": True,
             "use_custom_title_bar": True,
             "app_theme": "midnight",
             "theme_preset": "midnight",
@@ -1304,6 +1305,15 @@ class ConfigManager:
     @use_custom_title_bar.setter
     def use_custom_title_bar(self, val: bool):
         self.data["use_custom_title_bar"] = bool(val)
+        self.save()
+
+    @property
+    def guide_single_click_play(self) -> bool:
+        return bool(self.data.get("guide_single_click_play", True))
+
+    @guide_single_click_play.setter
+    def guide_single_click_play(self, val: bool):
+        self.data["guide_single_click_play"] = bool(val)
         self.save()
 
 

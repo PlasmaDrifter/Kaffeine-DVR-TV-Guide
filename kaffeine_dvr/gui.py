@@ -6166,6 +6166,16 @@ class MainWindow(QMainWindow):
         self.clock_size_spin.setEnabled(getattr(self.config_mgr, "show_clock", True))
         col3_grid.addWidget(self.clock_size_spin, 3, 1, Qt.AlignmentFlag.AlignVCenter)
 
+        lbl_single_click = QLabel("<b>Single-Click Play:</b>")
+        lbl_single_click.setStyleSheet("font-size: 13px; color: #e2e8f0;")
+        col3_grid.addWidget(lbl_single_click, 4, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        self.single_click_play_check = QCheckBox("Enable")
+        self.single_click_play_check.setToolTip("Play live/recordings or open schedule options on a single click instead of requiring a double-click")
+        self.single_click_play_check.setChecked(getattr(self.config_mgr, "guide_single_click_play", True))
+        self.single_click_play_check.toggled.connect(self._on_single_click_play_toggled)
+        col3_grid.addWidget(self.single_click_play_check, 4, 1, Qt.AlignmentFlag.AlignVCenter)
+
         col3_grid.setColumnStretch(1, 1)
         cols_row.addLayout(col3_grid, 1)
 
@@ -6710,6 +6720,11 @@ class MainWindow(QMainWindow):
             self.clock_size_spin.blockSignals(False)
         self._update_clock_display()
 
+        if hasattr(self, "single_click_play_check"):
+            self.single_click_play_check.blockSignals(True)
+            self.single_click_play_check.setChecked(self.config_mgr.guide_single_click_play)
+            self.single_click_play_check.blockSignals(False)
+
         # Color Swatches & Theme Presets
         if hasattr(self, "app_theme_combo"):
             self.app_theme_combo.blockSignals(True)
@@ -6851,7 +6866,12 @@ class MainWindow(QMainWindow):
         details = res.get("details", "")
 
         if hasattr(self, "update_status_lbl"):
-            self.update_status_lbl.setText(details)
+            if update_available:
+                disp_ver = f"v{latest_ver}" if latest_ver else "available"
+                formatted_details = f"New version <span style='color: #66bb6a; font-weight: bold;'>{disp_ver}</span> is available on GitHub."
+                self.update_status_lbl.setText(formatted_details)
+            else:
+                self.update_status_lbl.setText(details)
         if hasattr(self, "apply_update_btn"):
             self.apply_update_btn.setEnabled(update_available)
 
@@ -7752,6 +7772,9 @@ class MainWindow(QMainWindow):
 
     def _on_guide_auto_advance_min_changed(self, val: int):
         self.config_mgr.guide_auto_advance_minute = val
+
+    def _on_single_click_play_toggled(self, checked: bool):
+        self.config_mgr.guide_single_click_play = checked
 
     def _on_hide_time_line_toggled(self, checked: bool):
         self.config_mgr.guide_show_time_indicator = not checked
@@ -10306,6 +10329,9 @@ class MainWindow(QMainWindow):
         self._display_program_details(prog)
         self.guide_grid_table.viewport().update()
 
+        if getattr(self.config_mgr, "guide_single_click_play", True):
+            self.handle_program_activation(prog)
+
     def _display_program_details(self, prog: Dict[str, Any]):
         channel = prog.get("kaffeine_channel", "")
         start = prog.get("start_time_local", "")
@@ -10408,6 +10434,10 @@ class MainWindow(QMainWindow):
             self.clear_guide_selection()
         else:
             self._last_clicked_guide_list_row = row
+            if getattr(self.config_mgr, "guide_single_click_play", True):
+                if 0 <= row < len(getattr(self, "current_guide_items", [])):
+                    prog = self.current_guide_items[row]
+                    self.handle_program_activation(prog)
 
     def on_guide_selection_changed(self):
         row = self.guide_table.currentRow()
