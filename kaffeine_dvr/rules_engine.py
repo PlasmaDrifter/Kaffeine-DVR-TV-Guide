@@ -14,23 +14,25 @@ from .guide_service import GuideService
 from .queue_manager import QueueManager
 
 
+SPORTS_KEYWORDS = (
+    "football", "nfl", "ncaa", "basketball", "nba", "wnba", "baseball", "mlb",
+    "hockey", "nhl", "soccer", "premier league", "nascar", "racing", "pga",
+    "golf", "tennis", "wrestling", "wwe", "ufc", "boxing", "sportswrap",
+    "sports stars", "sports legends", "gametime", "kickoff", "postgame", "pregame",
+    "scoreboard", "flag football", "college football", "college basketball",
+    "usl championship", "volleyball", "championship wrestling", "tailgate",
+    "sports tonight"
+)
+
+
 def is_sports_program(prog: Dict[str, Any]) -> bool:
     title = (prog.get("show_title") or "").strip().lower()
     ep = (prog.get("episode_title") or "").strip().lower()
     summary = (prog.get("summary") or "").lower()
 
-    sports_kw = [
-        "football", "nfl", "ncaa", "basketball", "nba", "wnba", "baseball", "mlb",
-        "hockey", "nhl", "soccer", "premier league", "nascar", "racing", "pga",
-        "golf", "tennis", "wrestling", "wwe", "ufc", "boxing", "sportswrap",
-        "sports stars", "sports legends", "gametime", "kickoff", "postgame", "pregame",
-        "scoreboard", "flag football", "college football", "college basketball",
-        "usl championship", "volleyball", "championship wrestling", "tailgate",
-        "sports tonight"
-    ]
-    if any(k in title for k in sports_kw):
+    if any(k in title for k in SPORTS_KEYWORDS):
         return True
-    if any(k in ep for k in ["premier league", "nfl", "mlb", "nba", " vs. ", " at "]) and (
+    if any(k in ep for k in ("premier league", "nfl", "mlb", "nba", " vs. ", " at ")) and (
         "football" in summary or "game" in summary or "soccer" in summary or "basketball" in summary or "baseball" in summary
     ):
         return True
@@ -130,7 +132,8 @@ class RulesEngine:
                 duration_iso = prog.get("duration_iso", "")
                 episode_title = prog.get("episode_title") or ""
 
-                if is_sports_program(prog) and episode_title:
+                is_sports = is_sports_program(prog)
+                if is_sports and episode_title:
                     rec_title = f"{show_title}: {episode_title}" if show_title else episode_title
                 elif episode_title:
                     rec_title = f"{show_title} - {episode_title}"
@@ -141,7 +144,7 @@ class RulesEngine:
                 rule_buf = rule.get("buffer_mins")
                 if rule_buf is not None and rule_buf >= 0:
                     applied_buffer = int(rule_buf)
-                elif self.config_mgr.auto_buffer_sports and is_sports_program(prog):
+                elif self.config_mgr.auto_buffer_sports and is_sports:
                     applied_buffer = int(self.config_mgr.sports_buffer_mins)
                 else:
                     applied_buffer = int(self.config_mgr.end_buffer_mins)

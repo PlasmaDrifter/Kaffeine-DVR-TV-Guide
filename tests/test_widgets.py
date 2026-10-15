@@ -1,4 +1,5 @@
 from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QTableWidgetItem
 
 from kaffeine_dvr.gui import MainWindow, NumberStepper
 
@@ -100,4 +101,328 @@ def test_grid_zoom_base_row_h_minimum(qtbot, isolated_config):
     win.config_mgr.grid_visible_rows = 16
     win._apply_guide_zoom()
     assert win.guide_grid_table.verticalHeader().defaultSectionSize() >= 58
+
+
+def test_grid_stability_on_status_messages(qtbot, isolated_config):
+    win = MainWindow(config_mgr=isolated_config)
+    qtbot.addWidget(win)
+    win.resize(1300, 800)
+    win.show()
+
+    h0 = win.guide_grid_table.height()
+    vh0 = win.guide_grid_table.viewport().height()
+
+    # Show a status bar message
+    win.status_bar.showMessage("Queued recording: Test Show on Channel 4.1", 4000)
+    h1 = win.guide_grid_table.height()
+    vh1 = win.guide_grid_table.viewport().height()
+
+    # Clear message
+    win.status_bar.clearMessage()
+    h2 = win.guide_grid_table.height()
+    vh2 = win.guide_grid_table.viewport().height()
+
+    assert h0 == h1 == h2, f"Grid table height shifted: {h0} -> {h1} -> {h2}"
+    assert vh0 == vh1 == vh2, f"Grid viewport height shifted: {vh0} -> {vh1} -> {vh2}"
+
+    # Verify scrollbar positions remain preserved when keep_scroll is True
+    win.guide_grid_table.horizontalScrollBar().setValue(100)
+    win.guide_grid_table.verticalScrollBar().setValue(20)
+
+    hs_before = win.guide_grid_table.horizontalScrollBar().value()
+    vs_before = win.guide_grid_table.verticalScrollBar().value()
+
+    win._refresh_guide_view(keep_scroll=True)
+
+    assert win.guide_grid_table.horizontalScrollBar().value() == hs_before
+    assert win.guide_grid_table.verticalScrollBar().value() == vs_before
+
+
+def test_themed_and_centered_combobox(qtbot):
+    from kaffeine_dvr.gui import CenteredComboBox, ThemedComboBox
+
+    themed = ThemedComboBox()
+    themed.addItems(["Today", "Tomorrow", "Wed, Oct 15"])
+    qtbot.addWidget(themed)
+    themed.resize(120, 28)
+
+    assert themed.count() == 3
+    assert not themed.centered
+
+    centered = CenteredComboBox()
+    centered.addItem("2 Lines", 2)
+    centered.addItem("3 Lines", 3)
+    qtbot.addWidget(centered)
+    centered.resize(120, 28)
+
+    assert centered.count() == 2
+    assert centered.centered
+    assert centered.itemData(0, Qt.ItemDataRole.TextAlignmentRole) == Qt.AlignmentFlag.AlignCenter
+    assert centered.itemData(1, Qt.ItemDataRole.TextAlignmentRole) == Qt.AlignmentFlag.AlignCenter
+
+    # Verify both grab cleanly with no errors
+    pix1 = themed.grab()
+    assert not pix1.isNull()
+
+    pix2 = centered.grab()
+    assert not pix2.isNull()
+
+
+def test_clock_disable_toggle_and_stepper_state(qtbot, isolated_config):
+    win = MainWindow(config_mgr=isolated_config)
+    qtbot.addWidget(win)
+
+    assert hasattr(win, "hide_clock_check")
+    assert hasattr(win, "clock_size_spin")
+
+    # By default, clock is enabled
+    assert win.config_mgr.show_clock is True
+    assert win.hide_clock_check.isChecked() is False
+    assert win.clock_size_spin.isEnabled() is True
+
+    # Disable clock from hide_clock_check (in Column 2)
+    win.hide_clock_check.setChecked(True)
+    assert win.config_mgr.show_clock is False
+    assert win.clock_size_spin.isEnabled() is False
+
+    # Re-enable clock from hide_clock_check
+    win.hide_clock_check.setChecked(False)
+    assert win.config_mgr.show_clock is True
+    assert win.clock_size_spin.isEnabled() is True
+
+    # Check auto-saving persistence
+    win.hide_clock_check.setChecked(True)
+    win._auto_save_automation_settings()
+    assert win.config_mgr.show_clock is False
+
+
+def test_grid_guide_options_120px_width(qtbot, isolated_config):
+    win = MainWindow(config_mgr=isolated_config)
+    qtbot.addWidget(win)
+
+    assert win.grid_rows_spin.width() == 120
+    assert win.guide_desc_lines_combo.width() == 120
+    assert win.guide_auto_advance_spin.width() == 120
+    assert win.clock_size_spin.width() == 120
+
+
+def test_time_line_disable_toggle_and_opacity_popup_state(qtbot, isolated_config):
+    from kaffeine_dvr.gui import OpacitySliderPopup
+
+    win = MainWindow(config_mgr=isolated_config)
+    qtbot.addWidget(win)
+
+    assert hasattr(win, "hide_time_line_check")
+    assert hasattr(win, "time_line_opacity_btn")
+
+    # By default, time line is enabled and opacity is 100%
+    assert win.config_mgr.guide_show_time_indicator is True
+    assert win.config_mgr.time_line_opacity == 100
+    assert win.hide_time_line_check.isChecked() is False
+    assert win.time_line_opacity_btn.isEnabled() is True
+    assert win.time_line_opacity_btn.text() == "Opacity: 100%"
+
+    # Disable time line from hide_time_line_check (in Column 2)
+    win.hide_time_line_check.setChecked(True)
+    assert win.config_mgr.guide_show_time_indicator is False
+    assert win.time_line_opacity_btn.isEnabled() is False
+
+    # Re-enable time line from hide_time_line_check
+    win.hide_time_line_check.setChecked(False)
+    assert win.config_mgr.guide_show_time_indicator is True
+    assert win.time_line_opacity_btn.isEnabled() is True
+
+    # Open popup slider
+    win._open_time_line_opacity_popup()
+    assert OpacitySliderPopup._active_popup is not None
+    assert OpacitySliderPopup._active_popup.slider.value() == 100
+
+    # Change value via slider
+    OpacitySliderPopup._active_popup.slider.setValue(45)
+    assert win.config_mgr.time_line_opacity == 45
+    assert win.time_line_opacity_btn.text() == "Opacity: 45%"
+
+    # Dismiss popup
+    OpacitySliderPopup.hide_active()
+    assert OpacitySliderPopup._active_popup is None
+
+    # Check reset / refresh UI restore
+    win.config_mgr.time_line_opacity = 75
+    win._refresh_all_settings_ui()
+    assert win.time_line_opacity_btn.text() == "Opacity: 75%"
+
+
+def test_guide_filter_bar_theming_and_icons(qtbot, isolated_config):
+    win = MainWindow(config_mgr=isolated_config)
+    qtbot.addWidget(win)
+
+    # Verify object names are set for application stylesheet targeting
+    assert win.grid_view_btn.objectName() == "guideGridViewBtn"
+    assert win.list_view_btn.objectName() == "guideListViewBtn"
+    assert win.header_restore_btn.objectName() == "headerRestoreBtn"
+    assert win.guide_maximize_btn.objectName() == "guideMaximizeBtn"
+
+    # Verify no hardcoded inline stylesheets lock the colors
+    assert win.grid_view_btn.styleSheet() == ""
+    assert win.list_view_btn.styleSheet() == ""
+    assert win.header_restore_btn.styleSheet() == ""
+    assert win.guide_maximize_btn.styleSheet() == ""
+
+    # Test icons are properly generated with non-null pixmaps
+    assert not win.header_restore_btn.icon().isNull()
+    assert not win.guide_maximize_btn.icon().isNull()
+
+
+def test_guide_action_buttons_widths_and_labels(qtbot, isolated_config):
+    from kaffeine_dvr.gui import SilentStatusBar
+    win = MainWindow(config_mgr=isolated_config)
+    qtbot.addWidget(win)
+
+    # Status bar uses SilentStatusBar and absorbs messages without rendering
+    assert isinstance(win.status_bar, SilentStatusBar)
+    win.status_bar.showMessage("Testing silent status bar", 1000)
+
+    # Action buttons exist with correct labels and fixed width 168
+    assert win.record_guide_btn.text() == "Record Program"
+    assert win.cancel_guide_btn.text() == "Cancel Recording"
+    assert win.add_rule_guide_btn.text() == "Record Series"
+    assert win.watch_guide_btn.text() == "Watch Live"
+    assert not hasattr(win, "alt_watch_guide_btn")
+
+    for btn in (win.record_guide_btn, win.cancel_guide_btn, win.add_rule_guide_btn, win.watch_guide_btn):
+        assert btn.minimumWidth() == 168
+        assert btn.maximumWidth() == 168
+
+
+def test_live_tv_playback_player_settings(qtbot, isolated_config):
+    win = MainWindow(config_mgr=isolated_config)
+    qtbot.addWidget(win)
+
+    assert hasattr(win, "live_tv_mode_combo")
+    assert hasattr(win, "custom_live_player_edit")
+    assert hasattr(win, "playback_player_combo")
+
+    # Both combos have the exact same number of items and keys
+    live_keys = [win.live_tv_mode_combo.itemData(i) for i in range(win.live_tv_mode_combo.count())]
+    playback_keys = [win.playback_player_combo.itemData(i) for i in range(win.playback_player_combo.count())]
+    assert live_keys == playback_keys
+
+    # Test toggling to custom shows custom_live_player_edit
+    custom_idx = win.live_tv_mode_combo.findData("custom")
+    assert custom_idx >= 0
+    win.live_tv_mode_combo.setCurrentIndex(custom_idx)
+    assert not win.custom_live_player_edit.isHidden()
+
+    win.custom_live_player_edit.setText("mpv --fs {file}")
+    win._auto_save_automation_settings()
+    assert win.config_mgr.live_tv_watch_mode == "custom"
+    assert win.config_mgr.custom_live_tv_player_cmd == "mpv --fs {file}"
+
+
+def test_watch_or_tune_routing(qtbot, isolated_config, monkeypatch):
+    win = MainWindow(config_mgr=isolated_config)
+    qtbot.addWidget(win)
+
+    # Mock active program selection
+    mock_prog = {
+        "show_title": "Evening News",
+        "title": "Evening News",
+        "kaffeine_channel": "7.1 KGO-HD",
+        "start_iso": "2026-10-14T18:00:00",
+        "end_iso": "2026-10-14T19:00:00",
+    }
+    monkeypatch.setattr(win, "_get_active_selected_program", lambda: mock_prog)
+
+    # 1. State: live, live_tv_watch_mode: kaffeine (legacy) -> safely falls back to timeshift playback
+    win.config_mgr.live_tv_watch_mode = "kaffeine"
+    monkeypatch.setattr(win, "_get_program_timing_state", lambda p: {"state": "live", "recorded_file": None})
+
+    tuned_channels = []
+    timeshifted_progs = []
+    monkeypatch.setattr(win.dbus_client, "tune_channel", lambda ch, **kw: tuned_channels.append(ch))
+    monkeypatch.setattr(win, "start_timeshift_playback", lambda p: timeshifted_progs.append(p))
+
+    win.watch_or_tune_selected_guide_item()
+    assert len(tuned_channels) == 0
+    assert len(timeshifted_progs) == 1
+    assert timeshifted_progs[0]["show_title"] == "Evening News"
+
+    # 2. State: live, live_tv_watch_mode: smplayer -> starts timeshift
+    tuned_channels.clear()
+    timeshifted_progs.clear()
+    win.config_mgr.live_tv_watch_mode = "smplayer"
+
+    win.watch_or_tune_selected_guide_item()
+    assert len(tuned_channels) == 0
+    assert len(timeshifted_progs) == 1
+    assert timeshifted_progs[0]["show_title"] == "Evening News"
+
+    # 3. State: upcoming, live_tv_watch_mode: smplayer -> timeshifts live show
+    tuned_channels.clear()
+    timeshifted_progs.clear()
+    monkeypatch.setattr(win, "_get_program_timing_state", lambda p: {"state": "upcoming", "time_desc": "in 2 hours"})
+    monkeypatch.setattr(win, "_find_live_program_for_channel", lambda ch: {"show_title": "Current Live Show", "kaffeine_channel": ch})
+
+    win.watch_or_tune_selected_guide_item()
+    assert len(tuned_channels) == 0
+    assert len(timeshifted_progs) == 1
+    assert timeshifted_progs[0]["show_title"] == "Current Live Show"
+
+
+def test_grid_immediate_highlight_on_show_switch_and_toggle(qtbot, isolated_config):
+    win = MainWindow(config_mgr=isolated_config)
+    qtbot.addWidget(win)
+
+    table = win.guide_grid_table
+    table.setRowCount(2)
+    table.setColumnCount(10)
+
+    # Program 1 on Channel A
+    p1 = {
+        "id": 1001,
+        "show_title": "First Show",
+        "kaffeine_channel": "Channel A",
+        "start_iso": "2026-10-14T20:00:00",
+        "_start_col": 0,
+    }
+    item1 = QTableWidgetItem("First Show")
+    item1.setData(Qt.ItemDataRole.UserRole, p1)
+    table.setItem(0, 0, item1)
+
+    # Program 2 on Channel B with the SAME start time (previously caused bug due to channel_id=None)
+    p2 = {
+        "id": 1002,
+        "show_title": "Second Show (Same Start Time)",
+        "kaffeine_channel": "Channel B",
+        "start_iso": "2026-10-14T20:00:00",
+        "_start_col": 0,
+    }
+    item2 = QTableWidgetItem("Second Show")
+    item2.setData(Qt.ItemDataRole.UserRole, p2)
+    table.setItem(1, 0, item2)
+
+    # 1. Click Show 1 -> immediately highlighted
+    win.on_grid_cell_clicked(0, 0)
+    assert win.selected_grid_program is not None
+    assert win.selected_grid_program["show_title"] == "First Show"
+
+    # 2. Click Show 2 -> immediately highlighted (NOT deselected/None)
+    win.on_grid_cell_clicked(1, 0)
+    assert win.selected_grid_program is not None
+    assert win.selected_grid_program["show_title"] == "Second Show (Same Start Time)"
+
+    # 3. Click Show 2 again -> toggles and removes highlight
+    win.on_grid_cell_clicked(1, 0)
+    assert win.selected_grid_program is None
+
+    # 4. Click Show 1 -> immediately highlighted again
+    win.on_grid_cell_clicked(0, 0)
+    assert win.selected_grid_program is not None
+    assert win.selected_grid_program["show_title"] == "First Show"
+
+
+
+
+
+
 

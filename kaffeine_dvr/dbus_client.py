@@ -47,11 +47,6 @@ SUPPORTED_PLAYERS: Dict[str, Dict[str, Any]] = {
         "binary": "haruna",
         "flatpak_id": "org.kde.haruna",
     },
-    "kaffeine": {
-        "name": "Kaffeine",
-        "binary": "kaffeine",
-        "flatpak_id": "org.kde.kaffeine",
-    },
 }
 
 
@@ -69,15 +64,8 @@ def detect_player_installation(player_key: str) -> str:
         return ""
 
     bin_name = info.get("binary")
-    if bin_name:
-        if player_key == "kaffeine":
-            local_bin = Path.home() / ".local" / "bin" / "kaffeine"
-            if local_bin.is_file() and os.access(local_bin, os.X_OK):
-                return "native"
-            if shutil.which("kaffeine"):
-                return "native"
-        elif shutil.which(bin_name):
-            return "native"
+    if bin_name and shutil.which(bin_name):
+        return "native"
 
     flatpak_id = info.get("flatpak_id")
     if flatpak_id:
@@ -596,11 +584,7 @@ class KaffeineDbusClient:
             bin_name = info.get("binary")
             flatpak_id = info.get("flatpak_id")
 
-            bin_path = None
-            if player_mode == "kaffeine":
-                bin_path = self.get_kaffeine_bin()
-            elif bin_name:
-                bin_path = shutil.which(bin_name)
+            bin_path = shutil.which(bin_name) if bin_name else None
 
             extra_args = []
             if standalone:

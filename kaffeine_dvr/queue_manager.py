@@ -76,14 +76,13 @@ class QueueManager:
         cur.execute("CREATE INDEX IF NOT EXISTS idx_hist_start ON recording_history(start_iso)")
 
         # Migrate any legacy COMPLETED or PURGED records from recording_queue into history
-        cur.execute("SELECT id, title, channel, start_iso, duration_iso, start_time_local, end_iso FROM recording_queue WHERE status IN ('COMPLETED', 'PURGED')")
-        legacy_done = cur.fetchall()
-        for l_id, l_title, l_chan, l_start, l_dur, l_local, l_end in legacy_done:
-            cur.execute("""
-                INSERT INTO recording_history (title, channel, start_iso, duration_iso, start_time_local, completed_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (l_title, l_chan, l_start, l_dur, l_local, l_end or datetime.now().isoformat()))
-            cur.execute("DELETE FROM recording_queue WHERE id = ?", (l_id,))
+        cur.execute("""
+            INSERT INTO recording_history (title, channel, start_iso, duration_iso, start_time_local, completed_at)
+            SELECT title, channel, start_iso, duration_iso, start_time_local, COALESCE(end_iso, datetime('now'))
+            FROM recording_queue
+            WHERE status IN ('COMPLETED', 'PURGED')
+        """)
+        cur.execute("DELETE FROM recording_queue WHERE status IN ('COMPLETED', 'PURGED')")
 
         conn.commit()
         conn.close()

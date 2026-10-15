@@ -656,13 +656,16 @@ class GuideService:
         cur.execute("CREATE INDEX IF NOT EXISTS idx_guide_channel ON guide_programs(kaffeine_channel)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_guide_title ON guide_programs(show_title)")
 
-        # Migration: Promote actual movie titles from episode_title into show_title
-        cur.execute("""
-            UPDATE guide_programs
-            SET show_title = episode_title, episode_title = ''
-            WHERE LOWER(TRIM(show_title)) IN ('movie', 'feature film', 'tv movie', 'television movie')
-              AND episode_title IS NOT NULL AND TRIM(episode_title) != ''
-        """)
+        # Migration: Promote actual movie titles from episode_title into show_title (run once)
+        cur.execute("SELECT 1 FROM guide_meta WHERE key = 'movie_migration_v1'")
+        if not cur.fetchone():
+            cur.execute("""
+                UPDATE guide_programs
+                SET show_title = episode_title, episode_title = ''
+                WHERE LOWER(TRIM(show_title)) IN ('movie', 'feature film', 'tv movie', 'television movie')
+                  AND episode_title IS NOT NULL AND TRIM(episode_title) != ''
+            """)
+            cur.execute("INSERT OR REPLACE INTO guide_meta (key, value) VALUES ('movie_migration_v1', 'done')")
 
         conn.commit()
         conn.close()
@@ -883,18 +886,22 @@ class GuideService:
                 (ch, start_date_str, end_date_str)
             )
 
-        for p in all_programs:
-            cur.execute("""
+        if all_programs:
+            params = [
+                (
+                    p["tvmaze_id"], p["show_title"], p["episode_title"], p["network"], p["kaffeine_channel"],
+                    p["start_time_local"], p["start_iso"], p["duration_iso"], p["runtime_mins"], p["summary"],
+                    p["season"], p["number"], p["airdate"], p["updated_at"]
+                )
+                for p in all_programs
+            ]
+            cur.executemany("""
                 INSERT OR REPLACE INTO guide_programs (
                     tvmaze_id, show_title, episode_title, network, kaffeine_channel,
                     start_time_local, start_iso, duration_iso, runtime_mins, summary,
                     season, number, airdate, updated_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                p["tvmaze_id"], p["show_title"], p["episode_title"], p["network"], p["kaffeine_channel"],
-                p["start_time_local"], p["start_iso"], p["duration_iso"], p["runtime_mins"], p["summary"],
-                p["season"], p["number"], p["airdate"], p["updated_at"]
-            ))
+            """, params)
 
         now_str = datetime.now().strftime("%Y-%m-%d %I:%M:%S %p")
         cur.execute("INSERT OR REPLACE INTO guide_meta (key, value) VALUES ('last_updated', ?)", (now_str,))
@@ -911,7 +918,14 @@ class GuideService:
 
         return len(all_programs)
 
-    def search_programs(self, query: str = "", channel: Optional[str] = None, airdate: Optional[str] = None, trim_ended: bool = True) -> List[Dict[str, Any]]:
+    def search_programs(
+        self,
+        query: str = "",
+        channel: Optional[str] = None,
+        airdate: Optional[str] = None,
+        trim_ended: bool = True,
+        include_overhang: bool = False
+    ) -> List[Dict[str, Any]]:
         conn = self._get_connection()
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
@@ -929,8 +943,20 @@ class GuideService:
             params.append(channel)
 
         if airdate:
-            sql += " AND airdate = ?"
-            params.append(airdate)
+            if include_overhang:
+                try:
+                    target_dt = datetime.strptime(airdate, "%Y-%m-%d").date()
+                    next_day_dt = target_dt + timedelta(days=1)
+                    next_day_str = next_day_dt.strftime("%Y-%m-%d")
+                    next_cutoff = f"{next_day_str}T04:00:00"
+                    sql += " AND ((airdate = ?) OR (airdate = ? AND start_iso < ?))"
+                    params.extend([airdate, next_day_str, next_cutoff])
+                except Exception:
+                    sql += " AND airdate = ?"
+                    params.append(airdate)
+            else:
+                sql += " AND airdate = ?"
+                params.append(airdate)
 
         sql += " ORDER BY start_iso ASC"
 
@@ -941,13 +967,12 @@ class GuideService:
         if trim_ended:
             now_dt = datetime.now()
             today_str = now_dt.strftime("%Y-%m-%d")
+            # If querying a specific future date, don't trim
+            if airdate and airdate > today_str:
+                return rows
+
             filtered = []
             for r in rows:
-                # If querying a specific future date, don't trim
-                if airdate and airdate != today_str and airdate > today_str:
-                    filtered.append(r)
-                    continue
-
                 start_iso = r.get("start_iso")
                 if not start_iso:
                     filtered.append(r)

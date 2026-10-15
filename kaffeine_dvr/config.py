@@ -6,8 +6,9 @@ color themes, channel mappings, recording safety buffers, and bounds checking.
 """
 
 import json
+import os
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 DEFAULT_CHANNEL_MAP: Dict[str, str] = {}
 
@@ -21,7 +22,74 @@ DEFAULT_CATEGORY_COLORS = {
     "live_bg": "#132400",
     "time_indicator": "#06b6d4",
     "clock": "#38bdf8",
+    "grid_bg": "#222838",
+    "past_bg": "#161922",
+    "past_bg_alt": "#14171f",
+    "past_border": "#262c3a",
+    "past_title": "#788292",
+    "past_subtext": "#5a6474",
 }
+
+
+def compute_past_theme_colors(grid_bg_hex: str, text_primary_hex: Optional[str] = None) -> Dict[str, str]:
+    """
+    Algorithmically compute harmonious past show colors from any grid_bg and text color.
+    Used as an automatic fallback for custom user theme presets.
+    """
+    import colorsys
+    bg_clean = (grid_bg_hex or "#222838").lstrip("#")
+    if len(bg_clean) != 6:
+        return {
+            "past_bg": "#161922",
+            "past_bg_alt": "#14171f",
+            "past_border": "#262c3a",
+            "past_title": "#788292",
+            "past_subtext": "#5a6474",
+        }
+    try:
+        r, g, b = [int(bg_clean[i:i+2], 16) / 255.0 for i in (0, 2, 4)]
+    except ValueError:
+        return {
+            "past_bg": "#161922",
+            "past_bg_alt": "#14171f",
+            "past_border": "#262c3a",
+            "past_title": "#788292",
+            "past_subtext": "#5a6474",
+        }
+    h, l, s = colorsys.rgb_to_hls(r, g, b)
+
+    if l < 0.08:
+        l_past = min(1.0, l + 0.03)
+        l_past_alt = min(1.0, l_past + 0.02)
+        l_border = min(1.0, l_past + 0.08)
+    else:
+        l_past = max(0.04, l * 0.75)
+        l_past_alt = max(0.03, l_past * 0.90)
+        l_border = min(1.0, l_past * 1.5)
+
+    s_past = max(0.05, s * 0.70)
+
+    def to_hex(h_val, l_val, s_val):
+        rgb = colorsys.hls_to_rgb(h_val, max(0.0, min(1.0, l_val)), max(0.0, min(1.0, s_val)))
+        return f"#{int(round(rgb[0]*255)):02x}{int(round(rgb[1]*255)):02x}{int(round(rgb[2]*255)):02x}"
+
+    past_bg = to_hex(h, l_past, s_past)
+    past_bg_alt = to_hex(h, l_past_alt, s_past)
+    past_border = to_hex(h, l_border, s_past * 0.8)
+
+    l_title = max(0.45, min(0.65, l + 0.45))
+    l_sub = max(0.35, min(0.55, l_title - 0.15))
+    s_text = max(0.08, min(0.35, s * 0.6))
+    past_title = to_hex(h, l_title, s_text)
+    past_subtext = to_hex(h, l_sub, s_text)
+
+    return {
+        "past_bg": past_bg,
+        "past_bg_alt": past_bg_alt,
+        "past_border": past_border,
+        "past_title": past_title,
+        "past_subtext": past_subtext,
+    }
 
 APP_THEMES: Dict[str, Dict[str, str]] = {
     "midnight": {
@@ -242,6 +310,12 @@ THEME_PRESETS: Dict[str, Dict[str, Any]] = {
             "live_bg": "#132400",
             "time_indicator": "#06b6d4",
             "clock": "#38bdf8",
+            "grid_bg": "#222838",
+            "past_bg": "#161922",
+            "past_bg_alt": "#14171f",
+            "past_border": "#262c3a",
+            "past_title": "#788292",
+            "past_subtext": "#5a6474",
         },
     },
     "cyberpunk": {
@@ -256,6 +330,12 @@ THEME_PRESETS: Dict[str, Dict[str, Any]] = {
             "live_bg": "#032814",
             "time_indicator": "#ff007f",
             "clock": "#00f0ff",
+            "grid_bg": "#1a1228",
+            "past_bg": "#13101c",
+            "past_bg_alt": "#0f0d17",
+            "past_border": "#2b2040",
+            "past_title": "#8e82a8",
+            "past_subtext": "#655a7a",
         },
     },
     "nordic_frost": {
@@ -270,6 +350,12 @@ THEME_PRESETS: Dict[str, Dict[str, Any]] = {
             "live_bg": "#0c222b",
             "time_indicator": "#38bdf8",
             "clock": "#67e8f9",
+            "grid_bg": "#16222f",
+            "past_bg": "#121a24",
+            "past_bg_alt": "#0e151e",
+            "past_border": "#223245",
+            "past_title": "#7c93a8",
+            "past_subtext": "#566c80",
         },
     },
     "warm_sunset": {
@@ -284,6 +370,12 @@ THEME_PRESETS: Dict[str, Dict[str, Any]] = {
             "live_bg": "#28120c",
             "time_indicator": "#f59e0b",
             "clock": "#fcd34d",
+            "grid_bg": "#251c19",
+            "past_bg": "#1c1513",
+            "past_bg_alt": "#171110",
+            "past_border": "#382a25",
+            "past_title": "#a89288",
+            "past_subtext": "#7a665d",
         },
     },
     "emerald_forest": {
@@ -298,6 +390,12 @@ THEME_PRESETS: Dict[str, Dict[str, Any]] = {
             "live_bg": "#0a2612",
             "time_indicator": "#10b981",
             "clock": "#6ee7b7",
+            "grid_bg": "#14241b",
+            "past_bg": "#0f1a14",
+            "past_bg_alt": "#0b140f",
+            "past_border": "#1d3327",
+            "past_title": "#759883",
+            "past_subtext": "#52705e",
         },
     },
     "oled_contrast": {
@@ -312,6 +410,12 @@ THEME_PRESETS: Dict[str, Dict[str, Any]] = {
             "live_bg": "#182c00",
             "time_indicator": "#ef4444",
             "clock": "#facc15",
+            "grid_bg": "#050505",
+            "past_bg": "#000000",
+            "past_bg_alt": "#080808",
+            "past_border": "#1a1a1a",
+            "past_title": "#6b7280",
+            "past_subtext": "#4b5563",
         },
     },
     "synthwave": {
@@ -326,6 +430,12 @@ THEME_PRESETS: Dict[str, Dict[str, Any]] = {
             "live_bg": "#1f0933",
             "time_indicator": "#ec4899",
             "clock": "#06b6d4",
+            "grid_bg": "#1d162e",
+            "past_bg": "#150f22",
+            "past_bg_alt": "#110c1b",
+            "past_border": "#2f1e4a",
+            "past_title": "#957ca8",
+            "past_subtext": "#6b567d",
         },
     },
 }
@@ -426,8 +536,14 @@ class ConfigManager:
                         data["guide_auto_advance"] = True
                     if "guide_auto_advance_minute" not in data:
                         data["guide_auto_advance_minute"] = 50
+                    if "guide_detail_collapsed" not in data:
+                        data["guide_detail_collapsed"] = False
+                    if "guide_maximized" not in data:
+                        data["guide_maximized"] = False
                     if "guide_show_time_indicator" not in data:
                         data["guide_show_time_indicator"] = True
+                    if "time_line_opacity" not in data:
+                        data["time_line_opacity"] = 100
                     if "show_clock" not in data:
                         data["show_clock"] = True
                     if "clock_font_size" not in data:
@@ -436,6 +552,8 @@ class ConfigManager:
                         data["app_theme"] = "midnight"
                     if "theme_preset" not in data:
                         data["theme_preset"] = "midnight"
+                    if "custom_theme_presets" not in data or not isinstance(data.get("custom_theme_presets"), dict):
+                        data["custom_theme_presets"] = {}
                     if "category_colors" not in data or not isinstance(data.get("category_colors"), dict):
                         data["category_colors"] = dict(DEFAULT_CATEGORY_COLORS)
                     else:
@@ -493,16 +611,20 @@ class ConfigManager:
             "delete_timeshift_on_exit": True,
             "grid_visible_rows": 9,
             "guide_detail_lines": 3,
+            "guide_detail_collapsed": False,
+            "guide_maximized": False,
             "live_same_bg_as_others": False,
             "hide_live_badge": False,
             "guide_auto_advance": True,
             "guide_auto_advance_minute": 50,
             "guide_show_time_indicator": True,
+            "time_line_opacity": 100,
             "show_clock": True,
             "clock_font_size": 11,
             "use_custom_title_bar": True,
             "app_theme": "midnight",
             "theme_preset": "midnight",
+            "custom_theme_presets": {},
             "category_colors": dict(DEFAULT_CATEGORY_COLORS)
         }
 
@@ -525,8 +647,12 @@ class ConfigManager:
 
     def _save(self, data: Dict[str, Any]):
         try:
-            with open(self.config_file, "w", encoding="utf-8") as f:
+            tmp_file = self.config_file.with_name(f"{self.config_file.name}.tmp")
+            with open(tmp_file, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_file, self.config_file)
         except Exception as e:
             print(f"Error saving configuration: {e}")
 
@@ -676,7 +802,10 @@ class ConfigManager:
 
     @property
     def playback_player(self) -> str:
-        return self.data.get("playback_player", "system")
+        val = self.data.get("playback_player", "system")
+        if val == "kaffeine":
+            return "system"
+        return val
 
     @playback_player.setter
     def playback_player(self, val: str):
@@ -694,11 +823,23 @@ class ConfigManager:
 
     @property
     def live_tv_watch_mode(self) -> str:
-        return self.data.get("live_tv_watch_mode", "timeshift")
+        val = self.data.get("live_tv_watch_mode", "smplayer")
+        if val in ("timeshift", "kaffeine"):
+            val = self.playback_player if self.playback_player != "kaffeine" else "smplayer"
+        return val
 
     @live_tv_watch_mode.setter
     def live_tv_watch_mode(self, val: str):
         self.data["live_tv_watch_mode"] = val
+        self.save()
+
+    @property
+    def custom_live_tv_player_cmd(self) -> str:
+        return self.data.get("custom_live_tv_player_cmd") or self.custom_playback_player_cmd
+
+    @custom_live_tv_player_cmd.setter
+    def custom_live_tv_player_cmd(self, val: str):
+        self.data["custom_live_tv_player_cmd"] = val
         self.save()
 
     @property
@@ -960,9 +1101,52 @@ class ConfigManager:
     def guide_theme(self, val: str):
         self.theme_preset = val
 
+    @property
+    def custom_theme_presets(self) -> Dict[str, Any]:
+        return self.data.get("custom_theme_presets", {})
+
+    def get_all_theme_presets(self) -> Dict[str, Any]:
+        combined = dict(THEME_PRESETS)
+        combined.update(self.custom_theme_presets)
+        return combined
+
+    def save_custom_theme_preset(self, name: str) -> str:
+        clean_name = name.strip()
+        if not clean_name:
+            raise ValueError("Preset name cannot be empty")
+        import re
+        slug = re.sub(r"[^a-z0-9_]+", "_", clean_name.lower()).strip("_")
+        preset_key = f"custom_{slug}" if not slug.startswith("custom_") else slug
+        if not slug:
+            preset_key = f"custom_{int(time.time())}"
+
+        presets = dict(self.custom_theme_presets)
+        presets[preset_key] = {
+            "name": clean_name,
+            "colors": dict(self.category_colors),
+        }
+        self.data["custom_theme_presets"] = presets
+        self.data["theme_preset"] = preset_key
+        self.save()
+        return preset_key
+
+    def delete_custom_theme_preset(self, preset_key: str) -> bool:
+        presets = dict(self.custom_theme_presets)
+        if preset_key in presets:
+            del presets[preset_key]
+            self.data["custom_theme_presets"] = presets
+            if self.theme_preset == preset_key:
+                self.theme_preset = "midnight"
+                if "midnight" in THEME_PRESETS:
+                    self.data["category_colors"] = dict(THEME_PRESETS["midnight"]["colors"])
+            self.save()
+            return True
+        return False
+
     def apply_theme_preset(self, preset_key: str):
-        if preset_key in THEME_PRESETS:
-            preset = THEME_PRESETS[preset_key]
+        all_presets = self.get_all_theme_presets()
+        if preset_key in all_presets:
+            preset = all_presets[preset_key]
             self.data["category_colors"] = dict(preset["colors"])
             self.data["theme_preset"] = preset_key
             self.save()
@@ -1015,6 +1199,24 @@ class ConfigManager:
         self.save()
 
     @property
+    def guide_detail_collapsed(self) -> bool:
+        return bool(self.data.get("guide_detail_collapsed", False))
+
+    @guide_detail_collapsed.setter
+    def guide_detail_collapsed(self, val: bool):
+        self.data["guide_detail_collapsed"] = bool(val)
+        self.save()
+
+    @property
+    def guide_maximized(self) -> bool:
+        return bool(self.data.get("guide_maximized", False))
+
+    @guide_maximized.setter
+    def guide_maximized(self, val: bool):
+        self.data["guide_maximized"] = bool(val)
+        self.save()
+
+    @property
     def live_same_bg_as_others(self) -> bool:
         return bool(self.data.get("live_same_bg_as_others", False))
 
@@ -1057,6 +1259,15 @@ class ConfigManager:
     @guide_show_time_indicator.setter
     def guide_show_time_indicator(self, val: bool):
         self.data["guide_show_time_indicator"] = bool(val)
+        self.save()
+
+    @property
+    def time_line_opacity(self) -> int:
+        return int(self.data.get("time_line_opacity", 100))
+
+    @time_line_opacity.setter
+    def time_line_opacity(self, val: int):
+        self.data["time_line_opacity"] = max(10, min(100, int(val)))
         self.save()
 
     @property

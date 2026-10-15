@@ -97,22 +97,21 @@ class Watcher:
                     ch_b = rec_b.get("channel", "").strip().lower()
                     if ch_a != ch_b:
                         diff = (s_b_dt - end_a_dt).total_seconds()
-                        if -60 <= diff <= 90:
-                            if now >= end_a_dt:
-                                k_key = rec_a.get("kaffeine_key")
-                                now_str = now.strftime('%Y-%m-%d %H:%M:%S')
-                                print(
-                                    f"[{now_str}] Releasing tuner (handover): Stopping '{rec_a.get('title')}' "
-                                    f"({rec_a.get('channel')}) so '{rec_b.get('title')}' ({rec_b.get('channel')}) can record.",
-                                    flush=True
-                                )
-                                self.dbus_client.cancel_recording(
-                                    key=k_key,
-                                    channel=rec_a.get("channel"),
-                                    title=rec_a.get("title")
-                                )
-                                self.queue_mgr.archive_to_history(rec_a["id"])
-                                break
+                        if -60 <= diff <= 90 and now >= end_a_dt:
+                            k_key = rec_a.get("kaffeine_key")
+                            now_str = now.strftime('%Y-%m-%d %H:%M:%S')
+                            print(
+                                f"[{now_str}] Releasing tuner (handover): Stopping '{rec_a.get('title')}' "
+                                f"({rec_a.get('channel')}) so '{rec_b.get('title')}' ({rec_b.get('channel')}) can record.",
+                                flush=True
+                            )
+                            self.dbus_client.cancel_recording(
+                                key=k_key,
+                                channel=rec_a.get("channel"),
+                                title=rec_a.get("title")
+                            )
+                            self.queue_mgr.archive_to_history(rec_a["id"])
+                            break
             except Exception as e:
                 print(f"Error checking lingering buffers: {e}", flush=True)
 
@@ -266,10 +265,10 @@ class Watcher:
                         s_dt = datetime.fromisoformat(r["start_iso"])
                         if s_dt <= now + timedelta(minutes=3):
                             return 5
-                    except Exception:
+                    except (KeyError, ValueError):
                         continue
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Error calculating watcher sleep interval: {e}", flush=True)
         return max(5, default_interval)
 
     def run_loop(self, interval_seconds: int = 120):

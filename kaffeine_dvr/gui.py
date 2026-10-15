@@ -42,6 +42,7 @@ from PyQt6.QtGui import (
     QPen,
     QPixmap,
     QPolygon,
+    QPolygonF,
     QWheelEvent,
 )
 from PyQt6.QtWidgets import (
@@ -60,6 +61,7 @@ from PyQt6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -1241,6 +1243,175 @@ class TableViewportResizeFilter(QObject):
         return super().eventFilter(obj, event)
 
 
+class OpacitySliderPopup(QFrame):
+    """
+    Compact popup displaying an opacity percentage label, interactive horizontal slider,
+    and quick preset buttons (25%, 50%, 75%, 100%). Dismisses on outside click, origin toggle, or Escape.
+    """
+    _active_popup = None
+
+    def __init__(self, current_val: int = 100, on_change=None, parent=None, tokens=None):
+        super().__init__(parent, Qt.WindowType.ToolTip | Qt.WindowType.FramelessWindowHint)
+        self._origin_widget = None
+        self._on_change = on_change
+        tokens = tokens or {}
+        bg_panel = tokens.get("bg_panel", "#1a2233")
+        border_col = tokens.get("accent_primary", "#38bdf8")
+        accent = tokens.get("accent_hover", "#0284c7")
+        text_col = tokens.get("text_primary", "#f1f5f9")
+
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+        self.setObjectName("opacitySliderPopup")
+        self.setStyleSheet(f"""
+            QFrame#opacitySliderPopup {{
+                background-color: {bg_panel};
+                border: 1.5px solid {border_col};
+                border-radius: 8px;
+            }}
+            QLabel {{
+                color: {text_col};
+                font-size: 12px;
+                font-weight: bold;
+                background: transparent;
+            }}
+            QSlider::groove:horizontal {{
+                height: 6px;
+                background: #334155;
+                border-radius: 3px;
+            }}
+            QSlider::sub-page:horizontal {{
+                background: {border_col};
+                border-radius: 3px;
+            }}
+            QSlider::handle:horizontal {{
+                background: #ffffff;
+                border: 2px solid {border_col};
+                width: 16px;
+                margin-top: -5px;
+                margin-bottom: -5px;
+                border-radius: 8px;
+            }}
+            QSlider::handle:horizontal:hover {{
+                background: {accent};
+            }}
+            QPushButton.quick-preset {{
+                background-color: #242c3d;
+                border: 1px solid #3c465d;
+                border-radius: 4px;
+                color: #cbd5e1;
+                font-size: 11px;
+                font-weight: 500;
+                padding: 2px 6px;
+                min-width: 32px;
+            }}
+            QPushButton.quick-preset:hover {{
+                background-color: #334155;
+                border-color: {border_col};
+                color: #ffffff;
+            }}
+        """)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(14, 12, 14, 12)
+        lay.setSpacing(10)
+
+        self.lbl = QLabel(f"Time Line Opacity: {current_val}%")
+        self.lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lay.addWidget(self.lbl)
+
+        self.slider = QSlider(Qt.Orientation.Horizontal)
+        self.slider.setRange(10, 100)
+        self.slider.setSingleStep(5)
+        self.slider.setPageStep(10)
+        self.slider.setValue(current_val)
+        self.slider.setFixedWidth(200)
+        lay.addWidget(self.slider)
+
+        preset_row = QHBoxLayout()
+        preset_row.setSpacing(6)
+        for pct in (25, 50, 75, 100):
+            p_btn = QPushButton(f"{pct}%")
+            p_btn.setProperty("class", "quick-preset")
+            p_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            p_btn.clicked.connect(lambda chk=False, v=pct: self.slider.setValue(v))
+            preset_row.addWidget(p_btn)
+        lay.addLayout(preset_row)
+
+        self.slider.valueChanged.connect(self._handle_value_changed)
+
+    def _handle_value_changed(self, val: int):
+        self.lbl.setText(f"Time Line Opacity: {val}%")
+        if self._on_change:
+            self._on_change(val)
+
+    @classmethod
+    def show_for_widget(cls, widget: QWidget, current_val: int, on_change, tokens=None):
+        if cls._active_popup:
+            is_same = getattr(cls._active_popup, "_origin_widget", None) == widget
+            cls.hide_active()
+            if is_same:
+                return
+
+        win = widget.window()
+        popup = cls(current_val, on_change, win, tokens)
+        popup._origin_widget = widget
+        cls._active_popup = popup
+
+        app = QApplication.instance()
+        if app:
+            app.installEventFilter(popup)
+
+        pos = widget.mapToGlobal(QPoint(widget.width() // 2 - 110, widget.height() + 4))
+        popup.move(pos)
+        popup.show()
+
+    @classmethod
+    def hide_active(cls):
+        if cls._active_popup:
+            try:
+                app = QApplication.instance()
+                if app:
+                    app.removeEventFilter(cls._active_popup)
+                cls._active_popup.close()
+                cls._active_popup.deleteLater()
+            except Exception:
+                pass
+            cls._active_popup = None
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Escape:
+            OpacitySliderPopup.hide_active()
+            return
+        super().keyPressEvent(event)
+
+    def eventFilter(self, watched, event):
+        if event.type() in (
+            QEvent.Type.ApplicationDeactivate,
+            QEvent.Type.WindowDeactivate,
+            QEvent.Type.ActivationChange
+        ):
+            OpacitySliderPopup.hide_active()
+            return False
+
+        if event.type() == QEvent.Type.MouseButtonPress:
+            origin = getattr(self, "_origin_widget", None)
+            gp = None
+            if hasattr(event, "globalPosition"):
+                gp = event.globalPosition().toPoint()
+            elif hasattr(event, "globalPos"):
+                gp = event.globalPos()
+
+            if gp:
+                if self.rect().contains(self.mapFromGlobal(gp)):
+                    return False
+                if origin and origin.rect().contains(origin.mapFromGlobal(gp)):
+                    OpacitySliderPopup.hide_active()
+                    return True
+
+            OpacitySliderPopup.hide_active()
+
+        return super().eventFilter(watched, event)
+
+
 class NumberStepper(QFrame):
     """
     Horizontal stepper control with [-] [ Number Box ] [+] layout.
@@ -1331,6 +1502,15 @@ class NumberStepper(QFrame):
     def setSingleStep(self, step: int):
         self._spin.setSingleStep(step)
 
+    def singleStep(self) -> int:
+        return self._spin.singleStep()
+
+    def minimum(self) -> int:
+        return self._spin.minimum()
+
+    def maximum(self) -> int:
+        return self._spin.maximum()
+
     def setSuffix(self, suffix: str):
         self._spin.setSuffix(suffix)
 
@@ -1348,10 +1528,70 @@ class NumberStepper(QFrame):
         return self._spin
 
 
-class CenteredComboBox(QComboBox):
+class ThemedComboBox(QComboBox):
+    """
+    QComboBox that renders a clean modern flat frame and an antialiased chevron vector arrow,
+    eliminating raw 3D platform beveled buttons while matching the active theme.
+    """
+    def __init__(self, parent=None, centered: bool = False):
+        super().__init__(parent)
+        self.centered = centered
+
+    def enterEvent(self, event):
+        super().enterEvent(event)
+        self.update()
+
+    def leaveEvent(self, event):
+        super().leaveEvent(event)
+        self.update()
+
+    def paintEvent(self, event):
+        style_painter = QStylePainter(self)
+        opt = QStyleOptionComboBox()
+        self.initStyleOption(opt)
+        opt.currentText = ""  # Prevent default left-aligned text rendering
+        # Draw frame only, not the native arrow button
+        opt.subControls = QStyle.SubControl.SC_ComboBoxFrame
+        style_painter.drawComplexControl(QStyle.ComplexControl.CC_ComboBox, opt)
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        w = self.width()
+        h = self.height()
+        arrow_area_width = 24
+
+        # Draw clean chevron arrow on the right with interactive hover/focus accent
+        if self.underMouse() or self.hasFocus():
+            arrow_color = self.palette().color(QPalette.ColorRole.Highlight)
+        else:
+            arrow_color = self.palette().color(QPalette.ColorRole.PlaceholderText)
+        pen = QPen(arrow_color, 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+        painter.setPen(pen)
+
+        ax = w - 14
+        ay = h // 2 - 2
+        painter.drawLine(ax - 4, ay, ax, ay + 4)
+        painter.drawLine(ax, ay + 4, ax + 4, ay)
+
+        # Draw text
+        text = self.itemText(self.currentIndex())
+        painter.setPen(self.palette().color(QPalette.ColorRole.Text))
+        if self.centered:
+            text_rect = QRect(0, 0, w, h)
+            style_painter.drawItemText(text_rect, Qt.AlignmentFlag.AlignCenter, self.palette(), self.isEnabled(), text, QPalette.ColorRole.Text)
+        else:
+            text_rect = QRect(8, 0, max(0, w - arrow_area_width - 8), h)
+            style_painter.drawItemText(text_rect, int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft), self.palette(), self.isEnabled(), text, QPalette.ColorRole.Text)
+
+
+class CenteredComboBox(ThemedComboBox):
     """
     QComboBox that displays its selected text and dropdown menu items centered.
     """
+    def __init__(self, parent=None):
+        super().__init__(parent, centered=True)
+
     def addItem(self, text: str, userData: Any = None):
         if userData is not None:
             super().addItem(text, userData)
@@ -1371,17 +1611,108 @@ class CenteredComboBox(QComboBox):
             super().insertItem(index, text)
         self.setItemData(index, Qt.AlignmentFlag.AlignCenter, Qt.ItemDataRole.TextAlignmentRole)
 
-    def paintEvent(self, event):
-        painter = QStylePainter(self)
-        opt = QStyleOptionComboBox()
-        self.initStyleOption(opt)
-        opt.currentText = ""  # Prevent default left-aligned text rendering
-        painter.drawComplexControl(QStyle.ComplexControl.CC_ComboBox, opt)
-        sub_rect = self.style().subControlRect(
-            QStyle.ComplexControl.CC_ComboBox, opt, QStyle.SubControl.SC_ComboBoxEditField, self
-        )
-        text = self.itemText(self.currentIndex())
-        painter.drawItemText(sub_rect, Qt.AlignmentFlag.AlignCenter, self.palette(), self.isEnabled(), text, QPalette.ColorRole.Text)
+
+def get_theme_chip_fixed_width(font: Optional[QFont] = None) -> int:
+    """
+    Calculate a set uniform width for theme pills based on the largest theme entry
+    across Application Themes and Guide Themes, padded by a few characters.
+    """
+    names = [t["name"].split(" (")[0] for t in APP_THEMES.values()]
+    names += [p["name"].split(" (")[0] for p in THEME_PRESETS.values()]
+    names.append("Custom")
+    longest_name = max(names, key=len)
+
+    if font is not None:
+        f = QFont(font)
+    else:
+        app = QApplication.instance()
+        f = QFont(app.font() if app else QFont())
+
+    # ThemeChip stylesheet enforces 11px bold font
+    f.setPixelSize(11)
+    f.setBold(True)
+    fm = QFontMetrics(f)
+
+    # Longest entry + pad a few characters (4 spaces)
+    sample_text = f"  {longest_name}    "
+    text_width = fm.horizontalAdvance(sample_text)
+    # 10px circle dot icon + 6px icon margin + 20px button padding (10 left + 10 right) + 4px border/safety
+    return text_width + 40
+
+
+class ThemeChip(QPushButton):
+    """
+    Compact, pill-shaped button for selecting a theme.
+    Displays a small circular accent dot and theme label, highlighted via border/background when selected.
+    """
+    chip_clicked = pyqtSignal(str)
+
+    def __init__(self, key: str, display_name: str, dot_color: str, parent=None, fixed_width: Optional[int] = None):
+        super().__init__(parent)
+        self.key = key
+        self.display_name = display_name
+        self.short_name = display_name.split(" (")[0]
+        self.dot_color = dot_color
+        self._is_selected = False
+
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.fixed_width = fixed_width if fixed_width is not None else get_theme_chip_fixed_width(self.font())
+        self.setFixedSize(self.fixed_width, 28)
+        self.clicked.connect(lambda: self.chip_clicked.emit(self.key))
+        self._update_appearance()
+
+    def set_dot_color(self, color: str):
+        self.dot_color = color
+        self._update_appearance()
+
+    def set_selected(self, selected: bool):
+        self._is_selected = selected
+        self._update_appearance()
+
+    def _update_appearance(self):
+        # Generate 10x10 colored circle dot
+        pix = QPixmap(10, 10)
+        pix.fill(Qt.GlobalColor.transparent)
+        p = QPainter(pix)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setBrush(QColor(self.dot_color))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.drawEllipse(0, 0, 10, 10)
+        p.end()
+        self.setIcon(QIcon(pix))
+        self.setIconSize(QSize(10, 10))
+
+        self.setText(f"  {self.short_name}")
+        if self._is_selected:
+            self.setStyleSheet("""
+                QPushButton {
+                    background-color: #1e293b;
+                    color: #38bdf8;
+                    border: 1.5px solid #38bdf8;
+                    border-radius: 12px;
+                    padding: 3px 10px;
+                    font-size: 11px;
+                    font-weight: bold;
+                    text-align: left;
+                }
+            """)
+        else:
+            self.setStyleSheet("""
+                QPushButton {
+                    background-color: #141c28;
+                    color: #cbd5e1;
+                    border: 1px solid #2a3a50;
+                    border-radius: 12px;
+                    padding: 3px 10px;
+                    font-size: 11px;
+                    text-align: left;
+                }
+                QPushButton:hover {
+                    background-color: #1e2a3c;
+                    border-color: #38bdf8;
+                    color: #f8fafc;
+                }
+            """)
 
 
 def format_american_datetime(val: Any) -> str:
@@ -1550,6 +1881,18 @@ def get_program_display_titles(prog: Dict[str, Any]) -> Tuple[str, str]:
     return show, ep
 
 
+def compute_alternating_shade(base: QColor) -> QColor:
+    """
+    Compute a subtle alternating row shade for the EPG grid given any base color.
+    Preserves alternating row distinction across dark, medium, and pitch-black themes.
+    """
+    # For very dark or pure black (e.g. OLED), darkening has no effect so lighten slightly
+    if base.lightness() < 25:
+        return base.lighter(120) if base.lightness() > 0 else QColor("#12141a")
+    # For normal dark to medium backgrounds, darken by ~10%
+    return base.darker(110)
+
+
 class ProgramTileDelegate(QStyledItemDelegate):
     """
     Custom item delegate for rendering traditional EPG grid program tiles.
@@ -1587,6 +1930,7 @@ class ProgramTileDelegate(QStyledItemDelegate):
         "highlight": QColor("#38bdf8"),
         "live_badge": QColor("#059669"),
         "live_bg": QColor("#132400"),
+        "grid_bg": QColor("#222838"),
     }
 
     def __init__(self, parent=None, config_mgr=None):
@@ -1594,6 +1938,12 @@ class ProgramTileDelegate(QStyledItemDelegate):
         self.zoom_delta = 0
         self.config_mgr = config_mgr
         self._qcolor_cache: Dict[str, QColor] = {}
+        self._default_bg = self.COLOR_DEFAULT_BG
+        self.color_past_bg = self.COLOR_PAST_BG
+        self.color_past_bg_alt = self.COLOR_PAST_BG_ALT
+        self.color_past_border = self.COLOR_PAST_BORDER
+        self.color_past_title = self.COLOR_PAST_TITLE
+        self.color_past_subtext = self.COLOR_PAST_SUBTEXT
         self.refresh_category_colors()
 
     def set_zoom_delta(self, delta: int):
@@ -1602,6 +1952,30 @@ class ProgramTileDelegate(QStyledItemDelegate):
     def refresh_category_colors(self):
         cfg_colors = self.config_mgr.category_colors if self.config_mgr else DEFAULT_CATEGORY_COLORS
         self._qcolor_cache = {cat: QColor(hex_val) for cat, hex_val in cfg_colors.items()}
+        base_hex = cfg_colors.get("grid_bg", DEFAULT_CATEGORY_COLORS.get("grid_bg", "#222838"))
+        self._default_bg = QColor(base_hex)
+        self._default_bg_alt = compute_alternating_shade(self._default_bg)
+
+        # Harmonized theme colors for past shows
+        from kaffeine_dvr.config import compute_past_theme_colors
+        past_bg_hex = cfg_colors.get("past_bg")
+        past_title_hex = cfg_colors.get("past_title")
+        past_subtext_hex = cfg_colors.get("past_subtext")
+        past_border_hex = cfg_colors.get("past_border")
+
+        if not (past_bg_hex and past_title_hex and past_subtext_hex and past_border_hex):
+            computed = compute_past_theme_colors(base_hex)
+            past_bg_hex = past_bg_hex or computed.get("past_bg", "#161922")
+            past_title_hex = past_title_hex or computed.get("past_title", "#788292")
+            past_subtext_hex = past_subtext_hex or computed.get("past_subtext", "#5a6474")
+            past_border_hex = past_border_hex or computed.get("past_border", "#262c3a")
+
+        self.color_past_bg = QColor(past_bg_hex)
+        past_bg_alt_hex = cfg_colors.get("past_bg_alt")
+        self.color_past_bg_alt = QColor(past_bg_alt_hex) if past_bg_alt_hex else compute_alternating_shade(self.color_past_bg)
+        self.color_past_border = QColor(past_border_hex)
+        self.color_past_title = QColor(past_title_hex)
+        self.color_past_subtext = QColor(past_subtext_hex)
 
     def get_category_color(self, cat: str) -> QColor:
         if cat in self._qcolor_cache:
@@ -1626,11 +2000,25 @@ class ProgramTileDelegate(QStyledItemDelegate):
         rect = option.rect
 
         # Timing state & metadata
-        is_selected = bool(option.state & QStyle.StateFlag.State_Selected)
-        if not is_selected:
-            view = getattr(self, "parent", None)
-            grid = view() if callable(view) else getattr(option, "widget", None)
-            if isinstance(grid, QTableWidget):
+        is_selected = False
+        grid = getattr(option, "widget", None)
+        if not grid and callable(getattr(self, "parent", None)):
+            grid = self.parent()
+        mw = getattr(grid, "main_window", None) if grid else None
+        cur_sel = getattr(mw, "selected_grid_program", None) if mw else None
+
+        if cur_sel is not None:
+            if cur_sel is prog:
+                is_selected = True
+            elif cur_sel.get("id") is not None and prog.get("id") is not None:
+                is_selected = (cur_sel.get("id") == prog.get("id"))
+            else:
+                cur_ch = (cur_sel.get("kaffeine_channel") or cur_sel.get("channel") or "").strip().lower()
+                prog_ch = (prog.get("kaffeine_channel") or prog.get("channel") or "").strip().lower()
+                is_selected = bool(cur_ch and prog_ch and cur_ch == prog_ch and cur_sel.get("start_iso") == prog.get("start_iso"))
+        else:
+            is_selected = bool(option.state & QStyle.StateFlag.State_Selected)
+            if not is_selected and isinstance(grid, QTableWidget):
                 sel = grid.selectionModel()
                 if sel:
                     row = index.row()
@@ -1642,23 +2030,31 @@ class ProgramTileDelegate(QStyledItemDelegate):
         is_scheduled = bool(prog.get("_scheduled_rec"))
         is_past_recorded = bool(prog.get("_history_rec"))
         # Dynamically evaluate timing state against current time
-        start_iso = prog.get("start_iso")
-        dur_iso = prog.get("duration_iso") or "00:30:00"
         timing_state = prog.get("_timing_state")
-        if start_iso:
-            try:
-                dt = datetime.fromisoformat(start_iso)
-                parts = [int(x) for x in dur_iso.split(":")]
-                dur = timedelta(hours=parts[0], minutes=parts[1], seconds=parts[2] if len(parts) > 2 else 0)
-                now = datetime.now()
-                if now >= dt + dur:
-                    timing_state = "past"
-                elif dt <= now < dt + dur:
-                    timing_state = "live"
-                else:
-                    timing_state = "upcoming"
-            except Exception:
-                timing_state = timing_state or "upcoming"
+        start_dt = prog.get("_parsed_start_dt")
+        end_dt = prog.get("_parsed_end_dt")
+        if start_dt is None:
+            start_iso = prog.get("start_iso")
+            if start_iso:
+                try:
+                    start_dt = datetime.fromisoformat(start_iso)
+                    dur_iso = prog.get("duration_iso") or "00:30:00"
+                    parts = [int(x) for x in dur_iso.split(":")]
+                    dur = timedelta(hours=parts[0], minutes=parts[1], seconds=parts[2] if len(parts) > 2 else 0)
+                    end_dt = start_dt + dur
+                    prog["_parsed_start_dt"] = start_dt
+                    prog["_parsed_end_dt"] = end_dt
+                except Exception:
+                    pass
+
+        if start_dt and end_dt:
+            now = datetime.now()
+            if now >= end_dt:
+                timing_state = "past"
+            elif start_dt <= now < end_dt:
+                timing_state = "live"
+            else:
+                timing_state = "upcoming"
         else:
             timing_state = timing_state or "upcoming"
 
@@ -1672,13 +2068,13 @@ class ProgramTileDelegate(QStyledItemDelegate):
         same_bg = bool(getattr(self.config_mgr, "live_same_bg_as_others", False)) if self.config_mgr else False
         has_rec_border = is_scheduled or (timing_state == "past" and is_past_recorded)
         if timing_state == "past":
-            bg_color = self.COLOR_PAST_BG_ALT if is_alt else self.COLOR_PAST_BG
-            default_border = self.COLOR_PAST_BORDER_SCHED if has_rec_border else self.COLOR_PAST_BORDER
+            bg_color = self.color_past_bg_alt if is_alt else self.color_past_bg
+            default_border = self.COLOR_PAST_BORDER_SCHED if has_rec_border else self.color_past_border
         elif timing_state == "live" and not same_bg:
             bg_color = self.get_category_color("live_bg")
             default_border = self.COLOR_DEFAULT_BORDER_SCHED if has_rec_border else self.COLOR_DEFAULT_BORDER
         else:
-            bg_color = self.COLOR_DEFAULT_BG_ALT if is_alt else self.COLOR_DEFAULT_BG
+            bg_color = self._default_bg_alt if is_alt else self._default_bg
             default_border = self.COLOR_DEFAULT_BORDER_SCHED if has_rec_border else self.COLOR_DEFAULT_BORDER
 
         if is_selected:
@@ -1722,8 +2118,8 @@ class ProgramTileDelegate(QStyledItemDelegate):
         # Title & Subtext color logic
         cat = prog.get("_category") or classify_guide_category(prog)
         if timing_state == "past":
-            title_color = self.COLOR_PAST_TITLE
-            subtext_color = self.COLOR_PAST_SUBTEXT
+            title_color = self.color_past_title
+            subtext_color = self.color_past_subtext
         else:
             title_color = self.get_category_color(cat)
             subtext_color = self.COLOR_SUBTEXT
@@ -1817,6 +2213,8 @@ class GridPanFilter(QObject):
         self._drag_start_pos = None
         self._last_drag_pos = None
         self._drag_threshold = 5
+        self._overscroll_x = 0
+        self._overscroll_badge = None
         self._set_cursor(Qt.CursorShape.OpenHandCursor)
 
     def _set_cursor(self, shape: Qt.CursorShape):
@@ -1827,6 +2225,61 @@ class GridPanFilter(QObject):
                 hdr.viewport().setCursor(shape)
         except (RuntimeError, AttributeError):
             pass
+
+    def _ensure_badge(self):
+        if self._overscroll_badge is None:
+            vp = self.table.viewport()
+            self._overscroll_badge = QLabel(vp)
+            self._overscroll_badge.setObjectName("gridOverscrollBadge")
+            self._overscroll_badge.setStyleSheet(
+                "QLabel#gridOverscrollBadge {"
+                "  background-color: #1e3a8a;"
+                "  color: #ffffff;"
+                "  font-weight: bold;"
+                "  font-size: 11px;"
+                "  padding: 6px 14px;"
+                "  border: 1.5px solid #3b82f6;"
+                "  border-radius: 6px;"
+                "}"
+            )
+            self._overscroll_badge.hide()
+
+    def _update_overscroll_badge(self, direction: str):
+        mw = self.main_window or getattr(self.table, "main_window", None)
+        if not mw or not hasattr(mw, "guide_date_combo"):
+            return
+        combo = mw.guide_date_combo
+        cur_idx = combo.currentIndex()
+        if direction == "next":
+            if cur_idx >= combo.count() - 1:
+                return
+            target_text = combo.itemText(cur_idx + 1)
+            self._ensure_badge()
+            self._overscroll_badge.setText(f"Release to advance to {target_text} →")
+            self._overscroll_badge.adjustSize()
+            vp = self.table.viewport()
+            bx = vp.width() - self._overscroll_badge.width() - 16
+            by = max(10, (vp.height() - self._overscroll_badge.height()) // 2)
+            self._overscroll_badge.move(bx, by)
+            self._overscroll_badge.show()
+            self._overscroll_badge.raise_()
+        elif direction == "prev":
+            if cur_idx <= 1:
+                return
+            target_text = combo.itemText(cur_idx - 1)
+            self._ensure_badge()
+            self._overscroll_badge.setText(f"← Release for {target_text}")
+            self._overscroll_badge.adjustSize()
+            vp = self.table.viewport()
+            bx = 16
+            by = max(10, (vp.height() - self._overscroll_badge.height()) // 2)
+            self._overscroll_badge.move(bx, by)
+            self._overscroll_badge.show()
+            self._overscroll_badge.raise_()
+
+    def _hide_overscroll_badge(self):
+        if self._overscroll_badge is not None:
+            self._overscroll_badge.hide()
 
     def eventFilter(self, watched, event):
         evt_type = event.type()
@@ -1849,6 +2302,8 @@ class GridPanFilter(QObject):
         if evt_type == QEvent.Type.MouseButtonPress:
             if event.button() in (Qt.MouseButton.LeftButton, Qt.MouseButton.MiddleButton):
                 self._dragging = False
+                self._overscroll_x = 0
+                self._hide_overscroll_badge()
                 pos = event.position().toPoint()
                 self._drag_start_pos = pos
                 self._last_drag_pos = pos
@@ -1865,6 +2320,8 @@ class GridPanFilter(QObject):
                 if not (event.buttons() & (Qt.MouseButton.LeftButton | Qt.MouseButton.MiddleButton)):
                     was_drag = self._dragging
                     self._dragging = False
+                    self._overscroll_x = 0
+                    self._hide_overscroll_badge()
                     self._drag_start_pos = None
                     self._last_drag_pos = None
                     self._set_cursor(Qt.CursorShape.OpenHandCursor)
@@ -1885,7 +2342,24 @@ class GridPanFilter(QObject):
                     v_bar = self.table.verticalScrollBar()
 
                     if delta.x() != 0 and h_bar:
-                        h_bar.setValue(h_bar.value() - delta.x())
+                        old_val = h_bar.value()
+                        h_bar.setValue(old_val - delta.x())
+                        new_val = h_bar.value()
+
+                        # Detect overscroll when dragging past boundaries
+                        if delta.x() < 0 and old_val == h_bar.maximum() and new_val == h_bar.maximum():
+                            self._overscroll_x += abs(delta.x())
+                            if self._overscroll_x > 35:
+                                self._update_overscroll_badge("next")
+                        elif delta.x() > 0 and old_val == 0 and new_val == 0:
+                            self._overscroll_x -= abs(delta.x())
+                            if self._overscroll_x < -35:
+                                self._update_overscroll_badge("prev")
+                        else:
+                            if self._overscroll_x != 0:
+                                self._overscroll_x = 0
+                                self._hide_overscroll_badge()
+
                     if delta.y() != 0 and v_bar and watched is vp:
                         v_bar.setValue(v_bar.value() - delta.y())
                 return True
@@ -1898,6 +2372,23 @@ class GridPanFilter(QObject):
                 self._drag_start_pos = None
                 self._last_drag_pos = None
                 self._set_cursor(Qt.CursorShape.OpenHandCursor)
+
+                # Check if overscroll threshold was met to push through to next / prev day
+                overscroll = getattr(self, "_overscroll_x", 0)
+                self._overscroll_x = 0
+                self._hide_overscroll_badge()
+
+                if overscroll > 45:
+                    mw = self.main_window or getattr(self.table, "main_window", None)
+                    if mw and hasattr(mw, "advance_guide_date"):
+                        mw.advance_guide_date(offset=1, position="0400")
+                    return True
+                elif overscroll < -45:
+                    mw = self.main_window or getattr(self.table, "main_window", None)
+                    if mw and hasattr(mw, "advance_guide_date"):
+                        mw.advance_guide_date(offset=-1, position="end")
+                    return True
+
                 if was_dragging:
                     return True
                 # Clean click without dragging: select cell on release
@@ -1935,6 +2426,8 @@ class GridPanFilter(QObject):
             self._dragging = False
             self._drag_start_pos = None
             self._last_drag_pos = None
+            self._overscroll_x = 0
+            self._hide_overscroll_badge()
             self._set_cursor(Qt.CursorShape.OpenHandCursor)
 
         elif evt_type == QEvent.Type.Enter:
@@ -2001,10 +2494,13 @@ class GuideGridHeader(QHeaderView):
         vp_width = self.viewport().width()
         if 0 <= line_x <= vp_width:
             line_col_hex = mw.config_mgr.category_colors.get("time_indicator", "#06b6d4")
+            opacity = getattr(mw.config_mgr, "time_line_opacity", 100) / 100.0
+            color = QColor(line_col_hex)
+            color.setAlphaF(color.alphaF() * max(0.05, min(1.0, opacity)))
             painter = QPainter(self.viewport())
             painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor(line_col_hex))
+            painter.setBrush(color)
             h = self.viewport().height()
             tri = QPolygon([
                 QPoint(line_x - 5, h - 7),
@@ -2014,11 +2510,22 @@ class GuideGridHeader(QHeaderView):
             painter.drawPolygon(tri)
             painter.end()
 
+        # Draw subtle midnight boundary line at column 48 if visible
+        if self.count() > 48:
+            mid_x = self.sectionViewportPosition(48)
+            vp_width = self.viewport().width()
+            if 0 <= mid_x <= vp_width:
+                painter = QPainter(self.viewport())
+                painter.setPen(QPen(QColor("#3b82f6"), 2))
+                painter.drawLine(mid_x, 0, mid_x, self.viewport().height())
+                painter.end()
+
 
 class GuideGridTable(QTableWidget):
     """
     Custom table widget for the guide grid that draws a vertical current-time
-    indicator line down across the table viewport when viewing today's programming.
+    indicator line down across the table viewport when viewing today's programming,
+    and a subtle midnight demarcation line when viewing the extended 28-hour grid.
     """
     def __init__(self, *args, main_window=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -2026,6 +2533,16 @@ class GuideGridTable(QTableWidget):
 
     def paintEvent(self, event):
         super().paintEvent(event)
+        hdr = self.horizontalHeader()
+        if hdr and self.columnCount() > 48:
+            mid_x = hdr.sectionViewportPosition(48)
+            vp_width = self.viewport().width()
+            if 0 <= mid_x <= vp_width:
+                painter = QPainter(self.viewport())
+                painter.setPen(QPen(QColor("#3b82f6"), 1, Qt.PenStyle.DashLine))
+                painter.drawLine(mid_x, 0, mid_x, self.viewport().height())
+                painter.end()
+
         mw = getattr(self, "main_window", None)
         if not mw or not getattr(mw, "config_mgr", None):
             return
@@ -2034,7 +2551,6 @@ class GuideGridTable(QTableWidget):
         if not mw.is_viewing_today():
             return
 
-        hdr = self.horizontalHeader()
         if not hdr:
             return
 
@@ -2049,8 +2565,11 @@ class GuideGridTable(QTableWidget):
         vp_width = self.viewport().width()
         if 0 <= line_x <= vp_width:
             line_col_hex = mw.config_mgr.category_colors.get("time_indicator", "#06b6d4")
+            opacity = getattr(mw.config_mgr, "time_line_opacity", 100) / 100.0
+            color = QColor(line_col_hex)
+            color.setAlphaF(color.alphaF() * max(0.05, min(1.0, opacity)))
             painter = QPainter(self.viewport())
-            painter.setPen(QPen(QColor(line_col_hex), 2))
+            painter.setPen(QPen(color, 2))
             painter.drawLine(line_x, 0, line_x, self.viewport().height())
             painter.end()
 
@@ -2059,12 +2578,14 @@ class UpcomingShowDialog(QDialog):
     ACTION_CANCEL = 0
     ACTION_RECORD = 1
     ACTION_TUNE = 2
+    ACTION_CANCEL_RECORDING = 3
 
-    def __init__(self, prog: Dict[str, Any], timing_info: Dict[str, Any], parent=None):
+    def __init__(self, prog: Dict[str, Any], timing_info: Dict[str, Any], is_scheduled: bool = False, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Upcoming Program")
         self.setMinimumWidth(460)
         self.action = self.ACTION_CANCEL
+        self.is_scheduled = is_scheduled
 
         title = prog.get("show_title") or prog.get("title") or "Selected Program"
         ep = prog.get("episode_title")
@@ -2099,18 +2620,25 @@ class UpcomingShowDialog(QDialog):
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(8)
 
-        record_btn = QPushButton("Schedule Recording")
-        record_btn.setStyleSheet("font-weight: bold; background-color: #212635; color: #ffffff; padding: 6px 12px;")
-        record_btn.setDefault(True)
-        record_btn.clicked.connect(self._on_record)
-        btn_layout.addWidget(record_btn)
+        if self.is_scheduled:
+            rec_btn = QPushButton("Cancel Recording")
+            rec_btn.setStyleSheet("font-weight: bold; background-color: #7f1d1d; color: #fca5a5; padding: 6px 12px; border: 1px solid #ef4444;")
+            rec_btn.setDefault(True)
+            rec_btn.clicked.connect(self._on_cancel_recording)
+            btn_layout.addWidget(rec_btn)
+        else:
+            rec_btn = QPushButton("Schedule Recording")
+            rec_btn.setStyleSheet("font-weight: bold; background-color: #212635; color: #ffffff; padding: 6px 12px;")
+            rec_btn.setDefault(True)
+            rec_btn.clicked.connect(self._on_record)
+            btn_layout.addWidget(rec_btn)
 
-        tune_btn = QPushButton("Tune Channel Now")
+        tune_btn = QPushButton("Watch Channel")
         tune_btn.setStyleSheet("padding: 6px 12px;")
         tune_btn.clicked.connect(self._on_tune)
         btn_layout.addWidget(tune_btn)
 
-        cancel_btn = QPushButton("Cancel")
+        cancel_btn = QPushButton("Close" if self.is_scheduled else "Cancel")
         cancel_btn.clicked.connect(self.reject)
         btn_layout.addWidget(cancel_btn)
 
@@ -2118,6 +2646,10 @@ class UpcomingShowDialog(QDialog):
 
     def _on_record(self):
         self.action = self.ACTION_RECORD
+        self.accept()
+
+    def _on_cancel_recording(self):
+        self.action = self.ACTION_CANCEL_RECORDING
         self.accept()
 
     def _on_tune(self):
@@ -2418,8 +2950,34 @@ QLineEdit, QTextEdit, QSpinBox, QComboBox {{
     color: {tokens["text_primary"]};
     padding: 5px 8px;
 }}
+QLineEdit:hover, QSpinBox:hover, QComboBox:hover {{
+    border-color: {tokens["border_light"]};
+}}
 QLineEdit:focus, QTextEdit:focus, QSpinBox:focus, QComboBox:focus {{
     border-color: {tokens["accent_primary"]};
+}}
+QComboBox::drop-down {{
+    border: none;
+    background: transparent;
+    width: 22px;
+}}
+QComboBox QAbstractItemView {{
+    background-color: {tokens["menu_bg"]};
+    border: 1px solid {tokens["border_color"]};
+    color: {tokens["text_primary"]};
+    selection-background-color: {tokens["menu_item_selected"]};
+    selection-color: #ffffff;
+    outline: none;
+    padding: 3px;
+    border-radius: 4px;
+}}
+QComboBox QAbstractItemView::item {{
+    min-height: 22px;
+    padding: 2px 8px;
+    border-radius: 3px;
+}}
+QComboBox QAbstractItemView::item:hover {{
+    background-color: {tokens["bg_button_hover"]};
 }}
 
 /* Buttons */
@@ -2746,8 +3304,8 @@ QWidget#centralWidget[frameless_rounded="true"] {{
     border: 1px solid {tokens["border_color"]};
     border-top-left-radius: 9px;
     border-top-right-radius: 9px;
-    border-bottom-left-radius: 0px;
-    border-bottom-right-radius: 0px;
+    border-bottom-left-radius: 9px;
+    border-bottom-right-radius: 9px;
 }}
 
 QWidget#customTitleBar {{
@@ -2761,9 +3319,16 @@ QWidget#customTitleBar[frameless_rounded="true"] {{
     border-top-right-radius: 8px;
 }}
 
-QStatusBar[frameless_rounded="true"] {{
-    border-bottom-left-radius: 0px;
-    border-bottom-right-radius: 0px;
+QStatusBar {{
+    background: transparent;
+    min-height: 0px;
+    max-height: 0px;
+    border: none;
+    margin: 0px;
+    padding: 0px;
+}}
+QStatusBar::item {{
+    border: none;
 }}
 
 QLabel#customTitleBarTitle {{
@@ -2811,6 +3376,150 @@ QSizeGrip#cornerResizeGrip {{
     background-color: transparent;
     margin: 0px 2px 2px 0px;
 }}
+
+/* Day Navigation Bar Arrows */
+QWidget#dayNavBar QPushButton#dayNavPrevBtn, QWidget#dayNavBar QPushButton#dayNavNextBtn {{
+    background-color: {tokens["bg_button"]};
+    border: 1px solid {tokens["border_color"]};
+    border-radius: 4px;
+}}
+QWidget#dayNavBar QPushButton#dayNavPrevBtn:hover, QWidget#dayNavBar QPushButton#dayNavNextBtn:hover {{
+    background-color: {tokens["bg_button_hover"]};
+    border: 1px solid {tokens["border_light"]};
+}}
+QWidget#dayNavBar QPushButton#dayNavPrevBtn:pressed, QWidget#dayNavBar QPushButton#dayNavNextBtn:pressed {{
+    background-color: {tokens["bg_button_pressed"]};
+}}
+QWidget#dayNavBar QPushButton#dayNavPrevBtn:disabled, QWidget#dayNavBar QPushButton#dayNavNextBtn:disabled {{
+    background-color: {tokens["bg_window"]};
+    border: 1px solid {tokens["border_color"]};
+}}
+
+/* Guide Detail Text Box & Collapse Button */
+QTextEdit#guideDetailText {{
+    background-color: {tokens["bg_input"]};
+    border: 1px solid {tokens["border_color"]};
+    border-radius: 4px;
+    color: {tokens["text_primary"]};
+}}
+QTextEdit#guideDetailText:focus {{
+    border-color: {tokens["accent_primary"]};
+}}
+QPushButton#guideDetailCollapseBtn {{
+    background-color: {tokens["bg_button"]};
+    border: 1px solid {tokens["border_color"]};
+    border-radius: 4px;
+    color: {tokens["text_secondary"]};
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 500;
+}}
+QPushButton#guideDetailCollapseBtn:hover {{
+    background-color: {tokens["bg_button_hover"]};
+    border-color: {tokens["border_light"]};
+    color: #ffffff;
+}}
+QPushButton#guideDetailCollapseBtn:pressed {{
+    background-color: {tokens["bg_button_pressed"]};
+}}
+
+/* Custom Theme Action Icon Buttons */
+QPushButton#saveThemePresetBtn, QPushButton#deleteThemePresetBtn, QPushButton#resetCatColorsBtn {{
+    background-color: {tokens["bg_button"]};
+    border: 1px solid {tokens["border_color"]};
+    border-radius: 4px;
+    padding: 2px;
+}}
+QPushButton#saveThemePresetBtn:hover, QPushButton#deleteThemePresetBtn:hover, QPushButton#resetCatColorsBtn:hover {{
+    background-color: {tokens["bg_button_hover"]};
+    border-color: {tokens["border_light"]};
+}}
+QPushButton#saveThemePresetBtn:pressed, QPushButton#deleteThemePresetBtn:pressed, QPushButton#resetCatColorsBtn:pressed {{
+    background-color: {tokens["bg_button_pressed"]};
+}}
+QPushButton#deleteThemePresetBtn:disabled {{
+    background-color: {tokens["bg_window"]};
+    border-color: {tokens["border_color"]};
+}}
+
+/* Guide View Mode Toggle Buttons (Grid View vs List View) */
+QPushButton#guideGridViewBtn, QPushButton#guideListViewBtn {{
+    padding: 4px 12px;
+    font-weight: bold;
+    font-size: 11px;
+    border: 1px solid {tokens["border_color"]};
+    border-radius: 4px;
+    background-color: {tokens["bg_button"]};
+    color: {tokens["text_secondary"]};
+}}
+QPushButton#guideGridViewBtn:hover:!checked, QPushButton#guideListViewBtn:hover:!checked {{
+    background-color: {tokens["bg_button_hover"]};
+    border-color: {tokens["border_light"]};
+    color: #ffffff;
+}}
+QPushButton#guideGridViewBtn:checked, QPushButton#guideListViewBtn:checked {{
+    background-color: {tokens["accent_pressed"]};
+    border: 1.5px solid {tokens["accent_hover"]};
+    color: #ffffff;
+}}
+QPushButton#guideGridViewBtn:checked:hover, QPushButton#guideListViewBtn:checked:hover {{
+    background-color: {tokens["accent_primary"]};
+    border: 1.5px solid {tokens["accent_hover"]};
+    color: #ffffff;
+}}
+
+/* Guide Filter Bar Utility Icon Buttons (Restore Dimensions & Maximize Guide) */
+QPushButton#headerRestoreBtn, QPushButton#guideMaximizeBtn {{
+    min-width: 28px;
+    max-width: 28px;
+    min-height: 24px;
+    max-height: 24px;
+    padding: 1px;
+    border: 1px solid {tokens["border_color"]};
+    border-radius: 4px;
+    background-color: {tokens["bg_button"]};
+}}
+QPushButton#headerRestoreBtn:hover, QPushButton#guideMaximizeBtn:hover {{
+    background-color: {tokens["bg_button_hover"]};
+    border-color: {tokens["accent_hover"]};
+}}
+QPushButton#headerRestoreBtn:pressed, QPushButton#guideMaximizeBtn:pressed {{
+    background-color: {tokens["bg_button_pressed"]};
+}}
+
+/* Guide Filter Bar Inputs & Labels */
+QLabel#guideFilterLabel {{
+    color: {tokens["text_secondary"]};
+    font-weight: 600;
+    font-size: 11px;
+    padding-right: 2px;
+}}
+QComboBox#guideDateCombo, QComboBox#guideChannelCombo, QLineEdit#guideSearchInput {{
+    background-color: {tokens["bg_button"]};
+    border: 1px solid {tokens["border_light"]};
+    border-radius: 4px;
+    color: {tokens["text_primary"]};
+    padding: 3px 8px;
+    min-height: 20px;
+    max-height: 20px;
+    font-size: 12px;
+}}
+QComboBox#guideDateCombo:hover, QComboBox#guideChannelCombo:hover, QLineEdit#guideSearchInput:hover {{
+    background-color: {tokens["bg_button_hover"]};
+    border-color: {tokens["accent_hover"]};
+}}
+QComboBox#guideDateCombo:focus, QComboBox#guideChannelCombo:focus, QLineEdit#guideSearchInput:focus {{
+    background-color: {tokens["bg_button_hover"]};
+    border-color: {tokens["accent_primary"]};
+}}
+QLineEdit#guideSearchInput::placeholder {{
+    color: {tokens["text_secondary"]};
+}}
+QLineEdit#guideSearchInput > QToolButton {{
+    border: none;
+    background: transparent;
+    color: {tokens["text_secondary"]};
+}}
 """
 
 APP_STYLESHEET = build_app_stylesheet("midnight", "")
@@ -2850,6 +3559,7 @@ def setup_dark_theme(app: Optional[QApplication], theme_key: str = "midnight"):
     palette.setColor(QPalette.ColorRole.Link, QColor(tokens["accent_primary"]))
     palette.setColor(QPalette.ColorRole.Highlight, QColor(tokens["accent_primary"]))
     palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#ffffff"))
+    palette.setColor(QPalette.ColorRole.PlaceholderText, QColor(tokens["text_secondary"]))
     palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText, QColor(tokens["text_secondary"]))
     palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, QColor(tokens["text_secondary"]))
     palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, QColor(tokens["text_secondary"]))
@@ -2869,17 +3579,8 @@ class CustomTitleBar(QWidget):
         self._drag_pos: Optional[QPoint] = None
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(10, 0, 4, 0)
+        layout.setContentsMargins(12, 0, 4, 0)
         layout.setSpacing(6)
-
-        # App Icon
-        self.icon_lbl = QLabel()
-        self.icon_lbl.setFixedSize(18, 18)
-        self.icon_lbl.setScaledContents(True)
-        app_ic = get_app_icon()
-        if not app_ic.isNull():
-            self.icon_lbl.setPixmap(app_ic.pixmap(18, 18))
-        layout.addWidget(self.icon_lbl, 0, Qt.AlignmentFlag.AlignVCenter)
 
         # Title Label
         self.title_lbl = QLabel("Kaffeine DVR & TV Guide")
@@ -2963,6 +3664,20 @@ class CustomTitleBar(QWidget):
             event.accept()
         else:
             super().mouseDoubleClickEvent(event)
+
+
+class SilentStatusBar(QStatusBar):
+    """Hidden dummy status bar that absorbs all showMessage calls without allocating window space."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setVisible(False)
+        self.hide()
+
+    def showMessage(self, text, timeout=0):
+        pass  # Absorb text so nothing is displayed at the bottom of the window
+
+    def setVisible(self, visible):
+        super().setVisible(False)
 
 
 class CornerResizeGrip(QSizeGrip):
@@ -3176,16 +3891,9 @@ class MainWindow(QMainWindow):
         self._update_clock_display()
         main_layout.addWidget(self.tabs)
 
-        # Status Bar (kept hidden when empty to avoid an unnecessary bottom strip)
-        self.status_bar = QStatusBar()
-        self.status_bar.setSizeGripEnabled(False)
-        self.status_bar.hide()
-        self.setStatusBar(self.status_bar)
-
-        # Show status bar only when active messages are displayed
-        self.status_bar.messageChanged.connect(
-            lambda msg: self.status_bar.setVisible(bool(msg))
-        )
+        # Hidden status handler that absorbs status messages without allocating window layout space
+        self.status_bar = SilentStatusBar(self)
+        self.setStatusBar(None)
 
         # Bottom-right corner resize grip indicator
         self.corner_grip = CornerResizeGrip(self)
@@ -3196,6 +3904,9 @@ class MainWindow(QMainWindow):
         self._resize_filter = FramelessResizeFilter(self)
 
         self._update_window_frame_styling()
+
+        if getattr(self.config_mgr, "guide_maximized", False):
+            self.toggle_guide_maximized()
 
     def _create_clock_widget(self) -> QWidget:
         clock_frame = QFrame()
@@ -3389,22 +4100,13 @@ class MainWindow(QMainWindow):
         # View Mode Toggle: Grid View vs List View
         self.guide_view_group = QButtonGroup(self)
         self.grid_view_btn = QPushButton("Grid View")
+        self.grid_view_btn.setObjectName("guideGridViewBtn")
         self.grid_view_btn.setCheckable(True)
         self.list_view_btn = QPushButton("List View")
+        self.list_view_btn.setObjectName("guideListViewBtn")
         self.list_view_btn.setCheckable(True)
         self.guide_view_group.addButton(self.grid_view_btn, 0)
         self.guide_view_group.addButton(self.list_view_btn, 1)
-
-        # Style toggle buttons (subtle outline unselected, calmed/less bright green when selected)
-        btn_style = (
-            "QPushButton { padding: 4px 12px; font-weight: bold; font-size: 11px; "
-            "border: 1px solid #3d465c; border-radius: 4px; background-color: #212635; color: #a4b0c2; }"
-            "QPushButton:hover:!checked { background-color: #313d56; border: 1px solid #5a80b8; color: #ffffff; }"
-            "QPushButton:checked { background-color: #1e2e1f; border: 1.5px solid #3e7e3d; color: #ffffff; }"
-            "QPushButton:checked:hover { background-color: #243725; border: 1.5px solid #478e45; color: #ffffff; }"
-        )
-        self.grid_view_btn.setStyleSheet(btn_style)
-        self.list_view_btn.setStyleSheet(btn_style)
 
         # Default to Grid View
         saved_view = self.settings.value("guide_view_mode", "grid")
@@ -3421,8 +4123,11 @@ class MainWindow(QMainWindow):
         filter_bar.addSpacing(14)
 
         # Date & Channel Dropdowns immediately to the right of List View
-        filter_bar.addWidget(QLabel("Date:"))
-        self.guide_date_combo = QComboBox()
+        self.date_label = QLabel("Date:")
+        self.date_label.setObjectName("guideFilterLabel")
+        filter_bar.addWidget(self.date_label)
+        self.guide_date_combo = ThemedComboBox()
+        self.guide_date_combo.setObjectName("guideDateCombo")
         self.guide_date_combo.addItem("All Upcoming", None)
         today = date.today()
         for i in range(14):
@@ -3434,112 +4139,76 @@ class MainWindow(QMainWindow):
         filter_bar.addWidget(self.guide_date_combo)
         filter_bar.addSpacing(6)
 
-        filter_bar.addWidget(QLabel("Channel:"))
-        self.guide_channel_combo = QComboBox()
+        self.channel_label = QLabel("Channel:")
+        self.channel_label.setObjectName("guideFilterLabel")
+        filter_bar.addWidget(self.channel_label)
+        self.guide_channel_combo = ThemedComboBox()
+        self.guide_channel_combo.setObjectName("guideChannelCombo")
         self.guide_channel_combo.addItem("All")
         channels = self.config_mgr.get_ordered_channels()
         self.guide_channel_combo.addItems(channels)
         self.guide_channel_combo.currentIndexChanged.connect(self.filter_guide)
         filter_bar.addWidget(self.guide_channel_combo)
 
-        # Dynamic stretch before Jump and Prime Time buttons
+        # Center Time Jump Controls with symmetrical stretches
         filter_bar.addStretch(1)
 
-        # Quick Time Jump Controls centrally between Channel dropdown and Search box
-        jump_btn_style = (
-            "QPushButton { padding: 4px 10px; font-size: 11px; font-weight: 500; "
-            "border: 1px solid #3d465c; border-radius: 4px; background-color: #212635; color: #c8d2df; }"
-            "QPushButton:hover { background-color: #313d56; border: 1px solid #5a80b8; color: #ffffff; }"
-            "QPushButton:pressed { background-color: #1a1e2b; border: 1px solid #353d50; }"
-        )
         self.jump_now_btn = QPushButton("Jump to Now")
-        self.jump_now_btn.setStyleSheet(jump_btn_style)
+        self.jump_now_btn.setObjectName("guideJumpNowBtn")
         self.jump_now_btn.clicked.connect(self.jump_guide_to_now)
         filter_bar.addWidget(self.jump_now_btn)
 
         self.jump_prime_btn = QPushButton("Prime Time (7 PM)")
-        self.jump_prime_btn.setStyleSheet(jump_btn_style)
+        self.jump_prime_btn.setObjectName("guideJumpPrimeBtn")
         self.jump_prime_btn.clicked.connect(self.jump_guide_to_primetime)
         filter_bar.addWidget(self.jump_prime_btn)
 
-        self.guide_refresh_btn = QPushButton()
-        self.guide_refresh_btn.setIcon(self._create_guide_refresh_icon())
-        self.guide_refresh_btn.setIconSize(QSize(16, 16))
-        self.guide_refresh_btn.setToolTip("Refresh Guide & Recording Statuses")
-        self.guide_refresh_btn.setStyleSheet(
-            "QPushButton { min-width: 28px; max-width: 28px; min-height: 24px; max-height: 24px; "
-            "padding: 0px; border: 1px solid #3d465c; border-radius: 4px; background-color: #212635; }"
-            "QPushButton:hover { background-color: #313d56; border: 1px solid #5a80b8; }"
-            "QPushButton:pressed { background-color: #1a1e2b; border: 1px solid #353d50; }"
-        )
-        self.guide_refresh_btn.clicked.connect(self.filter_guide)
-        filter_bar.addWidget(self.guide_refresh_btn)
-
-        # Dynamic stretch before Zoom (+ / -) controls to center between Prime Time and Search
         filter_bar.addStretch(1)
 
         # Guide Font / Box Size Zoom (+ / -) Controls
-        zoom_btn_style = (
-            "QPushButton { min-width: 28px; max-width: 28px; min-height: 24px; max-height: 24px; "
-            "padding: 0px; font-size: 14px; font-weight: bold; "
-            "border: 1px solid #3d465c; border-radius: 4px; background-color: #212635; color: #c8d2df; }"
-            "QPushButton:hover { background-color: #313d56; border: 1px solid #5a80b8; color: #ffffff; }"
-            "QPushButton:pressed { background-color: #1a1e2b; border: 1px solid #353d50; }"
-        )
         self.zoom_out_btn = QPushButton("-")
+        self.zoom_out_btn.setObjectName("guideZoomOutBtn")
         self.zoom_out_btn.setToolTip("Decrease guide font and box size")
-        self.zoom_out_btn.setStyleSheet(zoom_btn_style)
         self.zoom_out_btn.clicked.connect(self.zoom_out_guide)
         filter_bar.addWidget(self.zoom_out_btn)
 
         self.zoom_in_btn = QPushButton("+")
+        self.zoom_in_btn.setObjectName("guideZoomInBtn")
         self.zoom_in_btn.setToolTip("Increase guide font and box size")
-        self.zoom_in_btn.setStyleSheet(zoom_btn_style)
         self.zoom_in_btn.clicked.connect(self.zoom_in_guide)
         filter_bar.addWidget(self.zoom_in_btn)
 
-        # Dynamic stretch after Zoom controls to maintain centering
-        filter_bar.addStretch(1)
-
         # Search box anchored to the far right
-        filter_bar.addWidget(QLabel("Search:"))
+        self.search_label = QLabel("Search:")
+        self.search_label.setObjectName("guideFilterLabel")
+        filter_bar.addWidget(self.search_label)
         self.guide_search_input = QLineEdit()
+        self.guide_search_input.setObjectName("guideSearchInput")
         self.guide_search_input.setPlaceholderText("Filter shows...")
         self.guide_search_input.setClearButtonEnabled(True)
         self.guide_search_input.setFixedWidth(160)
         self.guide_search_input.textChanged.connect(self.filter_guide)
         filter_bar.addWidget(self.guide_search_input)
 
-        # Button styles with color-coded hover highlights matching their icons
-        restore_btn_style = (
-            "QPushButton { min-width: 28px; max-width: 28px; min-height: 24px; max-height: 24px; padding: 1px; "
-            "border: 1px solid #3d465c; border-radius: 4px; background-color: #212635; color: #4fc3f7; }"
-            "QPushButton:hover { background-color: #1e2c3a; border: 1px solid #4fc3f7; color: #ffffff; }"
-            "QPushButton:pressed { background-color: #15202b; border: 1px solid #3882a5; }"
-        )
-        maximize_btn_style = (
-            "QPushButton { min-width: 28px; max-width: 28px; min-height: 24px; max-height: 24px; padding: 1px; "
-            "border: 1px solid #3d465c; border-radius: 4px; background-color: #212635; color: #66bb6a; }"
-            "QPushButton:hover { background-color: #1e2e22; border: 1px solid #66bb6a; color: #ffffff; }"
-            "QPushButton:pressed { background-color: #142217; border: 1px solid #478e4b; }"
-        )
+        app_theme = getattr(self.config_mgr, "app_theme", "midnight") if hasattr(self, "config_mgr") and self.config_mgr else "midnight"
+        init_tokens = APP_THEMES.get(app_theme, APP_THEMES["midnight"])
 
-        # Restore Saved Window Size Button (Sky Cyan)
+        # Restore Saved Window Size Button
         self.header_restore_btn = QPushButton()
+        self.header_restore_btn.setObjectName("headerRestoreBtn")
         self.header_restore_btn.setToolTip("Restore saved window dimensions (also accessible in Settings)")
-        self.header_restore_btn.setIcon(self._create_restore_window_icon())
+        self.header_restore_btn.setIcon(self._create_restore_window_icon(init_tokens.get("accent_hover")))
         self.header_restore_btn.setIconSize(QSize(19, 19))
-        self.header_restore_btn.setStyleSheet(restore_btn_style)
         self.header_restore_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.header_restore_btn.clicked.connect(self.restore_saved_window_size)
         filter_bar.addWidget(self.header_restore_btn)
 
-        # Maximize / Expand TV Guide Button (Emerald Green)
+        # Maximize / Expand TV Guide Button
         self.guide_maximize_btn = QPushButton()
+        self.guide_maximize_btn.setObjectName("guideMaximizeBtn")
         self.guide_maximize_btn.setToolTip("Maximize guide to fill window")
-        self.guide_maximize_btn.setIcon(self._create_guide_maximize_icon())
+        self.guide_maximize_btn.setIcon(self._create_guide_maximize_icon(init_tokens.get("accent_primary")))
         self.guide_maximize_btn.setIconSize(QSize(19, 19))
-        self.guide_maximize_btn.setStyleSheet(maximize_btn_style)
         self.guide_maximize_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.guide_maximize_btn.clicked.connect(self.toggle_guide_maximized)
         filter_bar.addWidget(self.guide_maximize_btn)
@@ -3554,11 +4223,17 @@ class MainWindow(QMainWindow):
         self.guide_grid_table.setObjectName("guideGridTable")
         self.guide_grid_header = GuideGridHeader(Qt.Orientation.Horizontal, self.guide_grid_table, main_window=self)
         self.guide_grid_table.setHorizontalHeader(self.guide_grid_header)
-        self.guide_grid_table.setColumnCount(48)
+        self.guide_grid_table.setColumnCount(56)
         grid_headers = []
         for h in range(24):
             for m in (0, 30):
                 grid_headers.append(f"{h%12 or 12}:{m:02d} {'AM' if h < 12 else 'PM'}")
+        for h in range(4):
+            for m in (0, 30):
+                if h == 0 and m == 0:
+                    grid_headers.append("12:00 AM (+1)")
+                else:
+                    grid_headers.append(f"{h%12 or 12}:{m:02d} AM")
         self.guide_grid_table.setHorizontalHeaderLabels(grid_headers)
         self.guide_grid_table.horizontalHeader().setDefaultSectionSize(200)
         self.guide_grid_table.horizontalHeader().setHighlightSections(False)
@@ -3577,6 +4252,7 @@ class MainWindow(QMainWindow):
         self.guide_grid_table.horizontalHeader().viewport().installEventFilter(self.grid_pan_filter)
         self.grid_resize_filter = TableViewportResizeFilter(self._apply_guide_zoom, self)
         self.guide_grid_table.viewport().installEventFilter(self.grid_resize_filter)
+        self.guide_grid_table.horizontalScrollBar().valueChanged.connect(self._on_grid_horizontal_scroll)
         self.guide_grid_table.cellClicked.connect(self.on_grid_cell_clicked)
         self.guide_grid_table.cellDoubleClicked.connect(self.on_grid_cell_double_clicked)
         self.guide_stack.addWidget(self.guide_grid_table)
@@ -3639,23 +4315,47 @@ class MainWindow(QMainWindow):
         detail_layout = QVBoxLayout(detail_widget)
         detail_layout.setContentsMargins(0, 4, 0, 0)
         detail_layout.setSpacing(4)
+
+        # Header row: left spacer, centered title, and compact collapse button on the right
+        detail_header_row = QHBoxLayout()
+        detail_header_row.setContentsMargins(0, 0, 0, 0)
+        detail_header_row.setSpacing(8)
+
+        # Left spacer with same width as the collapse button on the right to guarantee true horizontal centering of title
+        self.guide_detail_left_spacer = QWidget()
+        self.guide_detail_left_spacer.setFixedSize(30, 24)
+        detail_header_row.addWidget(self.guide_detail_left_spacer)
+
         self.guide_detail_title = QLabel("Select a program to view details")
+        self.guide_detail_title.setObjectName("guideDetailTitle")
         self.guide_detail_title.setStyleSheet("font-weight: bold; font-size: 16px;")
         self.guide_detail_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        detail_layout.addWidget(self.guide_detail_title)
+        detail_header_row.addWidget(self.guide_detail_title, 1)
+
+        self.guide_detail_collapse_btn = QPushButton("▼")
+        self.guide_detail_collapse_btn.setObjectName("guideDetailCollapseBtn")
+        self.guide_detail_collapse_btn.setFixedSize(30, 24)
+        self.guide_detail_collapse_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.guide_detail_collapse_btn.setToolTip("Collapse description panel")
+        self.guide_detail_collapse_btn.clicked.connect(self.toggle_guide_detail_collapsed)
+        detail_header_row.addWidget(self.guide_detail_collapse_btn)
+
+        detail_layout.addLayout(detail_header_row)
 
         self.guide_detail_text = QTextEdit()
+        self.guide_detail_text.setObjectName("guideDetailText")
         self.guide_detail_text.setReadOnly(True)
         font = self.guide_detail_text.font()
         font.setPixelSize(16)
         self.guide_detail_text.setFont(font)
         self.guide_detail_text.setStyleSheet("font-size: 16px; line-height: 1.35; padding: 6px 10px;")
         self._update_guide_detail_box_height()
+        self._apply_guide_detail_collapsed_state()
         detail_layout.addWidget(self.guide_detail_text)
 
         action_bar = QHBoxLayout()
 
-        self.record_guide_btn = QPushButton("Record This Program")
+        self.record_guide_btn = QPushButton("Record Program")
         self.record_guide_btn.setStyleSheet("font-weight: bold;")
         self.record_guide_btn.clicked.connect(self.record_selected_guide_item)
         action_bar.addWidget(self.record_guide_btn)
@@ -3666,7 +4366,7 @@ class MainWindow(QMainWindow):
         self.cancel_guide_btn.clicked.connect(self.cancel_selected_guide_recording)
         action_bar.addWidget(self.cancel_guide_btn)
 
-        self.add_rule_guide_btn = QPushButton("Auto-Record This Series")
+        self.add_rule_guide_btn = QPushButton("Record Series")
         self.add_rule_guide_btn.clicked.connect(self.add_rule_from_selected_guide_item)
         action_bar.addWidget(self.add_rule_guide_btn)
 
@@ -3676,11 +4376,9 @@ class MainWindow(QMainWindow):
         self.watch_guide_btn.clicked.connect(self.watch_or_tune_selected_guide_item)
         action_bar.addWidget(self.watch_guide_btn)
 
-        self.alt_watch_guide_btn = QPushButton("Watch in Kaffeine")
-        self.alt_watch_guide_btn.setStyleSheet("padding: 4px 12px;")
-        self.alt_watch_guide_btn.setVisible(False)
-        self.alt_watch_guide_btn.clicked.connect(self.alt_watch_or_tune_selected_guide_item)
-        action_bar.addWidget(self.alt_watch_guide_btn)
+        # Ensure all four primary guide action buttons share identical width
+        for btn in (self.record_guide_btn, self.cancel_guide_btn, self.add_rule_guide_btn, self.watch_guide_btn):
+            btn.setFixedWidth(168)
 
         self.stop_timeshift_btn = QPushButton("Stop Timeshift (Free Tuner)")
         self.stop_timeshift_btn.setStyleSheet("font-weight: bold; background-color: #c62828; color: #ffffff; padding: 4px 12px;")
@@ -4343,23 +5041,64 @@ class MainWindow(QMainWindow):
             self.launch_mode_combo
         )
 
-        # Live TV Playback Mode (Timeshift vs Direct Kaffeine)
+        # Live TV Playback Player
         self.live_tv_mode_combo = QComboBox()
-        self.live_tv_mode_combo.addItem("Timeshift via Video Player (SMPlayer / MPV / VLC)", "timeshift")
-        self.live_tv_mode_combo.addItem("Watch in Kaffeine (Direct Tuner)", "kaffeine")
+        from kaffeine_dvr.dbus_client import (
+            SUPPORTED_PLAYERS,
+            detect_player_installation,
+        )
+
+        cur_live_mode = getattr(self.config_mgr, "live_tv_watch_mode", "smplayer")
+
+        for key, pinfo in SUPPORTED_PLAYERS.items():
+            pname = pinfo["name"]
+            if key == "system":
+                self.live_tv_mode_combo.addItem(pname, key)
+            else:
+                itype = detect_player_installation(key)
+                if itype == "native":
+                    self.live_tv_mode_combo.addItem(f"{pname} (Installed)", key)
+                elif itype == "flatpak":
+                    self.live_tv_mode_combo.addItem(f"{pname} (Flatpak)", key)
+                elif key == cur_live_mode:
+                    self.live_tv_mode_combo.addItem(f"{pname} (Not Detected)", key)
+
+        self.live_tv_mode_combo.addItem("Custom Command...", "custom")
         self.live_tv_mode_combo.setFixedWidth(290)
-        cur_live_mode = getattr(self.config_mgr, "live_tv_watch_mode", "timeshift")
+
         l_idx = self.live_tv_mode_combo.findData(cur_live_mode)
-        self.live_tv_mode_combo.setCurrentIndex(max(l_idx, 0))
+        if l_idx >= 0:
+            self.live_tv_mode_combo.setCurrentIndex(l_idx)
+        else:
+            self.live_tv_mode_combo.setCurrentIndex(0)
+
+        self.custom_live_player_edit = QLineEdit()
+        self.custom_live_player_edit.setPlaceholderText("e.g. mpv --fs {file}")
+        self.custom_live_player_edit.setText(self.config_mgr.custom_live_tv_player_cmd)
+        self.custom_live_player_edit.setFixedWidth(290)
+        self.custom_live_player_edit.setVisible(cur_live_mode == "custom")
+
+        def _on_live_player_combo_changed(idx):
+            mode = self.live_tv_mode_combo.itemData(idx)
+            self.custom_live_player_edit.setVisible(mode == "custom")
+
+        self.live_tv_mode_combo.currentIndexChanged.connect(_on_live_player_combo_changed)
+
+        live_player_container = QWidget()
+        live_player_vbox = QVBoxLayout(live_player_container)
+        live_player_vbox.setContentsMargins(0, 0, 0, 0)
+        live_player_vbox.setSpacing(4)
+        live_player_vbox.addWidget(self.live_tv_mode_combo)
+        live_player_vbox.addWidget(self.custom_live_player_edit)
 
         dvr_layout.addRow(
             make_setting_label(
-                "Live TV Playback Mode:",
-                "Controls how live broadcast TV is played from the Guide:\n"
-                "• Timeshift via Video Player: Records broadcast in background with Kaffeine minimized, buffers for a few seconds, then opens the stream in your selected Recorded Video Player with full pause, rewind, and seek capabilities.\n"
-                "• Watch in Kaffeine: Tunes directly into Kaffeine's live window via D-Bus."
+                "Live TV Playback Player:",
+                "Select which media player opens live broadcasts from the Guide:\n"
+                "• External Player (SMPlayer, MPV, VLC, System Default, etc.): Records broadcast in background with Kaffeine minimized, buffers for a few seconds, then opens the stream in your selected player with full pause, rewind, and seek capabilities.\n"
+                "• Custom Command: Allows running a custom media player command template."
             ),
-            self.live_tv_mode_combo
+            live_player_container
         )
 
         self.timeshift_buffer_spin = NumberStepper()
@@ -4384,29 +5123,6 @@ class MainWindow(QMainWindow):
                 "When checked, temporary buffer files created during live TV timeshifting are automatically deleted upon stopping to avoid consuming disk space. Shows specifically scheduled to record are always preserved."
             ),
             self.delete_timeshift_check
-        )
-
-        self.guide_watch_combo = QComboBox()
-        self.guide_watch_combo.addItem("Minimal Mode (-m clean player)", "minimal")
-        self.guide_watch_combo.addItem("Full Screen (-f fullscreen)", "fullscreen")
-        self.guide_watch_combo.addItem("Normal Window (Full KDE controls)", "normal")
-        self.guide_watch_combo.setFixedWidth(290)
-        cur_watch_mode = self.config_mgr.guide_watch_mode
-        watch_idx = self.guide_watch_combo.findData(cur_watch_mode)
-        if watch_idx >= 0:
-            self.guide_watch_combo.setCurrentIndex(watch_idx)
-        else:
-            self.guide_watch_combo.setCurrentIndex(0)
-        dvr_layout.addRow(
-            make_setting_label(
-                "Kaffeine Live TV Window Mode:",
-                "Controls Kaffeine's window display mode only when tuning live broadcast TV into Kaffeine from the Guide:\n"
-                "• Minimal Mode: Hides Kaffeine toolbars and menus for clean live playback.\n"
-                "• Full Screen: Expands Kaffeine to full screen immediately.\n"
-                "• Normal Window: Opens Kaffeine with standard window controls.\n"
-                "(Does not affect external media players like mpv, SMPlayer, or VLC)."
-            ),
-            self.guide_watch_combo
         )
 
         # Recorded Video Playback Player
@@ -4473,50 +5189,7 @@ class MainWindow(QMainWindow):
 
         left_col.addWidget(dvr_group)
 
-        # Group 2: Window Dimensions
-        win_group = QGroupBox("Application Window Dimensions")
-        win_layout = QVBoxLayout(win_group)
-        win_layout.setContentsMargins(15, 15, 15, 15)
-        win_layout.setSpacing(10)
-
-        self.win_size_lbl = QLabel(self._get_window_size_label_text())
-        self.win_size_lbl.setStyleSheet("color: #a0b2c6; font-size: 13px; font-weight: 500;")
-        win_layout.addWidget(self.win_size_lbl)
-
-        win_size_btn_row = QHBoxLayout()
-        win_size_btn_row.setContentsMargins(0, 0, 0, 0)
-        win_size_btn_row.setSpacing(10)
-
-        self.save_win_size_btn = QPushButton("Save Size")
-        self.save_win_size_btn.setObjectName("primaryActionBtn")
-        self.save_win_size_btn.clicked.connect(self.save_current_window_size)
-        win_size_btn_row.addWidget(self.save_win_size_btn)
-
-        self.restore_win_size_btn = QPushButton("Restore Size")
-        self.restore_win_size_btn.clicked.connect(self.restore_saved_window_size)
-        win_size_btn_row.addWidget(self.restore_win_size_btn)
-
-        self.reset_win_size_btn = QPushButton("Reset Default")
-        self.reset_win_size_btn.clicked.connect(self.reset_window_size_to_default)
-        win_size_btn_row.addWidget(self.reset_win_size_btn)
-        win_size_btn_row.addStretch()
-        win_layout.addLayout(win_size_btn_row)
-
-        self.custom_title_bar_check = QCheckBox("Use Modern Frameless Title Bar (Custom drag, minimize && close)")
-        self.custom_title_bar_check.setStyleSheet("color: #e2e8f0; font-size: 13px; font-weight: 500; margin-top: 4px;")
-        self.custom_title_bar_check.setChecked(getattr(self.config_mgr, "use_custom_title_bar", True))
-        self.custom_title_bar_check.toggled.connect(self._on_custom_title_bar_toggled)
-        win_layout.addWidget(self.custom_title_bar_check)
-
-        left_col.addWidget(win_group)
-        left_col.addStretch()
-        two_col_layout.addLayout(left_col, 46)
-
-        # ------------------ RIGHT COLUMN: Storage & Video Retention ------------------
-        right_col = QVBoxLayout()
-        right_col.setSpacing(15)
-
-        # Storage & Auto-Cleanup Card
+        # Storage & Auto-Cleanup Card (Moved under DVR Scheduling)
         storage_box = QGroupBox("Storage && Video Retention")
         storage_layout = QVBoxLayout(storage_box)
         storage_layout.setContentsMargins(15, 15, 15, 15)
@@ -4592,9 +5265,15 @@ class MainWindow(QMainWindow):
         storage_btn_row.addStretch()
         storage_layout.addLayout(storage_btn_row)
 
-        right_col.addWidget(storage_box)
+        left_col.addWidget(storage_box)
+        left_col.addStretch()
+        two_col_layout.addLayout(left_col, 40)
 
-        # Grid Guide Options Card
+        # ------------------ RIGHT COLUMN: Grid Guide & Themes ------------------
+        right_col = QVBoxLayout()
+        right_col.setSpacing(15)
+
+        # Grid Guide Options Card (Moved to top of right column)
         color_box = QGroupBox("Grid Guide Options")
         color_layout = QVBoxLayout(color_box)
         color_layout.setContentsMargins(15, 15, 15, 15)
@@ -4611,6 +5290,7 @@ class MainWindow(QMainWindow):
             ("news", "News"),
             ("movies", "Movies"),
             ("tvshows", "TV Shows / Series"),
+            ("grid_bg", "Grid Background"),
         ]
 
         cur_colors = self.config_mgr.category_colors
@@ -4721,6 +5401,36 @@ class MainWindow(QMainWindow):
         self.hide_time_line_check.toggled.connect(self._on_hide_time_line_toggled)
         col2_grid.addWidget(self.hide_time_line_check, 3, 2, Qt.AlignmentFlag.AlignVCenter)
 
+        self.time_line_opacity_btn = QPushButton(f"Opacity: {getattr(self.config_mgr, 'time_line_opacity', 100)}%")
+        self.time_line_opacity_btn.setObjectName("timeLineOpacityBtn")
+        self.time_line_opacity_btn.setToolTip("Click to adjust the transparency / opacity of the time line")
+        self.time_line_opacity_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.time_line_opacity_btn.setFixedHeight(24)
+        self.time_line_opacity_btn.setStyleSheet("""
+            QPushButton#timeLineOpacityBtn {
+                background-color: #1e293b;
+                border: 1px solid #3c465d;
+                border-radius: 4px;
+                color: #e2e8f0;
+                font-size: 11px;
+                font-weight: 600;
+                padding: 1px 7px;
+            }
+            QPushButton#timeLineOpacityBtn:hover {
+                background-color: #2e3d55;
+                border-color: #38bdf8;
+                color: #ffffff;
+            }
+            QPushButton#timeLineOpacityBtn:disabled {
+                background-color: #141721;
+                border-color: #232a3b;
+                color: #64748b;
+            }
+        """)
+        self.time_line_opacity_btn.setEnabled(getattr(self.config_mgr, "guide_show_time_indicator", True))
+        self.time_line_opacity_btn.clicked.connect(self._open_time_line_opacity_popup)
+        col2_grid.addWidget(self.time_line_opacity_btn, 3, 3, Qt.AlignmentFlag.AlignVCenter)
+
         # Row 4: Clock Swatch & Disable Toggle
         clock_hex = cur_colors.get("clock", DEFAULT_CATEGORY_COLORS.get("clock", "#38bdf8"))
         swatch_clock = QPushButton()
@@ -4741,7 +5451,7 @@ class MainWindow(QMainWindow):
         self.hide_clock_check.toggled.connect(self._on_hide_clock_toggled)
         col2_grid.addWidget(self.hide_clock_check, 4, 2, Qt.AlignmentFlag.AlignVCenter)
 
-        col2_grid.setColumnStretch(3, 1)
+        col2_grid.setColumnStretch(4, 1)
         cols_row.addLayout(col2_grid, 1)
 
         # Sub-Column 3: Guide & Detail Sizing
@@ -4757,7 +5467,7 @@ class MainWindow(QMainWindow):
         self.grid_rows_spin.setRange(4, 16)
         self.grid_rows_spin.setValue(self.config_mgr.grid_visible_rows)
         self.grid_rows_spin.setSuffix(" rows")
-        self.grid_rows_spin.setFixedWidth(105)
+        self.grid_rows_spin.setFixedWidth(120)
         self.grid_rows_spin.valueChanged.connect(self._on_grid_rows_changed)
         col3_grid.addWidget(self.grid_rows_spin, 0, 1, Qt.AlignmentFlag.AlignVCenter)
 
@@ -4768,7 +5478,7 @@ class MainWindow(QMainWindow):
         self.guide_desc_lines_combo = CenteredComboBox()
         self.guide_desc_lines_combo.addItem("2 Lines", 2)
         self.guide_desc_lines_combo.addItem("3 Lines", 3)
-        self.guide_desc_lines_combo.setFixedWidth(105)
+        self.guide_desc_lines_combo.setFixedWidth(120)
         cur_desc_lines = getattr(self.config_mgr, "guide_detail_lines", 3)
         d_idx = self.guide_desc_lines_combo.findData(cur_desc_lines)
         self.guide_desc_lines_combo.setCurrentIndex(d_idx if d_idx >= 0 else 1)
@@ -4789,7 +5499,7 @@ class MainWindow(QMainWindow):
         self.guide_auto_advance_spin.setValue(getattr(self.config_mgr, "guide_auto_advance_minute", 50))
         self.guide_auto_advance_spin.setPrefix(":")
         self.guide_auto_advance_spin.setSuffix(" min")
-        self.guide_auto_advance_spin.setFixedWidth(105)
+        self.guide_auto_advance_spin.setFixedWidth(120)
         self.guide_auto_advance_spin.valueChanged.connect(self._on_guide_auto_advance_min_changed)
         auto_adv_layout.addWidget(self.guide_auto_advance_spin)
 
@@ -4817,43 +5527,193 @@ class MainWindow(QMainWindow):
         self.clock_size_spin.setRange(8, 24)
         self.clock_size_spin.setValue(getattr(self.config_mgr, "clock_font_size", 11))
         self.clock_size_spin.setSuffix(" pt")
-        self.clock_size_spin.setFixedWidth(105)
+        self.clock_size_spin.setFixedWidth(120)
         self.clock_size_spin.valueChanged.connect(self._on_clock_size_changed)
+        self.clock_size_spin.setEnabled(getattr(self.config_mgr, "show_clock", True))
         col3_grid.addWidget(self.clock_size_spin, 3, 1, Qt.AlignmentFlag.AlignVCenter)
+
         col3_grid.setColumnStretch(1, 1)
         cols_row.addLayout(col3_grid, 1)
 
         color_layout.addLayout(cols_row)
-
-        app_theme_row = QHBoxLayout()
-        app_theme_row.setSpacing(10)
-        lbl_app_theme = QLabel("<b>App Theme:</b>")
-        lbl_app_theme.setStyleSheet("font-size: 13px; color: #e2e8f0;")
-        lbl_app_theme.setFixedWidth(85)
-        app_theme_row.addWidget(lbl_app_theme)
-
-        self.app_theme_combo = CenteredComboBox()
-        for t_key, t_info in APP_THEMES.items():
-            self.app_theme_combo.addItem(t_info["name"], t_key)
-        self.app_theme_combo.setFixedWidth(200)
-
-        cur_app_theme = getattr(self.config_mgr, "app_theme", "midnight")
-        a_idx = self.app_theme_combo.findData(cur_app_theme)
-        self.app_theme_combo.setCurrentIndex(max(a_idx, 0))
-        self.app_theme_combo.currentIndexChanged.connect(self._on_app_theme_changed)
-        app_theme_row.addWidget(self.app_theme_combo)
-
-        app_theme_row.addSpacing(10)
-        self.reset_cat_colors_btn = QPushButton("Reset Color Defaults")
-        self.reset_cat_colors_btn.clicked.connect(self._reset_category_colors)
-        app_theme_row.addWidget(self.reset_cat_colors_btn)
-
-        app_theme_row.addStretch()
-        color_layout.addLayout(app_theme_row)
-
         right_col.addWidget(color_box)
+
+        # ------------------ Guide Grid Themes Card (Below Grid Guide Options) ------------------
+        guide_theme_box = QGroupBox("Guide Grid Themes")
+        guide_theme_layout = QVBoxLayout(guide_theme_box)
+        guide_theme_layout.setContentsMargins(15, 15, 15, 15)
+        guide_theme_layout.setSpacing(10)
+
+        # Hidden combobox to preserve backward compatibility and signals
+        self.theme_preset_combo = CenteredComboBox()
+        self.theme_preset_combo.setVisible(False)
+        self.theme_preset_combo.currentIndexChanged.connect(self._on_theme_preset_changed)
+
+        # Guide Grid Themes and Custom Themes side-by-side
+        guide_themes_row = QHBoxLayout()
+        guide_themes_row.setSpacing(18)
+
+        # Left: Preset Themes
+        left_guide_layout = QVBoxLayout()
+        left_guide_layout.setSpacing(6)
+        hdr_guide_row = QHBoxLayout()
+        lbl_guide_theme = QLabel("<b>Guide Grid Theme</b>")
+        lbl_guide_theme.setStyleSheet("font-size: 13px; color: #e2e8f0;")
+        hdr_guide_row.addWidget(lbl_guide_theme)
+        lbl_guide_hint = QLabel("(TV Guide tiles, category colors, timeline & clock)")
+        lbl_guide_hint.setStyleSheet("font-size: 11px; color: #94a3b8;")
+        hdr_guide_row.addWidget(lbl_guide_hint)
+        hdr_guide_row.addStretch()
+        left_guide_layout.addLayout(hdr_guide_row)
+
+        self._guide_theme_chips: Dict[str, ThemeChip] = {}
+        self.guide_theme_grid = QGridLayout()
+        self.guide_theme_grid.setHorizontalSpacing(8)
+        self.guide_theme_grid.setVerticalSpacing(6)
+        left_grid_wrap = QHBoxLayout()
+        left_grid_wrap.setContentsMargins(0, 0, 0, 0)
+        left_grid_wrap.addLayout(self.guide_theme_grid)
+        left_grid_wrap.addStretch()
+        left_guide_layout.addLayout(left_grid_wrap)
+        left_guide_layout.addStretch()
+        guide_themes_row.addLayout(left_guide_layout, 0)
+
+        # Right: Custom Themes (next to the grid guide themes)
+        right_custom_layout = QVBoxLayout()
+        right_custom_layout.setSpacing(6)
+        hdr_custom_row = QHBoxLayout()
+        hdr_custom_row.setContentsMargins(0, 0, 0, 0)
+        hdr_custom_row.setSpacing(6)
+        lbl_custom = QLabel("<b>Custom Grid Themes</b>")
+        lbl_custom.setStyleSheet("font-size: 13px; color: #e2e8f0;")
+        hdr_custom_row.addWidget(lbl_custom)
+        hdr_custom_row.addSpacing(4)
+
+        btn_size = QSize(26, 24)
+        icon_size = QSize(16, 16)
+
+        self.save_theme_preset_btn = QPushButton()
+        self.save_theme_preset_btn.setObjectName("saveThemePresetBtn")
+        self.save_theme_preset_btn.setFixedSize(btn_size)
+        self.save_theme_preset_btn.setIcon(self._create_save_theme_icon())
+        self.save_theme_preset_btn.setIconSize(icon_size)
+        self.save_theme_preset_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.save_theme_preset_btn.setToolTip("Save Theme As... (Save current guide grid colors as a new preset)")
+        self.save_theme_preset_btn.clicked.connect(self._save_current_theme_preset)
+        hdr_custom_row.addWidget(self.save_theme_preset_btn)
+
+        self.delete_theme_preset_btn = QPushButton()
+        self.delete_theme_preset_btn.setObjectName("deleteThemePresetBtn")
+        self.delete_theme_preset_btn.setFixedSize(btn_size)
+        self.delete_theme_preset_btn.setIcon(self._create_delete_theme_icon())
+        self.delete_theme_preset_btn.setIconSize(icon_size)
+        self.delete_theme_preset_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.delete_theme_preset_btn.setToolTip("Delete Theme (Delete selected custom theme preset)")
+        self.delete_theme_preset_btn.clicked.connect(self._delete_current_theme_preset)
+        hdr_custom_row.addWidget(self.delete_theme_preset_btn)
+
+        self.reset_cat_colors_btn = QPushButton()
+        self.reset_cat_colors_btn.setObjectName("resetCatColorsBtn")
+        self.reset_cat_colors_btn.setFixedSize(btn_size)
+        self.reset_cat_colors_btn.setIcon(self._create_defaults_theme_icon())
+        self.reset_cat_colors_btn.setIconSize(icon_size)
+        self.reset_cat_colors_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.reset_cat_colors_btn.setToolTip("Defaults (Reset guide grid colors to factory defaults)")
+        self.reset_cat_colors_btn.clicked.connect(self._reset_category_colors)
+        hdr_custom_row.addWidget(self.reset_cat_colors_btn)
+        hdr_custom_row.addStretch()
+
+        right_custom_layout.addLayout(hdr_custom_row)
+
+        self.guide_custom_grid = QGridLayout()
+        self.guide_custom_grid.setHorizontalSpacing(8)
+        self.guide_custom_grid.setVerticalSpacing(6)
+        right_grid_wrap = QHBoxLayout()
+        right_grid_wrap.setContentsMargins(0, 0, 0, 0)
+        right_grid_wrap.addLayout(self.guide_custom_grid)
+        right_grid_wrap.addStretch()
+        right_custom_layout.addLayout(right_grid_wrap)
+        right_custom_layout.addStretch()
+        guide_themes_row.addLayout(right_custom_layout, 1)
+
+        self._populate_theme_preset_combo()
+
+        guide_theme_layout.addLayout(guide_themes_row)
+
+        right_col.addWidget(guide_theme_box)
+
+        # ------------------ Themes & Styling Card (Below Guide Grid Themes) ------------------
+        theme_box = QGroupBox("Themes && Styling")
+        theme_layout = QVBoxLayout(theme_box)
+        theme_layout.setContentsMargins(15, 15, 15, 15)
+        theme_layout.setSpacing(10)
+
+        # Hidden combobox to preserve backward compatibility and signals
+        self.app_theme_combo = CenteredComboBox()
+        self.app_theme_combo.setVisible(False)
+
+        # Section: Application Theme Chips
+        app_header_row = QHBoxLayout()
+        lbl_app_theme = QLabel("<b>Application Theme</b>")
+        lbl_app_theme.setStyleSheet("font-size: 13px; color: #e2e8f0;")
+        app_header_row.addWidget(lbl_app_theme)
+        lbl_app_hint = QLabel("(Window, tables, dialogs, buttons & menus)")
+        lbl_app_hint.setStyleSheet("font-size: 11px; color: #94a3b8;")
+        app_header_row.addWidget(lbl_app_hint)
+        app_header_row.addStretch()
+        theme_layout.addLayout(app_header_row)
+
+        self._app_theme_chips: Dict[str, ThemeChip] = {}
+        self.app_theme_grid = QGridLayout()
+        self.app_theme_grid.setHorizontalSpacing(8)
+        self.app_theme_grid.setVerticalSpacing(6)
+        self._build_app_theme_chips()
+        app_grid_wrap = QHBoxLayout()
+        app_grid_wrap.setContentsMargins(0, 0, 0, 0)
+        app_grid_wrap.addLayout(self.app_theme_grid)
+        app_grid_wrap.addStretch()
+        theme_layout.addLayout(app_grid_wrap)
+
+        right_col.addWidget(theme_box)
+
+        # Application Window Dimensions (Under Themes & Styling)
+        win_group = QGroupBox("Application Window Dimensions")
+        win_layout = QVBoxLayout(win_group)
+        win_layout.setContentsMargins(15, 15, 15, 15)
+        win_layout.setSpacing(10)
+
+        self.win_size_lbl = QLabel(self._get_window_size_label_text())
+        self.win_size_lbl.setStyleSheet("color: #a0b2c6; font-size: 13px; font-weight: 500;")
+        win_layout.addWidget(self.win_size_lbl)
+
+        win_size_btn_row = QHBoxLayout()
+        win_size_btn_row.setContentsMargins(0, 0, 0, 0)
+        win_size_btn_row.setSpacing(10)
+
+        self.save_win_size_btn = QPushButton("Save Size")
+        self.save_win_size_btn.setObjectName("primaryActionBtn")
+        self.save_win_size_btn.clicked.connect(self.save_current_window_size)
+        win_size_btn_row.addWidget(self.save_win_size_btn)
+
+        self.restore_win_size_btn = QPushButton("Restore Size")
+        self.restore_win_size_btn.clicked.connect(self.restore_saved_window_size)
+        win_size_btn_row.addWidget(self.restore_win_size_btn)
+
+        self.reset_win_size_btn = QPushButton("Reset Default")
+        self.reset_win_size_btn.clicked.connect(self.reset_window_size_to_default)
+        win_size_btn_row.addWidget(self.reset_win_size_btn)
+        win_size_btn_row.addStretch()
+        win_layout.addLayout(win_size_btn_row)
+
+        self.custom_title_bar_check = QCheckBox("Use Modern Frameless Title Bar (Custom drag, minimize && close)")
+        self.custom_title_bar_check.setStyleSheet("color: #e2e8f0; font-size: 13px; font-weight: 500; margin-top: 4px;")
+        self.custom_title_bar_check.setChecked(getattr(self.config_mgr, "use_custom_title_bar", True))
+        self.custom_title_bar_check.toggled.connect(self._on_custom_title_bar_toggled)
+        win_layout.addWidget(self.custom_title_bar_check)
+
+        right_col.addWidget(win_group)
         right_col.addStretch()
-        two_col_layout.addLayout(right_col, 54)
+        two_col_layout.addLayout(right_col, 60)
 
         main_layout.addLayout(two_col_layout)
 
@@ -4863,10 +5723,12 @@ class MainWindow(QMainWindow):
         self.auto_buffer_sports_check.stateChanged.connect(self._auto_save_automation_settings)
         self.sports_buffer_spin.valueChanged.connect(self._auto_save_automation_settings)
         self.interval_spin.valueChanged.connect(self._auto_save_automation_settings)
-        self.launch_mode_combo.currentIndexChanged.connect(self._auto_save_automation_settings)
-        self.guide_watch_combo.currentIndexChanged.connect(self._auto_save_automation_settings)
+        if hasattr(self, "guide_watch_combo"):
+            self.guide_watch_combo.currentIndexChanged.connect(self._auto_save_automation_settings)
         if hasattr(self, "live_tv_mode_combo"):
             self.live_tv_mode_combo.currentIndexChanged.connect(self._auto_save_automation_settings)
+        if hasattr(self, "custom_live_player_edit"):
+            self.custom_live_player_edit.textChanged.connect(self._auto_save_automation_settings)
         if hasattr(self, "timeshift_buffer_spin"):
             self.timeshift_buffer_spin.valueChanged.connect(self._auto_save_automation_settings)
         if hasattr(self, "delete_timeshift_check"):
@@ -5139,6 +6001,11 @@ class MainWindow(QMainWindow):
                 self.live_tv_mode_combo.setCurrentIndex(idx)
             self.live_tv_mode_combo.blockSignals(False)
 
+        if hasattr(self, "custom_live_player_edit"):
+            self.custom_live_player_edit.blockSignals(True)
+            self.custom_live_player_edit.setText(self.config_mgr.custom_live_tv_player_cmd)
+            self.custom_live_player_edit.blockSignals(False)
+
         if hasattr(self, "timeshift_buffer_spin"):
             self.timeshift_buffer_spin.blockSignals(True)
             self.timeshift_buffer_spin.setValue(self.config_mgr.timeshift_buffer_seconds)
@@ -5193,6 +6060,10 @@ class MainWindow(QMainWindow):
             self.hide_time_line_check.setChecked(not self.config_mgr.guide_show_time_indicator)
             self.hide_time_line_check.blockSignals(False)
 
+        if hasattr(self, "time_line_opacity_btn"):
+            self.time_line_opacity_btn.setText(f"Opacity: {self.config_mgr.time_line_opacity}%")
+            self.time_line_opacity_btn.setEnabled(self.config_mgr.guide_show_time_indicator)
+
         if hasattr(self, "hide_clock_check"):
             self.hide_clock_check.blockSignals(True)
             self.hide_clock_check.setChecked(not self.config_mgr.show_clock)
@@ -5201,6 +6072,7 @@ class MainWindow(QMainWindow):
         if hasattr(self, "clock_size_spin"):
             self.clock_size_spin.blockSignals(True)
             self.clock_size_spin.setValue(self.config_mgr.clock_font_size)
+            self.clock_size_spin.setEnabled(self.config_mgr.show_clock)
             self.clock_size_spin.blockSignals(False)
         self._update_clock_display()
 
@@ -5210,12 +6082,14 @@ class MainWindow(QMainWindow):
             a_idx = self.app_theme_combo.findData(self.config_mgr.app_theme)
             self.app_theme_combo.setCurrentIndex(max(a_idx, 0))
             self.app_theme_combo.blockSignals(False)
+        self._sync_app_theme_chips()
 
         if hasattr(self, "theme_preset_combo"):
             self.theme_preset_combo.blockSignals(True)
             p_idx = self.theme_preset_combo.findData(self.config_mgr.theme_preset)
             self.theme_preset_combo.setCurrentIndex(max(p_idx, 0))
             self.theme_preset_combo.blockSignals(False)
+        self._sync_guide_theme_chips()
 
         colors = self.config_mgr.category_colors
         if hasattr(self, "_cat_swatches"):
@@ -6128,6 +7002,8 @@ class MainWindow(QMainWindow):
             self.config_mgr.guide_watch_mode = self.guide_watch_combo.currentData()
         if hasattr(self, "live_tv_mode_combo"):
             self.config_mgr.live_tv_watch_mode = self.live_tv_mode_combo.currentData()
+        if hasattr(self, "custom_live_player_edit"):
+            self.config_mgr.custom_live_tv_player_cmd = self.custom_live_player_edit.text().strip()
         if hasattr(self, "timeshift_buffer_spin"):
             self.config_mgr.timeshift_buffer_seconds = self.timeshift_buffer_spin.value()
         if hasattr(self, "delete_timeshift_check"):
@@ -6177,11 +7053,45 @@ class MainWindow(QMainWindow):
         desc_height = line_height * lines + doc_margin * 2 + 16
         self.guide_detail_text.setFixedHeight(desc_height)
 
+    def _apply_guide_detail_collapsed_state(self):
+        """Show or hide the description box based on guide_detail_collapsed."""
+        collapsed = bool(getattr(self.config_mgr, "guide_detail_collapsed", False))
+        if hasattr(self, "guide_detail_text"):
+            self.guide_detail_text.setVisible(not collapsed)
+        if hasattr(self, "guide_detail_collapse_btn"):
+            if collapsed:
+                self.guide_detail_collapse_btn.setText("▼")
+                self.guide_detail_collapse_btn.setToolTip("Expand program description box")
+            else:
+                self.guide_detail_collapse_btn.setText("▲")
+                self.guide_detail_collapse_btn.setToolTip("Collapse program description box")
+
+        if hasattr(self, "guide_desc_lines_combo") and self.guide_desc_lines_combo:
+            self.guide_desc_lines_combo.blockSignals(True)
+            if not collapsed:
+                lines = getattr(self.config_mgr, "guide_detail_lines", 3)
+                idx = self.guide_desc_lines_combo.findData(lines)
+                if idx >= 0:
+                    self.guide_desc_lines_combo.setCurrentIndex(idx)
+            self.guide_desc_lines_combo.blockSignals(False)
+
+    def toggle_guide_detail_collapsed(self):
+        """Toggle collapsed/expanded state of the program description box."""
+        collapsed = not getattr(self.config_mgr, "guide_detail_collapsed", False)
+        self.config_mgr.guide_detail_collapsed = collapsed
+        self._apply_guide_detail_collapsed_state()
+        self._apply_guide_zoom()
+        status_msg = "Description Box Collapsed" if collapsed else "Description Box Expanded"
+        self.flash_save_indicator(status_msg)
+
     def _on_guide_desc_lines_changed(self, idx: int):
         val = self.guide_desc_lines_combo.currentData()
         if val in (2, 3):
+            self.config_mgr.guide_detail_collapsed = False
             self.config_mgr.guide_detail_lines = val
+            self._apply_guide_detail_collapsed_state()
             self._update_guide_detail_box_height()
+            self._apply_guide_zoom()
             self.flash_save_indicator("Settings Saved")
 
     def _on_grid_rows_changed(self, val: int):
@@ -6212,6 +7122,27 @@ class MainWindow(QMainWindow):
 
     def _on_hide_time_line_toggled(self, checked: bool):
         self.config_mgr.guide_show_time_indicator = not checked
+        if hasattr(self, "time_line_opacity_btn"):
+            self.time_line_opacity_btn.setEnabled(not checked)
+        if hasattr(self, "guide_grid_table"):
+            self.guide_grid_table.viewport().update()
+            if self.guide_grid_table.horizontalHeader():
+                self.guide_grid_table.horizontalHeader().viewport().update()
+
+    def _open_time_line_opacity_popup(self):
+        app_theme = getattr(self.config_mgr, "app_theme", "midnight") if hasattr(self, "config_mgr") and self.config_mgr else "midnight"
+        tokens = APP_THEMES.get(app_theme, APP_THEMES["midnight"])
+        OpacitySliderPopup.show_for_widget(
+            self.time_line_opacity_btn,
+            self.config_mgr.time_line_opacity,
+            self._on_time_line_opacity_changed,
+            tokens=tokens
+        )
+
+    def _on_time_line_opacity_changed(self, val: int):
+        self.config_mgr.time_line_opacity = val
+        if hasattr(self, "time_line_opacity_btn"):
+            self.time_line_opacity_btn.setText(f"Opacity: {val}%")
         if hasattr(self, "guide_grid_table"):
             self.guide_grid_table.viewport().update()
             if self.guide_grid_table.horizontalHeader():
@@ -6219,6 +7150,12 @@ class MainWindow(QMainWindow):
 
     def _on_hide_clock_toggled(self, checked: bool):
         self.config_mgr.show_clock = not checked
+        if hasattr(self, "hide_clock_check") and self.hide_clock_check.isChecked() != checked:
+            self.hide_clock_check.blockSignals(True)
+            self.hide_clock_check.setChecked(checked)
+            self.hide_clock_check.blockSignals(False)
+        if hasattr(self, "clock_size_spin"):
+            self.clock_size_spin.setEnabled(not checked)
         self._update_clock_display()
 
     def _on_clock_size_changed(self, val: int):
@@ -6233,7 +7170,88 @@ class MainWindow(QMainWindow):
         app_inst = QApplication.instance()
         if app_inst:
             setup_dark_theme(app_inst, theme_key)
-        self.flash_save_indicator(f"App Theme: {APP_THEMES[theme_key]['name']}")
+
+        tokens = APP_THEMES[theme_key]
+        if hasattr(self, "_refresh_day_nav_styles"):
+            self._refresh_day_nav_styles()
+        if hasattr(self, "_update_day_nav_bar"):
+            self._update_day_nav_bar(sync_week_with_selection=False)
+
+        # Update dynamic icons to match new theme
+        if hasattr(self, "day_nav_prev_btn") and self.day_nav_prev_btn:
+            self.day_nav_prev_btn.setIcon(self._create_nav_arrow_icon("left", tokens.get("text_primary")))
+        if hasattr(self, "day_nav_next_btn") and self.day_nav_next_btn:
+            self.day_nav_next_btn.setIcon(self._create_nav_arrow_icon("right", tokens.get("text_primary")))
+        if hasattr(self, "guide_refresh_btn") and self.guide_refresh_btn:
+            self.guide_refresh_btn.setIcon(self._create_guide_refresh_icon(tokens.get("text_primary")))
+        if hasattr(self, "header_restore_btn") and self.header_restore_btn:
+            self.header_restore_btn.setIcon(self._create_restore_window_icon(tokens.get("accent_hover")))
+        if hasattr(self, "guide_maximize_btn") and self.guide_maximize_btn:
+            if getattr(self, "_guide_maximized", False):
+                self.guide_maximize_btn.setIcon(self._create_guide_restore_icon(tokens.get("accent_primary")))
+            else:
+                self.guide_maximize_btn.setIcon(self._create_guide_maximize_icon(tokens.get("accent_primary")))
+        if hasattr(self, "save_theme_preset_btn") and self.save_theme_preset_btn:
+            self.save_theme_preset_btn.setIcon(self._create_save_theme_icon(tokens.get("accent_hover")))
+        if hasattr(self, "delete_theme_preset_btn") and self.delete_theme_preset_btn:
+            self.delete_theme_preset_btn.setIcon(self._create_delete_theme_icon())
+        if hasattr(self, "reset_cat_colors_btn") and self.reset_cat_colors_btn:
+            self.reset_cat_colors_btn.setIcon(self._create_defaults_theme_icon(tokens.get("accent_primary")))
+
+        self.flash_save_indicator(f"App Theme: {tokens['name']}")
+
+    def _build_app_theme_chips(self):
+        if not hasattr(self, "app_theme_grid"):
+            return
+        while self.app_theme_grid.count():
+            item = self.app_theme_grid.takeAt(0)
+            w = item.widget()
+            if w:
+                w.deleteLater()
+        self._app_theme_chips.clear()
+
+        if not hasattr(self, "app_theme_combo"):
+            self.app_theme_combo = CenteredComboBox()
+            self.app_theme_combo.currentIndexChanged.connect(self._on_app_theme_changed)
+        self.app_theme_combo.blockSignals(True)
+        self.app_theme_combo.clear()
+
+        cur_app_theme = getattr(self.config_mgr, "app_theme", "midnight") if self.config_mgr else "midnight"
+        sorted_themes = sorted(APP_THEMES.items(), key=lambda item: item[1]["name"].lower())
+        chip_w = get_theme_chip_fixed_width(self.font())
+
+        num_cols = 3
+        for idx, (t_key, t_info) in enumerate(sorted_themes):
+            self.app_theme_combo.addItem(t_info["name"], t_key)
+            accent_dot = t_info.get("accent_primary", "#0284c7")
+            chip = ThemeChip(t_key, t_info["name"], accent_dot, parent=self, fixed_width=chip_w)
+            chip.chip_clicked.connect(self.select_app_theme)
+            self.app_theme_grid.addWidget(chip, idx // num_cols, idx % num_cols, Qt.AlignmentFlag.AlignLeft)
+            self._app_theme_chips[t_key] = chip
+
+        a_idx = self.app_theme_combo.findData(cur_app_theme)
+        self.app_theme_combo.setCurrentIndex(max(a_idx, 0))
+        self.app_theme_combo.blockSignals(False)
+        self._sync_app_theme_chips()
+
+    def select_app_theme(self, theme_key: str):
+        if not theme_key or theme_key not in APP_THEMES:
+            return
+        if hasattr(self, "app_theme_combo"):
+            self.app_theme_combo.blockSignals(True)
+            idx = self.app_theme_combo.findData(theme_key)
+            if idx >= 0:
+                self.app_theme_combo.setCurrentIndex(idx)
+            self.app_theme_combo.blockSignals(False)
+        self.apply_app_theme(theme_key)
+        self._sync_app_theme_chips()
+
+    def _sync_app_theme_chips(self):
+        if not hasattr(self, "_app_theme_chips"):
+            return
+        cur_theme = getattr(self.config_mgr, "app_theme", "midnight") if self.config_mgr else "midnight"
+        for k, chip in self._app_theme_chips.items():
+            chip.set_selected(k == cur_theme)
 
     def _on_app_theme_changed(self, index: int):
         if not hasattr(self, "app_theme_combo"):
@@ -6242,15 +7260,109 @@ class MainWindow(QMainWindow):
         if not theme_key or theme_key not in APP_THEMES:
             return
         self.apply_app_theme(theme_key)
+        self._sync_app_theme_chips()
 
-    def _on_theme_preset_changed(self, index: int):
+    def _populate_theme_preset_combo(self):
         if not hasattr(self, "theme_preset_combo"):
+            self.theme_preset_combo = CenteredComboBox()
+            self.theme_preset_combo.currentIndexChanged.connect(self._on_theme_preset_changed)
+
+        if not hasattr(self, "guide_theme_grid"):
             return
-        preset_key = self.theme_preset_combo.currentData()
+
+        while self.guide_theme_grid.count():
+            item = self.guide_theme_grid.takeAt(0)
+            w = item.widget()
+            if w:
+                w.deleteLater()
+
+        if hasattr(self, "guide_custom_grid"):
+            while self.guide_custom_grid.count():
+                item = self.guide_custom_grid.takeAt(0)
+                w = item.widget()
+                if w:
+                    w.deleteLater()
+
+        self._guide_theme_chips.clear()
+        self.theme_preset_combo.blockSignals(True)
+        self.theme_preset_combo.clear()
+
+        cur_preset = getattr(self.config_mgr, "theme_preset", "midnight") if self.config_mgr else "midnight"
+        chip_w = 165
+        num_cols = 2
+
+        # 1. Built-in presets in guide_theme_grid
+        for slot_idx, (p_key, p_info) in enumerate(THEME_PRESETS.items()):
+            self.theme_preset_combo.addItem(p_info["name"], p_key)
+            dot_color = p_info["colors"].get("sports", "#38bdf8")
+            chip = ThemeChip(p_key, p_info["name"], dot_color, parent=self, fixed_width=chip_w)
+            chip.chip_clicked.connect(self.select_guide_theme)
+            self.guide_theme_grid.addWidget(chip, slot_idx // num_cols, slot_idx % num_cols, Qt.AlignmentFlag.AlignLeft)
+            self._guide_theme_chips[p_key] = chip
+
+        # 2. Custom (Manual) pill permanently anchors slot 0 (0, 0)
+        target_custom_grid = self.guide_custom_grid if hasattr(self, "guide_custom_grid") else self.guide_theme_grid
+        self.theme_preset_combo.addItem("Custom (Manual)", "custom")
+        cur_colors = self.config_mgr.category_colors if self.config_mgr else DEFAULT_CATEGORY_COLORS
+        custom_dot = cur_colors.get("sports", "#ffa028")
+        custom_chip = ThemeChip("custom", "Custom (Manual)", custom_dot, parent=self, fixed_width=chip_w)
+        custom_chip.chip_clicked.connect(self.select_guide_theme)
+        target_custom_grid.addWidget(custom_chip, 0, 0, Qt.AlignmentFlag.AlignLeft)
+        self._guide_theme_chips["custom"] = custom_chip
+
+        # 3. Saved custom presets listed starting at slot 1, preserving Custom anchor at (0, 0)
+        custom_presets = self.config_mgr.custom_theme_presets if self.config_mgr else {}
+        c_slot = 1
+        for p_key, p_info in custom_presets.items():
+            self.theme_preset_combo.addItem(p_info["name"], p_key)
+            dot_color = p_info["colors"].get("sports", "#38bdf8")
+            chip = ThemeChip(p_key, p_info["name"], dot_color, parent=self, fixed_width=chip_w)
+            chip.chip_clicked.connect(self.select_guide_theme)
+            target_custom_grid.addWidget(chip, c_slot // num_cols, c_slot % num_cols, Qt.AlignmentFlag.AlignLeft)
+            self._guide_theme_chips[p_key] = chip
+            c_slot += 1
+
+        p_idx = self.theme_preset_combo.findData(cur_preset)
+        self.theme_preset_combo.setCurrentIndex(max(p_idx, 0))
+        self.theme_preset_combo.blockSignals(False)
+        self._sync_guide_theme_chips()
+
+    def select_guide_theme(self, preset_key: str):
+        if not preset_key:
+            return
+        if hasattr(self, "theme_preset_combo"):
+            self.theme_preset_combo.blockSignals(True)
+            idx = self.theme_preset_combo.findData(preset_key)
+            if idx >= 0:
+                self.theme_preset_combo.setCurrentIndex(idx)
+            self.theme_preset_combo.blockSignals(False)
+        if preset_key != "custom":
+            self._apply_guide_theme_preset(preset_key)
+        else:
+            self.config_mgr.theme_preset = "custom"
+        self._sync_guide_theme_chips()
+
+    def _sync_guide_theme_chips(self):
+        if not hasattr(self, "_guide_theme_chips"):
+            return
+        cur_preset = getattr(self.config_mgr, "theme_preset", "midnight") if self.config_mgr else "midnight"
+        for k, chip in self._guide_theme_chips.items():
+            chip.set_selected(k == cur_preset)
+
+        if "custom" in self._guide_theme_chips and self.config_mgr:
+            cur_colors = self.config_mgr.category_colors
+            self._guide_theme_chips["custom"].set_dot_color(cur_colors.get("sports", "#ffa028"))
+
+        # Enable Delete Theme button only if currently selected preset is a user custom preset
+        if hasattr(self, "delete_theme_preset_btn") and self.config_mgr:
+            is_custom_saved = cur_preset in self.config_mgr.custom_theme_presets
+            self.delete_theme_preset_btn.setEnabled(is_custom_saved)
+
+    def _apply_guide_theme_preset(self, preset_key: str):
         if not preset_key or preset_key == "custom":
             return
-
-        if preset_key in THEME_PRESETS:
+        all_presets = self.config_mgr.get_all_theme_presets() if self.config_mgr else dict(THEME_PRESETS)
+        if preset_key in all_presets:
             self.config_mgr.apply_theme_preset(preset_key)
 
             colors = self.config_mgr.category_colors
@@ -6273,7 +7385,78 @@ class MainWindow(QMainWindow):
             if active_prog:
                 self._display_program_details(active_prog)
 
-            self.flash_save_indicator(f"Theme Preset: {THEME_PRESETS[preset_key]['name']}")
+            self.flash_save_indicator(f"Theme Preset: {all_presets[preset_key]['name']}")
+
+    def _on_theme_preset_changed(self, index: int):
+        if not hasattr(self, "theme_preset_combo"):
+            return
+        preset_key = self.theme_preset_combo.currentData()
+        if not preset_key or preset_key == "custom":
+            return
+
+        all_presets = self.config_mgr.get_all_theme_presets() if self.config_mgr else dict(THEME_PRESETS)
+        if preset_key in all_presets:
+            self.config_mgr.apply_theme_preset(preset_key)
+
+            colors = self.config_mgr.category_colors
+            if hasattr(self, "_cat_swatches"):
+                for cat_key, swatch_btn in self._cat_swatches.items():
+                    hex_val = colors.get(cat_key, DEFAULT_CATEGORY_COLORS.get(cat_key, "#ffffff"))
+                    swatch_btn.setStyleSheet(f"QPushButton.category-color-tile {{ background-color: {hex_val}; }}")
+                    if hasattr(self, "_cat_hex_labels") and cat_key in self._cat_hex_labels:
+                        self._cat_hex_labels[cat_key].setText(hex_val.upper())
+
+            if hasattr(self, "grid_tile_delegate") and self.grid_tile_delegate:
+                self.grid_tile_delegate.refresh_category_colors()
+
+            self._apply_guide_zoom()
+            self._refresh_guide_view(keep_scroll=True)
+            if hasattr(self, "guide_grid_table") and self.guide_grid_table.horizontalHeader():
+                self.guide_grid_table.horizontalHeader().viewport().update()
+            self._update_clock_display()
+            active_prog = self._get_active_selected_program()
+            if active_prog:
+                self._display_program_details(active_prog)
+
+            self.flash_save_indicator(f"Theme Preset: {all_presets[preset_key]['name']}")
+            self._sync_guide_theme_chips()
+
+    def _save_current_theme_preset(self):
+        """Prompt user for a preset name and save the current guide grid category colors."""
+        name, ok = QInputDialog.getText(
+            self,
+            "Save Theme Preset",
+            "Enter a name for this custom theme preset:",
+            QLineEdit.EchoMode.Normal,
+            ""
+        )
+        if ok and name.strip():
+            preset_name = name.strip()
+            preset_key = self.config_mgr.save_custom_theme_preset(preset_name)
+            self._populate_theme_preset_combo()
+            self.select_guide_theme(preset_key)
+            self.flash_save_indicator(f"Saved Theme Preset: {preset_name}")
+
+    def _delete_current_theme_preset(self):
+        """Delete the currently selected custom theme preset."""
+        cur_preset = self.config_mgr.theme_preset
+        custom_presets = self.config_mgr.custom_theme_presets
+        if cur_preset not in custom_presets:
+            return
+
+        preset_name = custom_presets[cur_preset]["name"]
+        reply = QMessageBox.question(
+            self,
+            "Delete Theme Preset",
+            f"Are you sure you want to delete the theme preset '{preset_name}'?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self.config_mgr.delete_custom_theme_preset(cur_preset)
+            self._populate_theme_preset_combo()
+            self.select_guide_theme("midnight")
+            self.flash_save_indicator(f"Deleted Theme Preset: {preset_name}")
 
     def _choose_category_color(self, category_key: str, category_label: str):
         """Open dark-themed QColorDialog to select a custom color for a guide category."""
@@ -6299,6 +7482,7 @@ class MainWindow(QMainWindow):
                 if c_idx >= 0:
                     self.theme_preset_combo.setCurrentIndex(c_idx)
                 self.theme_preset_combo.blockSignals(False)
+            self._sync_guide_theme_chips()
 
             # Update swatch tile
             if hasattr(self, "_cat_swatches") and category_key in self._cat_swatches:
@@ -6332,6 +7516,7 @@ class MainWindow(QMainWindow):
             if m_idx >= 0:
                 self.theme_preset_combo.setCurrentIndex(m_idx)
             self.theme_preset_combo.blockSignals(False)
+        self._sync_guide_theme_chips()
 
         if hasattr(self, "_cat_swatches"):
             for cat_key, swatch in self._cat_swatches.items():
@@ -6547,7 +7732,14 @@ class MainWindow(QMainWindow):
         if hasattr(self, "guide_grid_table") and self.guide_grid_table.rowCount() > 0:
             rows = self.guide_grid_table.rowCount()
             cols = self.guide_grid_table.columnCount()
+            past_bg = getattr(self.grid_tile_delegate, "color_past_bg", QColor("#161922"))
+            past_bg_alt = getattr(self.grid_tile_delegate, "color_past_bg_alt", QColor("#14171f"))
+            tile_bg = getattr(self.grid_tile_delegate, "_default_bg", QColor("#222838"))
+            tile_bg_alt = getattr(self.grid_tile_delegate, "_default_bg_alt", QColor("#1e2332"))
+            live_bg = self.grid_tile_delegate.get_category_color("live_bg") if hasattr(self, "grid_tile_delegate") else QColor("#132400")
+
             for r in range(rows):
+                is_alt = (r % 2 == 1)
                 for c in range(cols):
                     item = self.guide_grid_table.item(r, c)
                     if not item:
@@ -6555,19 +7747,30 @@ class MainWindow(QMainWindow):
                     p_copy = item.data(Qt.ItemDataRole.UserRole)
                     if not isinstance(p_copy, dict):
                         continue
-                    start_iso = p_copy.get("start_iso")
-                    if not start_iso:
-                        continue
-                    try:
-                        dt = datetime.fromisoformat(start_iso)
-                        dur_iso = p_copy.get("duration_iso") or "00:30:00"
-                        parts = [int(x) for x in dur_iso.split(":")]
-                        dur = timedelta(hours=parts[0], minutes=parts[1], seconds=parts[2] if len(parts) > 2 else 0)
-                        end_dt = dt + dur
+                    start_dt = p_copy.get("_parsed_start_dt")
+                    end_dt = p_copy.get("_parsed_end_dt")
+                    if start_dt is None:
+                        start_iso = p_copy.get("start_iso")
+                        if not start_iso:
+                            continue
+                        try:
+                            start_dt = datetime.fromisoformat(start_iso)
+                            dur_iso = p_copy.get("duration_iso") or "00:30:00"
+                            parts = [int(x) for x in dur_iso.split(":")]
+                            dur = timedelta(hours=parts[0], minutes=parts[1], seconds=parts[2] if len(parts) > 2 else 0)
+                            end_dt = start_dt + dur
+                            p_copy["_parsed_start_dt"] = start_dt
+                            p_copy["_parsed_end_dt"] = end_dt
+                        except Exception:
+                            continue
 
+                    if not start_dt or not end_dt:
+                        continue
+
+                    try:
                         if now >= end_dt:
                             new_timing = "past"
-                        elif dt <= now < end_dt:
+                        elif start_dt <= now < end_dt:
                             new_timing = "live"
                         else:
                             new_timing = "upcoming"
@@ -6576,15 +7779,13 @@ class MainWindow(QMainWindow):
                         if new_timing != old_timing:
                             p_copy["_timing_state"] = new_timing
                             item.setData(Qt.ItemDataRole.UserRole, p_copy)
-                            # Visual background styling based on timing state
+                            # Theme-aware visual background styling based on timing state
                             if new_timing == "past":
-                                cur_bg = QColor("#161922") if (r % 2 == 0) else QColor("#14171f")
+                                cur_bg = past_bg_alt if is_alt else past_bg
                             elif new_timing == "live":
-                                cur_bg = QColor("#17261c")
+                                cur_bg = live_bg
                             else:
-                                tile_bg = QColor("#1a1e28")
-                                tile_bg_alt = QColor("#1e222d")
-                                cur_bg = tile_bg if (r % 2 == 0) else tile_bg_alt
+                                cur_bg = tile_bg_alt if is_alt else tile_bg
                             item.setBackground(cur_bg)
                     except Exception:
                         pass
@@ -6604,7 +7805,7 @@ class MainWindow(QMainWindow):
             for r, p in enumerate(programs):
                 if r >= self.guide_table.rowCount():
                     break
-                timing_info = self._get_program_timing_state(p)
+                timing_info = self._get_program_timing_state(p, check_files=False)
                 timing_state = timing_info.get("state", "upcoming")
                 cat = p.get("_category") or classify_guide_category(p)
 
@@ -6637,7 +7838,7 @@ class MainWindow(QMainWindow):
                 sub_item = self.guide_table.item(r, 5)
 
                 if timing_state == "past":
-                    gray_color = QColor("#788292")
+                    gray_color = getattr(self.grid_tile_delegate, "color_past_title", QColor("#788292"))
                     for it in (time_item, chan_item, dur_item, title_item, sub_item):
                         if it:
                             it.setForeground(gray_color)
@@ -6696,7 +7897,7 @@ class MainWindow(QMainWindow):
                         programs = getattr(self, "current_guide_items", None) or []
                         first_act = -1
                         for r, p in enumerate(programs):
-                            tm = self._get_program_timing_state(p)
+                            tm = self._get_program_timing_state(p, check_files=False)
                             if tm.get("state") in ("live", "upcoming"):
                                 first_act = r
                                 break
@@ -7072,24 +8273,18 @@ class MainWindow(QMainWindow):
 
         qid = self.rec_table.item(row, 0).data(Qt.ItemDataRole.UserRole)
         rec_title = self.rec_table.item(row, 0).text()
-        confirm = QMessageBox.question(
-            self, "Confirm Cancellation",
-            f"Are you sure you want to cancel the recording for '{rec_title}'?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
-        if confirm == QMessageBox.StandardButton.Yes:
-            rec_info = self.queue_mgr.remove_recording(int(qid))
-            if rec_info:
-                self.dbus_client.cancel_recording(
-                    key=rec_info.get("kaffeine_key"),
-                    channel=rec_info.get("channel"),
-                    title=rec_info.get("title")
-                )
-            else:
-                self.dbus_client.cancel_recording(title=rec_title)
-            self.status_bar.showMessage(f"Cancelled recording '{rec_title}'.", 3000)
-            self.refresh_recordings()
-            self._refresh_guide_view(keep_scroll=True)
+        rec_info = self.queue_mgr.remove_recording(int(qid))
+        if rec_info:
+            self.dbus_client.cancel_recording(
+                key=rec_info.get("kaffeine_key"),
+                channel=rec_info.get("channel"),
+                title=rec_info.get("title")
+            )
+        else:
+            self.dbus_client.cancel_recording(title=rec_title)
+        self.status_bar.showMessage(f"Cancelled recording '{rec_title}'.", 3000)
+        self.refresh_recordings()
+        self._refresh_guide_view(keep_scroll=True)
 
     def add_manual_recording(self):
         channels = self.config_mgr.get_ordered_channels()
@@ -7165,6 +8360,16 @@ class MainWindow(QMainWindow):
         bar.setValue(max(0, min(bar.maximum(), target_val)))
 
     def jump_guide_to_now(self):
+        # If currently viewing a future or past date, switch back to Today first
+        if hasattr(self, "guide_date_combo"):
+            today_str = date.today().strftime("%Y-%m-%d")
+            cur_date = self.guide_date_combo.currentData()
+            if cur_date is not None and cur_date != today_str:
+                today_idx = self.guide_date_combo.findData(today_str)
+                if today_idx >= 0:
+                    self.guide_date_combo.setCurrentIndex(today_idx)
+                    return
+
         if self._is_grid_view_active():
             now = datetime.now()
             # Align the left edge of the grid to the current hour (e.g. 10:00 AM at 10:15).
@@ -7183,12 +8388,38 @@ class MainWindow(QMainWindow):
         # 12:00 PM (Noon) is hour 12 -> slot 24
         self._scroll_grid_to_slot(24, center=False)
 
+    def jump_guide_to_0400(self):
+        # 4:00 AM (0400) is hour 4 -> slot 8
+        self._scroll_grid_to_slot(8, center=False)
+
     def jump_guide_to_primetime(self):
         if self._is_grid_view_active():
             # 7:00 PM (19:00) is hour 19 -> slot 38
             self._scroll_grid_to_slot(38, center=False)
         else:
             self._scroll_list_to_primetime()
+
+    def advance_guide_date(self, offset: int = 1, position: str = "0400"):
+        """Advances or rewinds the guide date by offset days and positions the scrollbar."""
+        if not hasattr(self, "guide_date_combo"):
+            return
+        combo = self.guide_date_combo
+        cur_idx = combo.currentIndex()
+        target_idx = cur_idx + offset
+        if 1 <= target_idx < combo.count():
+            self._target_grid_scroll_position = position
+            combo.setCurrentIndex(target_idx)
+
+    def _on_grid_horizontal_scroll(self, val: int):
+        """Updates day nav bar highlight when user scrolls past midnight into late night."""
+        if not hasattr(self, "guide_grid_table") or self.guide_stack.currentIndex() != 0:
+            return
+        col_w = self.guide_grid_table.horizontalHeader().defaultSectionSize() or 200
+        # Column 48 is midnight (+1 day)
+        is_past_midnight = (val >= 48 * col_w - 50)
+        if getattr(self, "_is_viewing_late_night_overhang", False) != is_past_midnight:
+            self._is_viewing_late_night_overhang = is_past_midnight
+            self._update_day_nav_bar(sync_week_with_selection=False)
 
     def _scroll_list_to_primetime(self):
         """Scroll list guide table to the first show at or after 7:00 PM (19:00)."""
@@ -7380,6 +8611,8 @@ class MainWindow(QMainWindow):
     def toggle_guide_maximized(self):
         self._guide_maximized = not getattr(self, "_guide_maximized", False)
         is_max = self._guide_maximized
+        if hasattr(self, "config_mgr") and hasattr(self.config_mgr, "guide_maximized"):
+            self.config_mgr.guide_maximized = is_max
 
         if hasattr(self, "tabs"):
             self.tabs.tabBar().setVisible(not is_max)
@@ -7390,29 +8623,34 @@ class MainWindow(QMainWindow):
         if hasattr(self, "status_bar"):
             self.status_bar.setVisible(not is_max)
 
+        cur_theme = getattr(self.config_mgr, "app_theme", "midnight") if hasattr(self, "config_mgr") and self.config_mgr else "midnight"
+        theme_tokens = APP_THEMES.get(cur_theme, APP_THEMES["midnight"])
+        accent = theme_tokens.get("accent_primary")
+
         if hasattr(self, "guide_maximize_btn"):
             if is_max:
                 self.guide_maximize_btn.setToolTip("Restore standard view (Esc)")
-                self.guide_maximize_btn.setIcon(self._create_guide_restore_icon())
+                self.guide_maximize_btn.setIcon(self._create_guide_restore_icon(accent))
             else:
                 self.guide_maximize_btn.setToolTip("Maximize guide to fill window")
-                self.guide_maximize_btn.setIcon(self._create_guide_maximize_icon())
+                self.guide_maximize_btn.setIcon(self._create_guide_maximize_icon(accent))
 
         QTimer.singleShot(30, self._apply_guide_zoom)
 
     @staticmethod
-    def _create_guide_maximize_icon() -> QIcon:
+    def _create_guide_maximize_icon(color: Optional[str] = None) -> QIcon:
         """
         Emerald green 4-corner outward expansion brackets icon (fullscreen metaphor).
         Maximizes canvas coverage (22x22) to fill the button box nicely.
         """
         icon = QIcon()
-        for mode, color in [(QIcon.Mode.Normal, "#66bb6a"), (QIcon.Mode.Disabled, "#3b5c3d")]:
+        norm_color = color or "#66bb6a"
+        for mode, c in [(QIcon.Mode.Normal, norm_color), (QIcon.Mode.Disabled, "#3b5c3d")]:
             pix = QPixmap(22, 22)
             pix.fill(Qt.GlobalColor.transparent)
             p = QPainter(pix)
             p.setRenderHint(QPainter.RenderHint.Antialiasing)
-            pen = QPen(QColor(color), 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.MiterJoin)
+            pen = QPen(QColor(c), 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.MiterJoin)
             p.setPen(pen)
 
             # Top-Left corner outward bracket
@@ -7436,18 +8674,19 @@ class MainWindow(QMainWindow):
         return icon
 
     @staticmethod
-    def _create_guide_restore_icon() -> QIcon:
+    def _create_guide_restore_icon(color: Optional[str] = None) -> QIcon:
         """
         Emerald green 4-corner inward contraction brackets icon (exit fullscreen metaphor).
         Maximizes canvas coverage (22x22) to fill the button box nicely.
         """
         icon = QIcon()
-        for mode, color in [(QIcon.Mode.Normal, "#66bb6a"), (QIcon.Mode.Disabled, "#3b5c3d")]:
+        norm_color = color or "#66bb6a"
+        for mode, c in [(QIcon.Mode.Normal, norm_color), (QIcon.Mode.Disabled, "#3b5c3d")]:
             pix = QPixmap(22, 22)
             pix.fill(Qt.GlobalColor.transparent)
             p = QPainter(pix)
             p.setRenderHint(QPainter.RenderHint.Antialiasing)
-            pen = QPen(QColor(color), 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.MiterJoin)
+            pen = QPen(QColor(c), 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.MiterJoin)
             p.setPen(pen)
 
             # Top-Left corner pointing toward center
@@ -7471,18 +8710,19 @@ class MainWindow(QMainWindow):
         return icon
 
     @staticmethod
-    def _create_guide_refresh_icon() -> QIcon:
+    def _create_guide_refresh_icon(color: Optional[str] = None) -> QIcon:
         """
         Crisp circular refresh arrow icon (22x22).
         """
         icon = QIcon()
-        for mode, color in [(QIcon.Mode.Normal, "#c8d2df"), (QIcon.Mode.Disabled, "#414b5d")]:
+        norm_color = color or "#c8d2df"
+        for mode, c in [(QIcon.Mode.Normal, norm_color), (QIcon.Mode.Disabled, "#414b5d")]:
             pix = QPixmap(22, 22)
             pix.fill(Qt.GlobalColor.transparent)
             p = QPainter(pix)
             p.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-            arc_pen = QPen(QColor(color), 2.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
+            arc_pen = QPen(QColor(c), 2.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
             p.setPen(arc_pen)
             # Circular arc centered in 22x22 box
             arc_rect = QRectF(3.5, 3.5, 15.0, 15.0)
@@ -7490,7 +8730,7 @@ class MainWindow(QMainWindow):
             p.drawArc(arc_rect, 45 * 16, 280 * 16)
 
             # Arrow head pointing clockwise at top-right
-            arrow_pen = QPen(QColor(color), 2.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.MiterJoin)
+            arrow_pen = QPen(QColor(c), 2.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.MiterJoin)
             p.setPen(arrow_pen)
             p.drawLine(QPointF(14.0, 2.0), QPointF(17.5, 5.5))
             p.drawLine(QPointF(13.0, 6.5), QPointF(17.5, 5.5))
@@ -7500,20 +8740,105 @@ class MainWindow(QMainWindow):
         return icon
 
     @staticmethod
-    def _create_restore_window_icon() -> QIcon:
+    def _create_save_theme_icon(color: Optional[str] = None) -> QIcon:
+        """Crisp floppy disk / save preset icon (20x20)."""
+        icon = QIcon()
+        norm_color = color or "#60a5fa"
+        for mode, c in [(QIcon.Mode.Normal, norm_color), (QIcon.Mode.Disabled, "#475569")]:
+            pix = QPixmap(20, 20)
+            pix.fill(Qt.GlobalColor.transparent)
+            p = QPainter(pix)
+            p.setRenderHint(QPainter.RenderHint.Antialiasing)
+            pen = QPen(QColor(c), 1.6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+            p.setPen(pen)
+
+            poly = QPolygonF([
+                QPointF(3.5, 3.5),
+                QPointF(13.5, 3.5),
+                QPointF(16.5, 6.5),
+                QPointF(16.5, 16.5),
+                QPointF(3.5, 16.5),
+            ])
+            p.drawPolygon(poly)
+            p.drawRect(QRectF(6.5, 3.5, 6.0, 4.5))
+            p.drawRect(QRectF(5.5, 11.5, 9.0, 5.0))
+
+            p.end()
+            icon.addPixmap(pix, mode)
+        return icon
+
+    @staticmethod
+    def _create_delete_theme_icon(color: Optional[str] = None) -> QIcon:
+        """Crisp trash can / delete preset icon (20x20)."""
+        icon = QIcon()
+        norm_color = color or "#f87171"
+        for mode, c in [(QIcon.Mode.Normal, norm_color), (QIcon.Mode.Disabled, "#475569")]:
+            pix = QPixmap(20, 20)
+            pix.fill(Qt.GlobalColor.transparent)
+            p = QPainter(pix)
+            p.setRenderHint(QPainter.RenderHint.Antialiasing)
+            pen = QPen(QColor(c), 1.6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+            p.setPen(pen)
+
+            p.drawLine(QPointF(8.0, 3.5), QPointF(12.0, 3.5))
+            p.drawLine(QPointF(4.0, 5.5), QPointF(16.0, 5.5))
+
+            body = QPolygonF([
+                QPointF(5.5, 6.5),
+                QPointF(6.5, 16.5),
+                QPointF(13.5, 16.5),
+                QPointF(14.5, 6.5),
+            ])
+            p.drawPolygon(body)
+
+            p.drawLine(QPointF(8.5, 8.5), QPointF(8.5, 14.5))
+            p.drawLine(QPointF(11.5, 8.5), QPointF(11.5, 14.5))
+
+            p.end()
+            icon.addPixmap(pix, mode)
+        return icon
+
+    @staticmethod
+    def _create_defaults_theme_icon(color: Optional[str] = None) -> QIcon:
+        """Crisp circular reset / defaults arrow icon (20x20)."""
+        icon = QIcon()
+        norm_color = color or "#34d399"
+        for mode, c in [(QIcon.Mode.Normal, norm_color), (QIcon.Mode.Disabled, "#475569")]:
+            pix = QPixmap(20, 20)
+            pix.fill(Qt.GlobalColor.transparent)
+            p = QPainter(pix)
+            p.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+            arc_pen = QPen(QColor(c), 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
+            p.setPen(arc_pen)
+            arc_rect = QRectF(3.5, 3.5, 13.0, 13.0)
+            p.drawArc(arc_rect, 45 * 16, 275 * 16)
+
+            arrow_pen = QPen(QColor(c), 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.MiterJoin)
+            p.setPen(arrow_pen)
+            p.drawLine(QPointF(9.5, 1.5), QPointF(14.5, 3.5))
+            p.drawLine(QPointF(13.5, 7.5), QPointF(14.5, 3.5))
+
+            p.end()
+            icon.addPixmap(pix, mode)
+        return icon
+
+    @staticmethod
+    def _create_restore_window_icon(color: Optional[str] = None) -> QIcon:
         """
         Sky cyan window contour with counter-clockwise reset / restore arrow.
         Maximizes canvas coverage (22x22) to fill the button box nicely.
         """
         icon = QIcon()
-        for mode, color in [(QIcon.Mode.Normal, "#4fc3f7"), (QIcon.Mode.Disabled, "#2d4857")]:
+        norm_color = color or "#4fc3f7"
+        for mode, c in [(QIcon.Mode.Normal, norm_color), (QIcon.Mode.Disabled, "#2d4857")]:
             pix = QPixmap(22, 22)
             pix.fill(Qt.GlobalColor.transparent)
             p = QPainter(pix)
             p.setRenderHint(QPainter.RenderHint.Antialiasing)
 
             # Outer subtle window frame in upper portion
-            frame_pen = QPen(QColor(color), 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
+            frame_pen = QPen(QColor(c), 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
             p.setPen(frame_pen)
             # Window top border and top-right corner
             p.drawLine(QPointF(3.0, 2.5), QPointF(19.0, 2.5))
@@ -7522,7 +8847,7 @@ class MainWindow(QMainWindow):
             p.drawLine(QPointF(3.0, 2.5), QPointF(3.0, 7.5))
 
             # Reset circular arc (counter-clockwise)
-            arc_pen = QPen(QColor(color), 2.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
+            arc_pen = QPen(QColor(c), 2.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
             p.setPen(arc_pen)
             # Arc bounding box centered in bottom-left
             arc_rect = QRectF(2.0, 6.0, 14.0, 14.0)
@@ -7530,7 +8855,7 @@ class MainWindow(QMainWindow):
             p.drawArc(arc_rect, 40 * 16, 270 * 16)
 
             # Reset Arrow head at start of arc (top-right of the circle)
-            arrow_pen = QPen(QColor(color), 2.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.MiterJoin)
+            arrow_pen = QPen(QColor(c), 2.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.MiterJoin)
             p.setPen(arrow_pen)
             p.drawLine(QPointF(11.0, 4.0), QPointF(13.0, 8.5))
             p.drawLine(QPointF(8.0, 8.5), QPointF(13.0, 8.5))
@@ -7540,20 +8865,21 @@ class MainWindow(QMainWindow):
         return icon
 
     @staticmethod
-    def _create_nav_arrow_icon(direction: str = "left") -> QIcon:
+    def _create_nav_arrow_icon(direction: str = "left", color: Optional[str] = None) -> QIcon:
         icon = QIcon()
+        norm_color = color or "#c5d1de"
         # Create crisp pixmaps for Normal and Disabled states
         states = [
-            (QIcon.Mode.Normal, "#c5d1de"),
+            (QIcon.Mode.Normal, norm_color),
             (QIcon.Mode.Disabled, "#414b5d"),
         ]
-        for mode, color in states:
+        for mode, c in states:
             pix = QPixmap(24, 24)
             pix.fill(Qt.GlobalColor.transparent)
             p = QPainter(pix)
             p.setRenderHint(QPainter.RenderHint.Antialiasing)
             p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(QBrush(QColor(color)))
+            p.setBrush(QBrush(QColor(c)))
             if direction == "left":
                 pts = [QPoint(15, 6), QPoint(7, 12), QPoint(15, 18)]
             else:
@@ -7570,55 +8896,17 @@ class MainWindow(QMainWindow):
         nav_layout.setContentsMargins(0, 4, 0, 2)
         nav_layout.setSpacing(6)
 
-        arrow_style = (
-            "QPushButton { "
-            "border: 1px solid #303746; border-radius: 4px; background-color: #1e2330; }"
-            "QPushButton:hover { background-color: #262e3f; border: 1px solid #455470; }"
-            "QPushButton:pressed { background-color: #161a24; }"
-            "QPushButton:disabled { background-color: #161a22; border: 1px solid #242935; }"
-        )
-
         self.day_nav_prev_btn = QPushButton()
+        self.day_nav_prev_btn.setObjectName("dayNavPrevBtn")
         self.day_nav_prev_btn.setIcon(self._create_nav_arrow_icon("left"))
         self.day_nav_prev_btn.setIconSize(QSize(20, 20))
         self.day_nav_prev_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.day_nav_prev_btn.setFixedWidth(36)
         self.day_nav_prev_btn.setFixedHeight(44)
-        self.day_nav_prev_btn.setStyleSheet(arrow_style)
         self.day_nav_prev_btn.clicked.connect(self._on_day_nav_prev)
         nav_layout.addWidget(self.day_nav_prev_btn)
 
-        # Standard upcoming unselected day
-        self._day_style_unselected = (
-            "QPushButton { padding: 4px 2px; font-size: 13px; font-weight: 500; line-height: 1.2; "
-            "border: 1px solid #303746; border-radius: 4px; background-color: #1e2330; color: #a4b0c2; }"
-            "QPushButton:hover { background-color: #262e3f; border: 1px solid #455470; color: #e2e8f0; }"
-            "QPushButton:pressed { background-color: #161a24; }"
-        )
-
-        # Today's day (when NOT currently selected) - understated dark green tint & border
-        self._day_style_today_unselected = (
-            "QPushButton { padding: 4px 2px; font-size: 13px; font-weight: 600; line-height: 1.2; "
-            "border: 1px solid #2e5937; border-radius: 4px; background-color: #16261b; color: #7ec788; }"
-            "QPushButton:hover { background-color: #1e3324; border: 1px solid #3d7349; color: #9cdba4; }"
-            "QPushButton:pressed { background-color: #111e15; }"
-        )
-
-        # Today's day (when ALSO currently selected) - subdued dark forest green with clean accent
-        self._day_style_today_selected = (
-            "QPushButton { padding: 4px 2px; font-size: 13px; font-weight: 600; line-height: 1.2; "
-            "border: 1px solid #438450; border-radius: 4px; background-color: #223f2a; color: #e8f5e9; }"
-            "QPushButton:hover { background-color: #2a4c33; border: 1px solid #529c62; color: #ffffff; }"
-            "QPushButton:pressed { background-color: #1a3221; }"
-        )
-
-        # Selected day (when it is NOT Today) - subdued dark warm amber with soft border
-        self._day_style_selected = (
-            "QPushButton { padding: 4px 2px; font-size: 13px; font-weight: 600; line-height: 1.2; "
-            "border: 1px solid #b86e28; border-radius: 4px; background-color: #3b2818; color: #ffd8a8; }"
-            "QPushButton:hover { background-color: #4a3320; border: 1px solid #d48332; color: #ffe3c2; }"
-            "QPushButton:pressed { background-color: #2e1f13; }"
-        )
+        self._refresh_day_nav_styles()
 
         self.day_nav_buttons = []
         for i in range(7):
@@ -7631,16 +8919,193 @@ class MainWindow(QMainWindow):
             self.day_nav_buttons.append(btn)
 
         self.day_nav_next_btn = QPushButton()
+        self.day_nav_next_btn.setObjectName("dayNavNextBtn")
         self.day_nav_next_btn.setIcon(self._create_nav_arrow_icon("right"))
         self.day_nav_next_btn.setIconSize(QSize(20, 20))
         self.day_nav_next_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.day_nav_next_btn.setFixedWidth(36)
         self.day_nav_next_btn.setFixedHeight(44)
-        self.day_nav_next_btn.setStyleSheet(arrow_style)
         self.day_nav_next_btn.clicked.connect(self._on_day_nav_next)
         nav_layout.addWidget(self.day_nav_next_btn)
 
         return container
+
+    def _refresh_day_nav_styles(self):
+        """Builds dynamically themed button styles for day navigation buttons."""
+        app_theme = getattr(self.config_mgr, "app_theme", "midnight") if self.config_mgr else "midnight"
+        tokens = APP_THEMES.get(app_theme, APP_THEMES["midnight"])
+
+        bg_btn = tokens.get("bg_button", "#1e2330")
+        bg_btn_hover = tokens.get("bg_button_hover", "#262e3f")
+        bg_btn_pressed = tokens.get("bg_button_pressed", "#161a24")
+        border = tokens.get("border_color", "#303746")
+        border_light = tokens.get("border_light", "#455470")
+        text_pri = tokens.get("text_primary", "#dce1e8")
+        text_sec = tokens.get("text_secondary", "#a4b0c2")
+        accent = tokens.get("accent_primary", "#2d6cd4")
+        accent_hover = tokens.get("accent_hover", "#3b7ee8")
+        accent_pressed = tokens.get("accent_pressed", "#2259b3")
+
+        # Standard upcoming unselected day
+        self._day_style_unselected = (
+            f"QPushButton {{ padding: 4px 2px; font-size: 13px; font-weight: 500; line-height: 1.2; "
+            f"border: 1px solid {border}; border-radius: 4px; background-color: {bg_btn}; color: {text_sec}; }} "
+            f"QPushButton:hover {{ background-color: {bg_btn_hover}; border: 1px solid {border_light}; color: {text_pri}; }} "
+            f"QPushButton:pressed {{ background-color: {bg_btn_pressed}; }}"
+        )
+
+        # Theme-specific color palettes for the current day ("Today")
+        # Unselected: subtle tint background, theme border, theme-accent text
+        # Selected: rich theme fill, bright accent border, high-contrast text
+        today_palettes = {
+            "midnight": {
+                "unsel_bg": "#16233b",
+                "unsel_border": "#254b8c",
+                "unsel_text": "#60a5fa",
+                "unsel_hover_bg": "#1c2d4a",
+                "unsel_hover_border": "#3b82f6",
+                "unsel_hover_text": "#93c5fd",
+                "unsel_pressed_bg": "#121d30",
+                "sel_bg": "#1d3d73",
+                "sel_border": "#3b82f6",
+                "sel_text": "#ffffff",
+                "sel_hover_bg": "#254d8f",
+                "sel_hover_border": "#60a5fa",
+                "sel_pressed_bg": "#16305a",
+            },
+            "oled_black": {
+                "unsel_bg": "#071a0e",
+                "unsel_border": "#15803d",
+                "unsel_text": "#4ade80",
+                "unsel_hover_bg": "#0d2616",
+                "unsel_hover_border": "#22c55e",
+                "unsel_hover_text": "#86efac",
+                "unsel_pressed_bg": "#041008",
+                "sel_bg": "#14532d",
+                "sel_border": "#22c55e",
+                "sel_text": "#ffffff",
+                "sel_hover_bg": "#166534",
+                "sel_hover_border": "#4ade80",
+                "sel_pressed_bg": "#0f3d21",
+            },
+            "nordic_frost": {
+                "unsel_bg": "#0d2338",
+                "unsel_border": "#0369a1",
+                "unsel_text": "#38bdf8",
+                "unsel_hover_bg": "#132d47",
+                "unsel_hover_border": "#0ea5e9",
+                "unsel_hover_text": "#7dd3fc",
+                "unsel_pressed_bg": "#0a1a2b",
+                "sel_bg": "#075985",
+                "sel_border": "#0ea5e9",
+                "sel_text": "#ffffff",
+                "sel_hover_bg": "#0369a1",
+                "sel_hover_border": "#38bdf8",
+                "sel_pressed_bg": "#0c4a6e",
+            },
+            "charcoal": {
+                "unsel_bg": "#1b1c36",
+                "unsel_border": "#4338ca",
+                "unsel_text": "#818cf8",
+                "unsel_hover_bg": "#232545",
+                "unsel_hover_border": "#6366f1",
+                "unsel_hover_text": "#a5b4fc",
+                "unsel_pressed_bg": "#15162b",
+                "sel_bg": "#3730a3",
+                "sel_border": "#6366f1",
+                "sel_text": "#ffffff",
+                "sel_hover_bg": "#4338ca",
+                "sel_hover_border": "#818cf8",
+                "sel_pressed_bg": "#312e81",
+            },
+            "cyberpunk": {
+                "unsel_bg": "#052230",
+                "unsel_border": "#0891b2",
+                "unsel_text": "#22d3ee",
+                "unsel_hover_bg": "#092d3f",
+                "unsel_hover_border": "#00f0ff",
+                "unsel_hover_text": "#67e8f9",
+                "unsel_pressed_bg": "#031721",
+                "sel_bg": "#0e7490",
+                "sel_border": "#00f0ff",
+                "sel_text": "#ffffff",
+                "sel_hover_bg": "#155e75",
+                "sel_hover_border": "#38f5ff",
+                "sel_pressed_bg": "#083344",
+            },
+            "warm_sunset": {
+                "unsel_bg": "#2e1b10",
+                "unsel_border": "#92400e",
+                "unsel_text": "#fbbf24",
+                "unsel_hover_bg": "#3d2415",
+                "unsel_hover_border": "#f59e0b",
+                "unsel_hover_text": "#fcd34d",
+                "unsel_pressed_bg": "#20120a",
+                "sel_bg": "#78350f",
+                "sel_border": "#f59e0b",
+                "sel_text": "#ffffff",
+                "sel_hover_bg": "#92400e",
+                "sel_hover_border": "#fbbf24",
+                "sel_pressed_bg": "#451a03",
+            },
+            "synthwave": {
+                "unsel_bg": "#2e0f2b",
+                "unsel_border": "#86198f",
+                "unsel_text": "#f472b6",
+                "unsel_hover_bg": "#3d153a",
+                "unsel_hover_border": "#e024c3",
+                "unsel_hover_text": "#f9a8d4",
+                "unsel_pressed_bg": "#20091e",
+                "sel_bg": "#701a75",
+                "sel_border": "#e024c3",
+                "sel_text": "#ffffff",
+                "sel_hover_bg": "#86198f",
+                "sel_hover_border": "#f472b6",
+                "sel_pressed_bg": "#4a044e",
+            },
+        }
+
+        p = today_palettes.get(app_theme)
+        if not p:
+            p = {
+                "unsel_bg": bg_btn,
+                "unsel_border": border_light,
+                "unsel_text": accent,
+                "unsel_hover_bg": bg_btn_hover,
+                "unsel_hover_border": accent,
+                "unsel_hover_text": accent_hover,
+                "unsel_pressed_bg": bg_btn_pressed,
+                "sel_bg": accent_pressed,
+                "sel_border": accent,
+                "sel_text": "#ffffff",
+                "sel_hover_bg": accent,
+                "sel_hover_border": accent_hover,
+                "sel_pressed_bg": bg_btn_pressed,
+            }
+
+        # Today's day (when NOT currently selected) - themed tint & border
+        self._day_style_today_unselected = (
+            f"QPushButton {{ padding: 4px 2px; font-size: 13px; font-weight: 600; line-height: 1.2; "
+            f"border: 1px solid {p['unsel_border']}; border-radius: 4px; background-color: {p['unsel_bg']}; color: {p['unsel_text']}; }} "
+            f"QPushButton:hover {{ background-color: {p['unsel_hover_bg']}; border: 1px solid {p['unsel_hover_border']}; color: {p['unsel_hover_text']}; }} "
+            f"QPushButton:pressed {{ background-color: {p['unsel_pressed_bg']}; }}"
+        )
+
+        # Today's day (when ALSO currently selected) - rich theme fill with bright accent border
+        self._day_style_today_selected = (
+            f"QPushButton {{ padding: 4px 2px; font-size: 13px; font-weight: 600; line-height: 1.2; "
+            f"border: 1.5px solid {p['sel_border']}; border-radius: 4px; background-color: {p['sel_bg']}; color: {p['sel_text']}; }} "
+            f"QPushButton:hover {{ background-color: {p['sel_hover_bg']}; border: 1.5px solid {p['sel_hover_border']}; color: {p['sel_text']}; }} "
+            f"QPushButton:pressed {{ background-color: {p['sel_pressed_bg']}; }}"
+        )
+
+        # Selected day (when it is NOT Today) - themed accent styling
+        self._day_style_selected = (
+            f"QPushButton {{ padding: 4px 2px; font-size: 13px; font-weight: 600; line-height: 1.2; "
+            f"border: 1.5px solid {accent}; border-radius: 4px; background-color: {accent_pressed}; color: #ffffff; }} "
+            f"QPushButton:hover {{ background-color: {accent_hover}; border: 1.5px solid {accent_hover}; color: #ffffff; }} "
+            f"QPushButton:pressed {{ background-color: {bg_btn_pressed}; }}"
+        )
 
     def _make_day_nav_handler(self, btn: QPushButton):
         def handler():
@@ -7758,14 +9223,27 @@ class MainWindow(QMainWindow):
             is_selected = (btn_date_str == selected_date_str)
 
             if is_today and is_selected:
-                btn.setStyleSheet(self._day_style_today_selected)
+                if getattr(self, "_is_viewing_late_night_overhang", False):
+                    overhang_color = self.config_mgr.category_colors.get("time_indicator", "#06b6d4") if self.config_mgr else "#06b6d4"
+                    btn.setStyleSheet(self._day_style_today_selected + f" border: 1.5px solid {overhang_color};")
+                    btn.setToolTip("Viewing late-night broadcasts (midnight to 4:00 AM)")
+                else:
+                    btn.setStyleSheet(self._day_style_today_selected)
+                    btn.setToolTip("")
             elif is_today:
                 btn.setStyleSheet(self._day_style_today_unselected)
+                btn.setToolTip("")
             elif is_selected:
-                btn.setStyleSheet(self._day_style_selected)
+                if getattr(self, "_is_viewing_late_night_overhang", False):
+                    overhang_color = self.config_mgr.category_colors.get("time_indicator", "#06b6d4") if self.config_mgr else "#06b6d4"
+                    btn.setStyleSheet(self._day_style_selected + f" border: 1.5px solid {overhang_color};")
+                    btn.setToolTip("Viewing late-night broadcasts (midnight to 4:00 AM)")
+                else:
+                    btn.setStyleSheet(self._day_style_selected)
+                    btn.setToolTip("")
             else:
                 btn.setStyleSheet(self._day_style_unselected)
-            btn.setToolTip("")
+                btn.setToolTip("")
 
         if hasattr(self, "day_nav_prev_btn"):
             self.day_nav_prev_btn.setEnabled(self.day_nav_offset > 0)
@@ -7785,9 +9263,10 @@ class MainWindow(QMainWindow):
         
         # When viewing the grid for a specific date or today, don't trim earlier shows of that day.
         # In list mode with All Upcoming, trim ended programs.
-        trim_ended = (self.guide_stack.currentIndex() == 1 and airdate is None)
+        is_grid = (self.guide_stack.currentIndex() == 0)
+        trim_ended = (not is_grid and airdate is None)
         programs = self.guide_service.search_programs(
-            query=query, channel=channel, airdate=airdate, trim_ended=trim_ended
+            query=query, channel=channel, airdate=airdate, trim_ended=trim_ended, include_overhang=is_grid
         )
 
         self.current_guide_items = programs
@@ -7814,7 +9293,7 @@ class MainWindow(QMainWindow):
                 rec_info = active_scheduled.get((ch, start_iso))
                 hist_info = history_map.get((ch, start_iso))
 
-                timing_info = self._get_program_timing_state(p)
+                timing_info = self._get_program_timing_state(p, check_files=False)
                 timing_state = timing_info.get("state", "upcoming")
                 cat = p.get("_category") or classify_guide_category(p)
 
@@ -7865,7 +9344,7 @@ class MainWindow(QMainWindow):
                 # Option 1 coloring for list view:
                 cat_colors = self.config_mgr.category_colors
                 if timing_state == "past":
-                    gray_color = QColor("#788292")
+                    gray_color = getattr(self.grid_tile_delegate, "color_past_title", QColor("#788292"))
                     time_item.setForeground(gray_color)
                     chan_item.setForeground(gray_color)
                     title_item.setForeground(gray_color)
@@ -7909,7 +9388,7 @@ class MainWindow(QMainWindow):
         programs = getattr(self, "current_guide_items", None) or []
         first_active_row = -1
         for r, p in enumerate(programs):
-            timing = self._get_program_timing_state(p)
+            timing = self._get_program_timing_state(p, check_files=False)
             if timing.get("state") in ("live", "upcoming"):
                 first_active_row = r
                 break
@@ -7919,6 +9398,8 @@ class MainWindow(QMainWindow):
                 self.guide_table.scrollToItem(target_item, QTableWidget.ScrollHint.PositionAtTop)
 
     def _populate_grid_guide(self, programs: List[Dict[str, Any]], airdate: Optional[str], keep_scroll: bool = False):
+        saved_h = self.guide_grid_table.horizontalScrollBar().value() if keep_scroll else 0
+        saved_v = self.guide_grid_table.verticalScrollBar().value() if keep_scroll else 0
         active_scheduled = self.queue_mgr.get_active_scheduled_map()
         history_map = self.queue_mgr.get_history_map(limit=200)
 
@@ -7945,31 +9426,48 @@ class MainWindow(QMainWindow):
         today = date.today()
         target_date_str = airdate or today.strftime("%Y-%m-%d")
 
-        # Configure columns and headers for single-day 24-hour grid (48 columns)
-        total_cols = 48
+        # Configure columns and headers for extended 28-hour grid (56 columns including 4h late night)
+        total_cols = 56
         if self.guide_grid_table.columnCount() != total_cols:
             self.guide_grid_table.setColumnCount(total_cols)
+        base_dt = datetime.combine(datetime.strptime(target_date_str, "%Y-%m-%d").date(), datetime.min.time())
+        next_dt = base_dt + timedelta(days=1)
+        next_day_abbr = next_dt.strftime("%a")
+
         grid_headers = []
         for h in range(24):
             for m in (0, 30):
                 grid_headers.append(f"{h%12 or 12}:{m:02d} {'AM' if h < 12 else 'PM'}")
+        for h in range(4):
+            for m in (0, 30):
+                if h == 0 and m == 0:
+                    grid_headers.append(f"12:00 AM ({next_day_abbr})")
+                else:
+                    grid_headers.append(f"{h%12 or 12}:{m:02d} AM")
         self.guide_grid_table.setHorizontalHeaderLabels(grid_headers)
-        base_dt = datetime.combine(datetime.strptime(target_date_str, "%Y-%m-%d").date(), datetime.min.time())
+
+        cut_dt = base_dt + timedelta(hours=28)
 
         # Color palette for tiles
-        tile_bg = QColor("#222838")
-        tile_bg_alt = QColor("#1e2332")
+        tile_bg = getattr(self.grid_tile_delegate, "_default_bg", QColor("#222838"))
+        tile_bg_alt = getattr(self.grid_tile_delegate, "_default_bg_alt", QColor("#1e2332"))
         tile_text_color = QColor("#ffffff")
 
         for row_idx, ch in enumerate(channels):
-            # Filter specifically to selected airdate
-            ch_progs = [
-                p for p in programs
-                if p.get("kaffeine_channel") == ch and (
-                    p.get("airdate") == target_date_str or
-                    (p.get("start_iso") and p.get("start_iso").startswith(target_date_str))
-                )
-            ]
+            # Filter specifically to selected airdate and next-day late-night overhang
+            ch_progs = []
+            for p in programs:
+                if p.get("kaffeine_channel") != ch:
+                    continue
+                start_iso = p.get("start_iso")
+                if not start_iso:
+                    continue
+                try:
+                    p_dt = datetime.fromisoformat(start_iso)
+                    if base_dt <= p_dt < cut_dt:
+                        ch_progs.append(p)
+                except Exception:
+                    continue
             ch_progs.sort(key=lambda x: x.get("start_iso", ""))
 
             current_col = 0
@@ -8053,7 +9551,7 @@ class MainWindow(QMainWindow):
                 elif timing_state == "live":
                     cur_bg = QColor("#17261c")
                 else:
-                    cur_bg = tile_bg if (idx % 2 == 0) else tile_bg_alt
+                    cur_bg = tile_bg_alt if (row_idx % 2 == 1) else tile_bg
                 item.setBackground(cur_bg)
                 item.setForeground(tile_text_color)
 
@@ -8074,8 +9572,18 @@ class MainWindow(QMainWindow):
         # Ensure all populated rows fit intelligently flush at the bottom
         self._apply_guide_zoom()
 
-        # Auto-scroll based on selected date (unless preserving scroll position):
-        if not keep_scroll:
+        # Auto-scroll based on push-through gesture target position or selected date:
+        target_pos = getattr(self, "_target_grid_scroll_position", None)
+        self._target_grid_scroll_position = None
+
+        if target_pos in ("0400", "04:00", "4am", "start"):
+            QTimer.singleShot(60, self.jump_guide_to_0400)
+        elif target_pos == "end":
+            QTimer.singleShot(60, lambda: self._scroll_grid_to_slot(48, center=False))
+        elif keep_scroll:
+            self.guide_grid_table.horizontalScrollBar().setValue(saved_h)
+            self.guide_grid_table.verticalScrollBar().setValue(saved_v)
+        else:
             if target_date_str == today.strftime("%Y-%m-%d"):
                 QTimer.singleShot(60, self.jump_guide_to_now)
             else:
@@ -8106,13 +9614,11 @@ class MainWindow(QMainWindow):
 
         if hasattr(self, "watch_guide_btn"):
             self.watch_guide_btn.setVisible(False)
-        if hasattr(self, "alt_watch_guide_btn"):
-            self.alt_watch_guide_btn.setVisible(False)
         if hasattr(self, "stop_timeshift_btn"):
             self.stop_timeshift_btn.setVisible(False)
         if hasattr(self, "record_guide_btn"):
             self.record_guide_btn.setVisible(True)
-            self.record_guide_btn.setText("Record This Program")
+            self.record_guide_btn.setText("Record Program")
         if hasattr(self, "adjust_buffer_guide_btn"):
             self.adjust_buffer_guide_btn.setVisible(False)
         if hasattr(self, "cancel_guide_btn"):
@@ -8125,7 +9631,10 @@ class MainWindow(QMainWindow):
             for c in range(col - 1, -1, -1):
                 it = self.guide_grid_table.item(row, c)
                 if it and it.data(Qt.ItemDataRole.UserRole):
-                    item = it
+                    p_data = it.data(Qt.ItemDataRole.UserRole)
+                    p_span = p_data.get("_span", 1) if isinstance(p_data, dict) else 1
+                    if c + p_span > col:
+                        item = it
                     break
 
         if not item or not item.data(Qt.ItemDataRole.UserRole):
@@ -8135,25 +9644,34 @@ class MainWindow(QMainWindow):
         prog = item.data(Qt.ItemDataRole.UserRole)
         # Option 1: Clicking the currently selected program tile again toggles / unhighlights it
         cur_sel = getattr(self, "selected_grid_program", None)
-        if cur_sel is not None and (
-            cur_sel is prog
-            or (
-                isinstance(cur_sel, dict)
-                and cur_sel.get("channel_id") == prog.get("channel_id")
-                and cur_sel.get("start_iso") == prog.get("start_iso")
-            )
-        ):
-            self.clear_guide_selection()
-            return
+        if cur_sel is not None:
+            is_same = False
+            if cur_sel is prog or cur_sel == prog:
+                is_same = True
+            elif cur_sel.get("id") is not None and prog.get("id") is not None:
+                is_same = (cur_sel.get("id") == prog.get("id"))
+            else:
+                cur_ch = (cur_sel.get("kaffeine_channel") or cur_sel.get("channel") or cur_sel.get("channel_id") or "").strip().lower()
+                prog_ch = (prog.get("kaffeine_channel") or prog.get("channel") or prog.get("channel_id") or "").strip().lower()
+                cur_start = cur_sel.get("start_iso") or ""
+                prog_start = prog.get("start_iso") or ""
+                if cur_ch and prog_ch and cur_ch == prog_ch and cur_start and prog_start and cur_start == prog_start:
+                    is_same = True
+
+            if is_same:
+                self.clear_guide_selection()
+                return
 
         root_col = prog.get("_start_col", col)
         root_item = self.guide_grid_table.item(row, root_col)
+        self.guide_grid_table.clearSelection()
         if root_item:
             self.guide_grid_table.setCurrentCell(row, root_col)
             root_item.setSelected(True)
 
         self.selected_grid_program = prog
         self._display_program_details(prog)
+        self.guide_grid_table.viewport().update()
 
     def _display_program_details(self, prog: Dict[str, Any]):
         channel = prog.get("kaffeine_channel", "")
@@ -8217,18 +9735,11 @@ class MainWindow(QMainWindow):
         if hasattr(self, "watch_guide_btn"):
             if state == "live":
                 self.watch_guide_btn.setVisible(True)
-                if is_live_rec and rec_file:
-                    self.watch_guide_btn.setText(f"Watch in {player_disp}")
-                    self.watch_guide_btn.setStyleSheet("font-weight: bold; background-color: #1976d2; color: #ffffff; padding: 4px 12px;")
-                elif live_mode == "timeshift":
-                    self.watch_guide_btn.setText(f"Watch Live ({player_disp})")
-                    self.watch_guide_btn.setStyleSheet("font-weight: bold; background-color: #1976d2; color: #ffffff; padding: 4px 12px;")
-                else:
-                    self.watch_guide_btn.setText("Watch Live (Kaffeine)")
-                    self.watch_guide_btn.setStyleSheet("font-weight: bold; background-color: #2e7d32; color: #ffffff; padding: 4px 12px;")
+                self.watch_guide_btn.setText("Watch Live")
+                self.watch_guide_btn.setStyleSheet("font-weight: bold; background-color: #1976d2; color: #ffffff; padding: 4px 12px;")
             elif state == "upcoming":
                 self.watch_guide_btn.setVisible(True)
-                self.watch_guide_btn.setText("Tune Channel Now")
+                self.watch_guide_btn.setText("Watch Channel")
                 self.watch_guide_btn.setStyleSheet("padding: 4px 12px;")
             elif state == "past":
                 if timing_info.get("recorded_file"):
@@ -8238,19 +9749,9 @@ class MainWindow(QMainWindow):
                 else:
                     self.watch_guide_btn.setVisible(False)
 
-        if hasattr(self, "alt_watch_guide_btn"):
-            if state == "live":
-                self.alt_watch_guide_btn.setVisible(True)
-                if is_live_rec and rec_file or live_mode == "timeshift":
-                    self.alt_watch_guide_btn.setText("Watch in Kaffeine")
-                else:
-                    self.alt_watch_guide_btn.setText(f"Timeshift in {player_disp}")
-            else:
-                self.alt_watch_guide_btn.setVisible(False)
-
         if hasattr(self, "record_guide_btn"):
             self.record_guide_btn.setVisible(rec_info is None)
-            self.record_guide_btn.setText("Record This Program")
+            self.record_guide_btn.setText("Record Program")
 
         if hasattr(self, "adjust_buffer_guide_btn"):
             self.adjust_buffer_guide_btn.setVisible(rec_info is not None)
@@ -8294,22 +9795,26 @@ class MainWindow(QMainWindow):
                 return self.current_guide_items[row]
         return None
 
-    def _get_program_timing_state(self, prog: Dict[str, Any]) -> Dict[str, Any]:
+    def _get_program_timing_state(self, prog: Dict[str, Any], check_files: bool = True) -> Dict[str, Any]:
         """
         Calculates whether a program is live, upcoming, or past, and looks for recorded files if past.
+        When check_files is False (e.g. bulk table population or row styling), bypasses disk scans
+        and database lookups for instant memory-speed execution.
         """
         now = datetime.now()
         start_iso = prog.get("start_iso")
         dur_iso = prog.get("duration_iso") or "00:30:00"
 
-        start_dt = None
-        end_dt = None
-        if start_iso:
+        start_dt = prog.get("_parsed_start_dt")
+        end_dt = prog.get("_parsed_end_dt")
+        if start_dt is None and start_iso:
             try:
                 start_dt = datetime.fromisoformat(start_iso)
                 parts = [int(x) for x in dur_iso.split(":")]
                 dur = timedelta(hours=parts[0], minutes=parts[1], seconds=parts[2] if len(parts) > 2 else 0)
                 end_dt = start_dt + dur
+                prog["_parsed_start_dt"] = start_dt
+                prog["_parsed_end_dt"] = end_dt
             except Exception:
                 pass
 
@@ -8328,6 +9833,17 @@ class MainWindow(QMainWindow):
 
         if start_dt <= now < end_dt:
             mins_left = max(1, int((end_dt - now).total_seconds() // 60))
+            if not check_files:
+                return {
+                    "state": "live",
+                    "time_desc": f"Live Now ({mins_left}m remaining)",
+                    "start_fmt": start_fmt,
+                    "recorded_file": None,
+                    "is_active_recording": False,
+                    "start_dt": start_dt,
+                    "end_dt": end_dt,
+                }
+
             active_file = None
             title = (prog.get("show_title") or prog.get("title") or "").strip()
             ch = (prog.get("kaffeine_channel") or "").strip().lower()
@@ -8357,7 +9873,7 @@ class MainWindow(QMainWindow):
                 "recorded_file": active_file,
                 "is_active_recording": bool(rec_data and active_file),
                 "start_dt": start_dt,
-                "end_dt": end_dt
+                "end_dt": end_dt,
             }
         elif now < start_dt:
             delta_sec = int((start_dt - now).total_seconds())
@@ -8378,9 +9894,20 @@ class MainWindow(QMainWindow):
                 "start_fmt": time_prefix,
                 "recorded_file": None,
                 "start_dt": start_dt,
-                "end_dt": end_dt
+                "end_dt": end_dt,
             }
         else:
+            end_fmt = end_dt.strftime("%I:%M %p").lstrip("0")
+            if not check_files:
+                return {
+                    "state": "past",
+                    "time_desc": f"Ended at {end_fmt} ({start_dt.strftime('%b %d')})",
+                    "start_fmt": start_fmt,
+                    "recorded_file": None,
+                    "start_dt": start_dt,
+                    "end_dt": end_dt,
+                }
+
             # Past program: search for recorded file
             title = (prog.get("show_title") or prog.get("title") or "").strip()
             ch = (prog.get("kaffeine_channel") or "").strip().lower()
@@ -8417,15 +9944,54 @@ class MainWindow(QMainWindow):
                 except Exception:
                     pass
 
-            end_fmt = end_dt.strftime("%I:%M %p").lstrip("0")
             return {
                 "state": "past",
                 "time_desc": f"Ended at {end_fmt} ({start_dt.strftime('%b %d')})",
                 "start_fmt": start_fmt,
                 "recorded_file": recorded_file,
                 "start_dt": start_dt,
-                "end_dt": end_dt
+                "end_dt": end_dt,
             }
+
+    def _find_live_program_for_channel(self, ch: str) -> Optional[Dict[str, Any]]:
+        """Finds the currently broadcasting program for the given channel in the guide database."""
+        if not ch or not hasattr(self, "guide_service") or not self.guide_service:
+            return None
+        now_dt = datetime.now()
+        now_iso = now_dt.strftime("%Y-%m-%dT%H:%M:%S")
+        try:
+            conn = self.guide_service._get_connection()
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT * FROM guide_programs WHERE kaffeine_channel = ? AND start_iso <= ? AND end_iso > ? LIMIT 1",
+                (ch, now_iso, now_iso)
+            )
+            row = cur.fetchone()
+            conn.close()
+            if row:
+                return dict(row)
+        except Exception as e:
+            logger.warning(f"Error finding live program for channel {ch} via query: {e}")
+
+        # Fallback search through guide_service.search_programs
+        try:
+            progs = self.guide_service.search_programs(
+                query="",
+                channel=ch,
+                airdate=now_dt.strftime("%Y-%m-%d"),
+                trim_ended=False,
+                include_overhang=True
+            )
+            for p in progs:
+                s_iso = p.get("start_iso", "")
+                e_iso = p.get("end_iso", "")
+                if s_iso and e_iso and s_iso <= now_iso < e_iso:
+                    return p
+        except Exception:
+            pass
+
+        return None
 
     def watch_or_tune_selected_guide_item(self):
         prog = self._get_active_selected_program()
@@ -8435,30 +10001,34 @@ class MainWindow(QMainWindow):
 
         timing_info = self._get_program_timing_state(prog)
         state = timing_info.get("state")
-        ch = prog.get("kaffeine_channel", "")
+        ch = prog.get("kaffeine_channel") or prog.get("channel", "")
         title = prog.get("show_title") or prog.get("title") or "Program"
         rec_file = timing_info.get("recorded_file")
         is_live_rec = timing_info.get("is_active_recording") or bool(rec_file)
-        live_mode = getattr(self.config_mgr, "live_tv_watch_mode", "timeshift")
-        watch_mode = self.config_mgr.guide_watch_mode
 
         if state == "live":
             if is_live_rec and rec_file:
                 self.dbus_client.play_file(
                     rec_file,
-                    player=self.config_mgr.playback_player,
-                    custom_cmd=self.config_mgr.custom_playback_player_cmd
+                    player=self.config_mgr.live_tv_watch_mode,
+                    custom_cmd=self.config_mgr.custom_live_tv_player_cmd
                 )
                 self.status_bar.showMessage(f"Playing live recording: {os.path.basename(rec_file)}", 4000)
-            elif live_mode == "timeshift":
-                self.start_timeshift_playback(prog)
             else:
-                self.dbus_client.tune_channel(ch, raise_window=True, view_mode=watch_mode)
-                self.status_bar.showMessage(f"Tuned to {ch} - Watching '{title}' live in Kaffeine.", 4000)
+                self.start_timeshift_playback(prog)
         elif state == "upcoming":
-            # Direct button click in detail pane tunes directly without popup
-            self.dbus_client.tune_channel(ch, raise_window=True, view_mode=watch_mode)
-            self.status_bar.showMessage(f"Tuned to {ch} (Upcoming: '{title}' {timing_info.get('time_desc')}).", 4000)
+            live_prog = self._find_live_program_for_channel(ch)
+            if not live_prog:
+                now_iso = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+                live_prog = {
+                    "show_title": f"{ch} Live",
+                    "title": f"{ch} Live",
+                    "kaffeine_channel": ch,
+                    "channel": ch,
+                    "start_iso": now_iso,
+                    "duration_iso": "02:00:00",
+                }
+            self.start_timeshift_playback(live_prog)
         elif state == "past":
             if rec_file:
                 self.dbus_client.play_file(
@@ -8469,25 +10039,7 @@ class MainWindow(QMainWindow):
                 self.status_bar.showMessage(f"Playing recording: {os.path.basename(rec_file)}", 4000)
 
     def alt_watch_or_tune_selected_guide_item(self):
-        prog = self._get_active_selected_program()
-        if not prog:
-            return
-
-        timing_info = self._get_program_timing_state(prog)
-        state = timing_info.get("state")
-        ch = prog.get("kaffeine_channel", "")
-        title = prog.get("show_title") or prog.get("title") or "Program"
-        rec_file = timing_info.get("recorded_file")
-        is_live_rec = timing_info.get("is_active_recording") or bool(rec_file)
-        live_mode = getattr(self.config_mgr, "live_tv_watch_mode", "timeshift")
-        watch_mode = self.config_mgr.guide_watch_mode
-
-        if state == "live":
-            if (is_live_rec and rec_file) or (live_mode == "timeshift"):
-                self.dbus_client.tune_channel(ch, raise_window=True, view_mode=watch_mode)
-                self.status_bar.showMessage(f"Tuned to {ch} - Watching '{title}' live in Kaffeine.", 4000)
-            else:
-                self.start_timeshift_playback(prog)
+        self.watch_or_tune_selected_guide_item()
 
     def handle_program_activation(self, prog: Dict[str, Any]):
         if not prog:
@@ -8495,35 +10047,37 @@ class MainWindow(QMainWindow):
 
         timing_info = self._get_program_timing_state(prog)
         state = timing_info.get("state")
-        ch = prog.get("kaffeine_channel", "")
+        ch = prog.get("kaffeine_channel") or prog.get("channel", "")
         title = prog.get("show_title") or prog.get("title") or "Program"
         rec_file = timing_info.get("recorded_file")
         is_live_rec = timing_info.get("is_active_recording") or bool(rec_file)
-        live_mode = getattr(self.config_mgr, "live_tv_watch_mode", "timeshift")
-        watch_mode = self.config_mgr.guide_watch_mode
 
         if state == "live":
             if is_live_rec and rec_file:
                 self.dbus_client.play_file(
                     rec_file,
-                    player=self.config_mgr.playback_player,
-                    custom_cmd=self.config_mgr.custom_playback_player_cmd
+                    player=self.config_mgr.live_tv_watch_mode,
+                    custom_cmd=self.config_mgr.custom_live_tv_player_cmd
                 )
                 self.status_bar.showMessage(f"Playing live recording: {os.path.basename(rec_file)}", 4000)
-            elif live_mode == "timeshift":
-                self.start_timeshift_playback(prog)
             else:
-                self.dbus_client.tune_channel(ch, raise_window=True, view_mode=watch_mode)
-                self.status_bar.showMessage(f"Tuned to {ch} - Watching '{title}' live in Kaffeine.", 4000)
+                self.start_timeshift_playback(prog)
         elif state == "upcoming":
-            # Option A: Smart Choice Dialog
-            dlg = UpcomingShowDialog(prog, timing_info, parent=self)
+            # Check if this program has an active scheduled recording
+            active_map = self.queue_mgr.get_active_scheduled_map() if hasattr(self, "queue_mgr") and self.queue_mgr else {}
+            ch_key = (ch or "").strip().lower()
+            iso_key = (prog.get("start_iso") or "")[:16]
+            is_scheduled = bool(prog.get("_scheduled_rec") or active_map.get((ch_key, iso_key)))
+
+            # Smart Choice Dialog
+            dlg = UpcomingShowDialog(prog, timing_info, is_scheduled=is_scheduled, parent=self)
             dlg.exec()
             if dlg.action == UpcomingShowDialog.ACTION_RECORD:
                 self.record_selected_guide_item()
+            elif dlg.action == UpcomingShowDialog.ACTION_CANCEL_RECORDING:
+                self.cancel_selected_guide_recording()
             elif dlg.action == UpcomingShowDialog.ACTION_TUNE:
-                self.dbus_client.tune_channel(ch, raise_window=True, view_mode=watch_mode)
-                self.status_bar.showMessage(f"Tuned to {ch} (Upcoming: '{title}' {timing_info.get('time_desc')}).", 4000)
+                self.watch_or_tune_selected_guide_item()
         elif state == "past":
             if rec_file:
                 self.dbus_client.play_file(
@@ -8542,14 +10096,14 @@ class MainWindow(QMainWindow):
         """
         Timeshifts a live broadcast in the user's selected video player:
         - If already recording and .m2t file exists, opens immediately in player.
-        - Otherwise, queues recording, dispatches to Kaffeine (minimized in background),
+        - Otherwise, queues recording directly for prog, dispatches to Kaffeine (minimized in background),
           waits a few seconds for tuner lock and stream buffering, then launches the player.
         """
         if not prog:
             return
 
         title = prog.get("show_title") or prog.get("title") or "Live Program"
-        ch = prog.get("kaffeine_channel", "")
+        ch = prog.get("kaffeine_channel") or prog.get("channel", "")
 
         # If switching from an existing timeshift channel, stop previous session first
         if getattr(self, "_active_timeshift", None):
@@ -8565,19 +10119,33 @@ class MainWindow(QMainWindow):
         rec_info = active_map.get((ch_key, iso_key))
         was_already_scheduled = bool(rec_info)
 
-        # Check if file is already active on disk
-        active_file = self.storage_mgr.find_active_or_recent_recording_file(title, max_age_seconds=7200)
+        # Compute recording title for this specific program
+        cat = prog.get("_category") or classify_guide_category(prog)
+        show = prog.get("show_title") or prog.get("title") or "Live TV"
+        ep = prog.get("episode_title", "")
+        if cat == "movies":
+            rec_title = show
+        elif cat == "sports" and ep:
+            rec_title = f"{show}: {ep}" if show else ep
+        else:
+            rec_title = f"{show} - {ep}" if ep else show
+
+        # Check if file is already active on disk (search by title or rec_title)
+        active_file = (
+            self.storage_mgr.find_active_or_recent_recording_file(rec_title, max_age_seconds=7200)
+            or self.storage_mgr.find_active_or_recent_recording_file(title, max_age_seconds=7200)
+        )
         if active_file and active_file.exists():
             proc = self.dbus_client.play_file(
                 str(active_file),
-                player=self.config_mgr.playback_player,
-                custom_cmd=self.config_mgr.custom_playback_player_cmd,
+                player=self.config_mgr.live_tv_watch_mode,
+                custom_cmd=self.config_mgr.custom_live_tv_player_cmd,
                 standalone=True
             )
-            pname = self.config_mgr.playback_player.upper()
+            pname = self.config_mgr.live_tv_watch_mode.upper()
             self.status_bar.showMessage(f"Playing active recording '{title}' in {pname}.", 5000)
             self._active_timeshift = {
-                "title": title,
+                "title": rec_title,
                 "channel": ch,
                 "queue_id": rec_info.get("id") if rec_info else None,
                 "kaffeine_key": rec_info.get("kaffeine_key") if rec_info else None,
@@ -8590,19 +10158,34 @@ class MainWindow(QMainWindow):
             self._display_program_details(prog)
             return
 
-        # Ensure program is queued and recording is dispatched
+        # Ensure program is queued specifically for prog and recording is dispatched
+        qid = None
         if not rec_info:
             try:
-                self.record_selected_guide_item()
+                now_iso = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+                start_iso = prog.get("start_iso") or now_iso
+                duration_iso = prog.get("duration_iso") or "02:00:00"
+
+                qid = self.queue_mgr.add_recording(
+                    rec_title, ch, start_iso, duration_iso,
+                    lead_time_mins=0, buffer_mins=0
+                )
+                self.watcher.check_and_dispatch(notify=False)
                 active_map = self.queue_mgr.get_active_scheduled_map()
                 rec_info = active_map.get((ch_key, iso_key))
+                if not rec_info and qid:
+                    for item in active_map.values():
+                        if item.get("id") == qid:
+                            rec_info = item
+                            break
             except Exception as e:
                 self.status_bar.showMessage(f"Error starting background recording for timeshift: {e}", 4000)
                 return
+        else:
+            qid = rec_info.get("id")
 
-        qid = rec_info.get("id") if rec_info else None
         buf_secs = getattr(self.config_mgr, "timeshift_buffer_seconds", 2)
-        pname = self.config_mgr.playback_player.upper()
+        pname = self.config_mgr.live_tv_watch_mode.upper()
         self.status_bar.showMessage(f"Buffering live stream ({buf_secs}s) before opening in {pname}...", (buf_secs + 4) * 1000)
         QTimer.singleShot(
             buf_secs * 1000,
@@ -8610,7 +10193,8 @@ class MainWindow(QMainWindow):
                 prog,
                 retries_left=6,
                 was_already_scheduled=was_already_scheduled,
-                queue_id=qid
+                queue_id=qid,
+                rec_title=rec_title
             )
         )
 
@@ -8619,28 +10203,56 @@ class MainWindow(QMainWindow):
         prog: Dict[str, Any],
         retries_left: int = 6,
         was_already_scheduled: bool = False,
-        queue_id: Optional[int] = None
+        queue_id: Optional[int] = None,
+        rec_title: Optional[str] = None
     ):
         title = prog.get("show_title") or prog.get("title") or ""
-        ch = prog.get("kaffeine_channel", "")
-        active_file = self.storage_mgr.find_active_or_recent_recording_file(title, max_age_seconds=600)
+        ch = prog.get("kaffeine_channel") or prog.get("channel", "")
+        lookup_title = rec_title or title
+
+        active_file = (
+            self.storage_mgr.find_active_or_recent_recording_file(lookup_title, max_age_seconds=600)
+            or self.storage_mgr.find_active_or_recent_recording_file(title, max_age_seconds=600)
+        )
+        if not active_file or not active_file.exists():
+            # If title search had no hit, check if any recent file appeared in recording folder
+            try:
+                rec_folder = self.storage_mgr.get_recording_folder()
+                if rec_folder and rec_folder.exists():
+                    now_ts = time.time()
+                    newest_file = None
+                    newest_mtime = 0
+                    for ext in StorageManager.VIDEO_EXTENSIONS:
+                        for vf in rec_folder.glob(f"*{ext}"):
+                            try:
+                                st = vf.stat()
+                                if (now_ts - st.st_mtime) < 120 and st.st_size > 16384:
+                                    if st.st_mtime > newest_mtime:
+                                        newest_mtime = st.st_mtime
+                                        newest_file = vf
+                            except Exception:
+                                pass
+                    if newest_file:
+                        active_file = newest_file
+            except Exception:
+                pass
 
         if active_file and active_file.exists():
             proc = self.dbus_client.play_file(
                 str(active_file),
-                player=self.config_mgr.playback_player,
-                custom_cmd=self.config_mgr.custom_playback_player_cmd,
+                player=self.config_mgr.live_tv_watch_mode,
+                custom_cmd=self.config_mgr.custom_live_tv_player_cmd,
                 standalone=True
             )
-            pname = self.config_mgr.playback_player.upper()
-            self.status_bar.showMessage(f"Playing timeshifted broadcast '{title}' in {pname}.", 5000)
+            pname = self.config_mgr.live_tv_watch_mode.upper()
+            self.status_bar.showMessage(f"Playing live broadcast '{title}' in {pname}.", 5000)
 
             ch_key = (ch or "").strip().lower()
             iso_key = (prog.get("start_iso") or "")[:16]
             rec_info = self.queue_mgr.get_active_scheduled_map().get((ch_key, iso_key))
 
             self._active_timeshift = {
-                "title": title,
+                "title": lookup_title,
                 "channel": ch,
                 "queue_id": queue_id or (rec_info.get("id") if rec_info else None),
                 "kaffeine_key": rec_info.get("kaffeine_key") if rec_info else None,
@@ -8661,7 +10273,8 @@ class MainWindow(QMainWindow):
                     prog,
                     retries_left - 1,
                     was_already_scheduled=was_already_scheduled,
-                    queue_id=queue_id
+                    queue_id=queue_id,
+                    rec_title=rec_title
                 )
             )
         else:
@@ -8782,23 +10395,17 @@ class MainWindow(QMainWindow):
 
         qid = rec_info.get("id")
         rec_title = rec_info.get("title") or prog.get("show_title", "")
-        confirm = QMessageBox.question(
-            self, "Confirm Cancellation",
-            f"Are you sure you want to cancel the scheduled recording for '{rec_title}' (Queue #{qid})?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        removed_info = self.queue_mgr.remove_recording(int(qid))
+        target_info = removed_info or rec_info or {}
+        self.dbus_client.cancel_recording(
+            key=target_info.get("kaffeine_key"),
+            channel=target_info.get("channel") or prog.get("kaffeine_channel"),
+            title=target_info.get("title") or prog.get("show_title") or rec_title
         )
-        if confirm == QMessageBox.StandardButton.Yes:
-            removed_info = self.queue_mgr.remove_recording(int(qid))
-            target_info = removed_info or rec_info or {}
-            self.dbus_client.cancel_recording(
-                key=target_info.get("kaffeine_key"),
-                channel=target_info.get("channel") or prog.get("kaffeine_channel"),
-                title=target_info.get("title") or prog.get("show_title") or rec_title
-            )
-            self.status_bar.showMessage(f"Cancelled recording '{rec_title}'.", 3000)
-            self.refresh_recordings()
-            self._refresh_guide_view(keep_scroll=True)
-            self._display_program_details(prog)
+        self.status_bar.showMessage(f"Cancelled recording '{rec_title}'.", 3000)
+        self.refresh_recordings()
+        self._refresh_guide_view(keep_scroll=True)
+        self._display_program_details(prog)
 
     def _refresh_guide_view(self, keep_scroll: bool = True):
         airdate = self.guide_date_combo.currentData() if hasattr(self, "guide_date_combo") else None
@@ -9024,6 +10631,10 @@ class MainWindow(QMainWindow):
         try:
             self.settings.setValue("geometry", self.saveGeometry())
             self._auto_save_automation_settings()
+            if hasattr(self, "config_mgr"):
+                if hasattr(self, "_guide_maximized"):
+                    self.config_mgr.guide_maximized = bool(self._guide_maximized)
+                self.config_mgr.save()
             if hasattr(self, "_timeshift_poll_timer") and self._timeshift_poll_timer.isActive():
                 self._timeshift_poll_timer.stop()
             if hasattr(self, "_clock_timer") and self._clock_timer.isActive():

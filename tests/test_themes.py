@@ -5,7 +5,8 @@ from kaffeine_dvr.gui import build_app_stylesheet
 def test_theme_presets_structure():
     required_keys = {
         "sports", "news", "movies", "tvshows",
-        "highlight", "live_badge", "live_bg", "time_indicator", "clock"
+        "highlight", "live_badge", "live_bg", "time_indicator", "clock", "grid_bg",
+        "past_bg", "past_bg_alt", "past_border", "past_title", "past_subtext"
     }
 
     assert "midnight" in THEME_PRESETS
@@ -60,6 +61,10 @@ def test_build_app_stylesheet():
     assert "#000000" in css
     assert "QMainWindow" in css
     assert "QTabWidget" in css
+    assert "QPushButton#guideGridViewBtn" in css
+    assert "QPushButton#guideListViewBtn" in css
+    assert "QPushButton#headerRestoreBtn" in css
+    assert "QPushButton#guideMaximizeBtn" in css
 
 
 def test_config_theme_presets(isolated_config):
@@ -132,4 +137,147 @@ def test_gui_dual_theme_switching(qapp, isolated_config):
     assert g_idx >= 0
     guide_combo.setCurrentIndex(g_idx)
     assert guide_combo.currentData() == "cyberpunk"
+
+
+def test_theme_chip_widget(qapp):
+    from kaffeine_dvr.gui import ThemeChip, get_theme_chip_fixed_width
+
+    w = get_theme_chip_fixed_width()
+    assert w > 100
+
+    clicked_keys = []
+    chip = ThemeChip("test_theme", "Test Theme", "#38bdf8")
+    chip.chip_clicked.connect(lambda k: clicked_keys.append(k))
+
+    assert chip.key == "test_theme"
+    assert chip.display_name == "Test Theme"
+    assert chip.dot_color == "#38bdf8"
+    assert not chip._is_selected
+    assert chip.fixed_width == w
+    assert chip.height() == 28
+    assert chip.width() == w
+
+    # Test selection toggle
+    chip.set_selected(True)
+    assert chip._is_selected
+    chip.set_selected(False)
+    assert not chip._is_selected
+
+    # Test dot color update
+    chip.set_dot_color("#ff0000")
+    assert chip.dot_color == "#ff0000"
+
+    # Test click signal
+    chip.click()
+    assert clicked_keys == ["test_theme"]
+
+
+def test_theme_icon_generators(qapp):
+    from kaffeine_dvr.gui import MainWindow
+    # Ensure all icon methods accept optional color tokens without TypeError
+    assert MainWindow._create_nav_arrow_icon("left", "#ffffff") is not None
+    assert MainWindow._create_nav_arrow_icon("right", "#ffffff") is not None
+    assert MainWindow._create_guide_refresh_icon("#ffffff") is not None
+    assert MainWindow._create_restore_window_icon("#ffffff") is not None
+    assert MainWindow._create_guide_restore_icon("#ffffff") is not None
+    assert MainWindow._create_guide_maximize_icon("#ffffff") is not None
+
+
+def test_today_theme_palettes_in_day_nav(isolated_config):
+    from unittest.mock import MagicMock
+
+    from kaffeine_dvr.gui import MainWindow
+
+    dummy = MagicMock()
+    dummy.config_mgr = isolated_config
+
+    expected_colors = {
+        "warm_sunset": ("#fbbf24", "#f59e0b"),
+        "cyberpunk": ("#22d3ee", "#00f0ff"),
+        "nordic_frost": ("#38bdf8", "#0ea5e9"),
+        "midnight": ("#60a5fa", "#3b82f6"),
+        "charcoal": ("#818cf8", "#6366f1"),
+        "synthwave": ("#f472b6", "#e024c3"),
+        "oled_black": ("#4ade80", "#22c55e"),
+    }
+
+    for theme_key, (unsel_token, sel_token) in expected_colors.items():
+        isolated_config.app_theme = theme_key
+        MainWindow._refresh_day_nav_styles(dummy)
+        assert unsel_token in dummy._day_style_today_unselected
+        assert sel_token in dummy._day_style_today_selected
+        # Verify old hardcoded green border (#2e5937) is gone
+        assert "#2e5937" not in dummy._day_style_today_unselected
+
+
+def test_guide_filter_bar_theming(qapp):
+    from PyQt6.QtGui import QPalette
+
+    from kaffeine_dvr.gui import APP_THEMES, build_app_stylesheet, setup_dark_theme
+
+    for theme_key, tokens in APP_THEMES.items():
+        css = build_app_stylesheet(theme_key, "")
+        assert "QLabel#guideFilterLabel" in css
+        assert "QComboBox#guideDateCombo" in css
+        assert "QComboBox#guideChannelCombo" in css
+        assert "QLineEdit#guideSearchInput" in css
+        assert "QLineEdit#guideSearchInput::placeholder" in css
+        assert "QComboBox QAbstractItemView::item" in css
+        assert tokens["bg_button"] in css
+        assert tokens["border_light"] in css
+
+        setup_dark_theme(qapp, theme_key)
+        palette = qapp.palette()
+        placeholder_color = palette.color(QPalette.ColorRole.PlaceholderText).name().lower()
+        expected_color = tokens["text_secondary"].lower()
+        assert placeholder_color == expected_color, f"Theme {theme_key} placeholder text color mismatch: {placeholder_color} != {expected_color}"
+
+
+def test_compute_past_theme_colors():
+    from kaffeine_dvr.config import compute_past_theme_colors
+    res = compute_past_theme_colors("#251c19")
+    assert "past_bg" in res
+    assert "past_bg_alt" in res
+    assert "past_border" in res
+    assert "past_title" in res
+    assert "past_subtext" in res
+    for v in res.values():
+        assert v.startswith("#") and len(v) == 7
+
+    # Test invalid / fallback
+    fallback = compute_past_theme_colors("invalid")
+    assert fallback["past_bg"] == "#161922"
+    assert fallback["past_title"] == "#788292"
+
+
+def test_delegate_past_show_theming_sync(qtbot, isolated_config):
+    from kaffeine_dvr.gui import MainWindow
+
+    win = MainWindow(config_mgr=isolated_config)
+    qtbot.addWidget(win)
+
+    delegate = win.grid_tile_delegate
+
+    # Verify default midnight past colors
+    assert delegate.color_past_bg.name().lower() == "#161922"
+    assert delegate.color_past_title.name().lower() == "#788292"
+
+    # Switch to Warm Amber / Sunset preset
+    isolated_config.apply_theme_preset("warm_sunset")
+    delegate.refresh_category_colors()
+    assert delegate.color_past_bg.name().lower() == "#1c1513"
+    assert delegate.color_past_title.name().lower() == "#a89288"
+    assert delegate.color_past_subtext.name().lower() == "#7a665d"
+
+    # Switch to Emerald Forest preset
+    isolated_config.apply_theme_preset("emerald_forest")
+    delegate.refresh_category_colors()
+    assert delegate.color_past_bg.name().lower() == "#0f1a14"
+    assert delegate.color_past_title.name().lower() == "#759883"
+
+    # Switch to Cyberpunk preset
+    isolated_config.apply_theme_preset("cyberpunk")
+    delegate.refresh_category_colors()
+    assert delegate.color_past_bg.name().lower() == "#13101c"
+    assert delegate.color_past_title.name().lower() == "#8e82a8"
 
