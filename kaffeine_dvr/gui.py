@@ -9957,40 +9957,10 @@ class MainWindow(QMainWindow):
         """Finds the currently broadcasting program for the given channel in the guide database."""
         if not ch or not hasattr(self, "guide_service") or not self.guide_service:
             return None
-        now_dt = datetime.now()
-        now_iso = now_dt.strftime("%Y-%m-%dT%H:%M:%S")
         try:
-            conn = self.guide_service._get_connection()
-            conn.row_factory = sqlite3.Row
-            cur = conn.cursor()
-            cur.execute(
-                "SELECT * FROM guide_programs WHERE kaffeine_channel = ? AND start_iso <= ? AND end_iso > ? LIMIT 1",
-                (ch, now_iso, now_iso)
-            )
-            row = cur.fetchone()
-            conn.close()
-            if row:
-                return dict(row)
+            return self.guide_service.get_live_program_for_channel(ch)
         except Exception as e:
-            logger.warning(f"Error finding live program for channel {ch} via query: {e}")
-
-        # Fallback search through guide_service.search_programs
-        try:
-            progs = self.guide_service.search_programs(
-                query="",
-                channel=ch,
-                airdate=now_dt.strftime("%Y-%m-%d"),
-                trim_ended=False,
-                include_overhang=True
-            )
-            for p in progs:
-                s_iso = p.get("start_iso", "")
-                e_iso = p.get("end_iso", "")
-                if s_iso and e_iso and s_iso <= now_iso < e_iso:
-                    return p
-        except Exception:
-            pass
-
+            print(f"Error finding live program for channel {ch}: {e}")
         return None
 
     def watch_or_tune_selected_guide_item(self):

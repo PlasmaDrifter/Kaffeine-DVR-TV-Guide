@@ -59,3 +59,36 @@ def test_guide_service_wal_mode(isolated_guide_svc: GuideService):
     mode = cur.fetchone()[0]
     assert mode.lower() == "wal"
     conn.close()
+
+
+def test_get_live_program_for_channel(isolated_guide_svc: GuideService):
+    from datetime import datetime, timedelta
+    gs = isolated_guide_svc
+
+    now = datetime.now()
+    start_dt = now - timedelta(minutes=15)
+    start_iso = start_dt.strftime("%Y-%m-%dT%H:%M:%S")
+    airdate = now.strftime("%Y-%m-%d")
+
+    conn = gs._get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT OR REPLACE INTO guide_programs (
+            tvmaze_id, show_title, episode_title, network, kaffeine_channel,
+            start_time_local, start_iso, duration_iso, runtime_mins, summary,
+            season, number, airdate, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        88881, "Live Action News", "Evening Edition", "Local", "7.1 KGO-HD",
+        start_dt.strftime("%I:%M %p"), start_iso, "01:00:00", 60, "Breaking news updates.",
+        None, None, airdate, now.isoformat()
+    ))
+    conn.commit()
+    conn.close()
+
+    live_p = gs.get_live_program_for_channel("7.1 KGO-HD")
+    assert live_p is not None
+    assert live_p["show_title"] == "Live Action News"
+
+    # Non-existent channel returns None
+    assert gs.get_live_program_for_channel("99.9 NONEXISTENT") is None

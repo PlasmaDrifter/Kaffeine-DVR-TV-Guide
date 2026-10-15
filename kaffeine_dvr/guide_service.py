@@ -1012,3 +1012,41 @@ class GuideService:
         conn.commit()
         conn.close()
         return count
+
+    def get_live_program_for_channel(self, channel: str) -> Optional[Dict[str, Any]]:
+        """
+        Locates the currently broadcasting program for a channel in the guide database.
+        Calculates broadcast end time (start_iso + duration_iso) to check if start <= now < end.
+        """
+        if not channel:
+            return None
+        now_dt = datetime.now()
+        airdate = now_dt.strftime("%Y-%m-%d")
+        try:
+            progs = self.search_programs(
+                query="",
+                channel=channel,
+                airdate=airdate,
+                trim_ended=False,
+                include_overhang=True
+            )
+            for p in progs:
+                start_iso = p.get("start_iso")
+                if not start_iso:
+                    continue
+                try:
+                    s_dt = p.get("_parsed_start_dt")
+                    e_dt = p.get("_parsed_end_dt")
+                    if s_dt is None or e_dt is None:
+                        s_dt = datetime.fromisoformat(start_iso)
+                        dur_iso = p.get("duration_iso") or "00:30:00"
+                        parts = [int(x) for x in dur_iso.split(":")]
+                        dur = timedelta(hours=parts[0], minutes=parts[1], seconds=parts[2] if len(parts) > 2 else 0)
+                        e_dt = s_dt + dur
+                    if s_dt <= now_dt < e_dt:
+                        return p
+                except Exception:
+                    continue
+        except Exception as e:
+            print(f"Error querying live program for channel {channel}: {e}")
+        return None
