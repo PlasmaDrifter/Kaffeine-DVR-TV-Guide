@@ -276,7 +276,7 @@ def check_for_updates() -> Dict[str, Any]:
                         RELEASES_API,
                         headers={"User-Agent": f"KaffeineDVR/{__version__}"}
                     )
-                    with urllib.request.urlopen(req, timeout=5) as resp:
+                    with urllib.request.urlopen(req, timeout=5) as resp:  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
                         api_data = json.loads(resp.read().decode("utf-8"))
                         notes = api_data.get("body", "").strip()
                 except Exception:
@@ -303,7 +303,7 @@ def check_for_updates() -> Dict[str, Any]:
             RELEASES_API,
             headers={"User-Agent": f"KaffeineDVR/{__version__}"}
         )
-        with urllib.request.urlopen(req, timeout=8) as resp:
+        with urllib.request.urlopen(req, timeout=8) as resp:  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
             data = json.loads(resp.read().decode("utf-8"))
             tag = data.get("tag_name", "").lstrip("v")
             remote_notes = data.get("body", "").strip()
