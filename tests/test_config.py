@@ -89,3 +89,33 @@ def test_settings_ui_scale_clamping(isolated_config: ConfigManager):
     cfg.settings_ui_scale = 125
     assert cfg.settings_ui_scale == 125
 
+
+def test_custom_theme_presets_limit_and_overwrite(isolated_config: ConfigManager):
+    cfg = isolated_config
+    assert len(cfg.custom_theme_presets) == 0
+
+    # Save 3 custom themes
+    k1 = cfg.save_custom_theme_preset("Theme 1")
+    k2 = cfg.save_custom_theme_preset("Theme 2")
+    cfg.save_custom_theme_preset("Theme 3")
+    assert len(cfg.custom_theme_presets) == 3
+
+    # Attempting to save a 4th should raise ValueError
+    import pytest
+    with pytest.raises(ValueError, match="Maximum limit of 3"):
+        cfg.save_custom_theme_preset("Theme 4")
+
+    # Overwriting an existing key replaces it and preserves the 3 limit
+    k4 = cfg.save_custom_theme_preset("Theme 4 Overwrite", overwrite_key=k1)
+    assert len(cfg.custom_theme_presets) == 3
+    assert k1 not in cfg.custom_theme_presets
+    assert k4 in cfg.custom_theme_presets
+    assert cfg.custom_theme_presets[k4]["name"] == "Theme 4 Overwrite"
+
+    # Deleting allows adding a new one
+    cfg.delete_custom_theme_preset(k2)
+    assert len(cfg.custom_theme_presets) == 2
+    cfg.save_custom_theme_preset("Theme 5")
+    assert len(cfg.custom_theme_presets) == 3
+
+

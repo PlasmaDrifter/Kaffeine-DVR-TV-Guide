@@ -13,6 +13,7 @@ import json
 import mimetypes
 import secrets
 import shutil
+import sys
 import threading
 import time
 import urllib.parse
@@ -24,6 +25,36 @@ from .guide_service import GuideService
 from .queue_manager import QueueManager
 from .storage_manager import StorageManager
 from .web_ui import WEB_HTML_TEMPLATE
+
+_CACHED_FAVICON_BYTES: Optional[bytes] = None
+
+
+def _get_favicon_bytes() -> bytes:
+    global _CACHED_FAVICON_BYTES
+    if _CACHED_FAVICON_BYTES is not None:
+        return _CACHED_FAVICON_BYTES
+
+    base_dir = Path(__file__).resolve().parent.parent
+    candidates = [
+        base_dir / "assets" / "icons" / "kaffeine-dvr-32.png",
+        base_dir / "assets" / "icons" / "kaffeine-dvr-64.png",
+        base_dir / "assets" / "kaffeine-dvr.png",
+    ]
+    if hasattr(sys, "_MEIPASS"):
+        meipass = Path(getattr(sys, "_MEIPASS"))
+        candidates.insert(0, meipass / "assets" / "icons" / "kaffeine-dvr-32.png")
+        candidates.insert(1, meipass / "assets" / "kaffeine-dvr.png")
+
+    for cand in candidates:
+        if cand.is_file():
+            try:
+                _CACHED_FAVICON_BYTES = cand.read_bytes()
+                return _CACHED_FAVICON_BYTES
+            except Exception:
+                pass
+
+    _CACHED_FAVICON_BYTES = b""
+    return _CACHED_FAVICON_BYTES
 
 
 class KaffeineWebRequestHandler(http.server.BaseHTTPRequestHandler):
@@ -161,6 +192,21 @@ class KaffeineWebRequestHandler(http.server.BaseHTTPRequestHandler):
         if path in ("/", "/index.html"):
             self._send_html(WEB_HTML_TEMPLATE)
             return
+
+        # Favicon routes (unauthenticated)
+        if path in ("/favicon.ico", "/favicon.png"):
+            fav_bytes = _get_favicon_bytes()
+            if fav_bytes:
+                self.send_response(200)
+                self.send_header("Content-Type", "image/png")
+                self.send_header("Content-Length", str(len(fav_bytes)))
+                self.send_header("Cache-Control", "public, max-age=86400")
+                self.end_headers()
+                self.wfile.write(fav_bytes)
+                return
+            else:
+                self._send_json({"error": "Favicon not found"}, status=404)
+                return
 
         # All API endpoints require authentication (except status probe which returns 401 if unauthed)
         if path.startswith("/api/"):

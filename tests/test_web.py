@@ -234,4 +234,19 @@ def test_web_companion_ui_anchored_epg_and_channels(web_test_env):
         assert "epgChannelList" in html
         assert "populateChannelDropdown" in html
         assert "epg-rec-dot" in html
+        assert 'href="/favicon.png"' in html
+        assert 'href="/favicon.ico"' in html
+
+    # Verify favicon endpoints return valid PNG bytes
+    with urllib.request.urlopen(f"{base_url}/favicon.ico") as ico_resp:
+        assert ico_resp.status == 200
+        assert ico_resp.headers.get("Content-Type") == "image/png"
+        data = ico_resp.read()
+        assert data.startswith(b"\x89PNG\r\n\x1a\n")
+
+    with urllib.request.urlopen(f"{base_url}/favicon.png") as png_resp:
+        assert png_resp.status == 200
+        assert png_resp.headers.get("Content-Type") == "image/png"
+        data = png_resp.read()
+        assert data.startswith(b"\x89PNG\r\n\x1a\n")
 

@@ -1141,7 +1141,7 @@ class ConfigManager:
         combined.update(self.custom_theme_presets)
         return combined
 
-    def save_custom_theme_preset(self, name: str) -> str:
+    def save_custom_theme_preset(self, name: str, overwrite_key: Optional[str] = None) -> str:
         clean_name = name.strip()
         if not clean_name:
             raise ValueError("Preset name cannot be empty")
@@ -1152,6 +1152,12 @@ class ConfigManager:
             preset_key = f"custom_{int(time.time())}"
 
         presets = dict(self.custom_theme_presets)
+        if overwrite_key and overwrite_key in presets:
+            if overwrite_key != preset_key:
+                del presets[overwrite_key]
+        elif preset_key not in presets and len(presets) >= 3:
+            raise ValueError("Maximum limit of 3 custom theme presets reached.")
+
         presets[preset_key] = {
             "name": clean_name,
             "colors": dict(self.category_colors),

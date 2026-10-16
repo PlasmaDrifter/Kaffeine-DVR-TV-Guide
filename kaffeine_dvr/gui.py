@@ -6915,20 +6915,21 @@ class MainWindow(QMainWindow):
         )
 
         detected_folder = str(self.storage_mgr.get_recording_folder())
-        folder_row = QHBoxLayout()
-        folder_row.setContentsMargins(0, 0, 0, 0)
-        folder_row.setSpacing(8)
         self.custom_folder_input = QLineEdit()
-        self.custom_folder_input.setText(self.config_mgr.custom_recording_folder)
-        self.custom_folder_input.setPlaceholderText(f"Auto-detected: {detected_folder}")
-        self.custom_folder_input.textChanged.connect(self._auto_save_automation_settings)
-        folder_row.addWidget(self.custom_folder_input)
-        self.browse_folder_btn = QPushButton("Browse...")
-        self.browse_folder_btn.clicked.connect(self.browse_custom_recording_folder)
-        folder_row.addWidget(self.browse_folder_btn)
+        self.custom_folder_input.setText(detected_folder)
+        self.custom_folder_input.setReadOnly(True)
+        self.custom_folder_input.setCursorPosition(0)
+        self.custom_folder_input.setToolTip(f"Recording folder automatically detected from kaffeinerc:\n{detected_folder}")
+        self.custom_folder_input.setStyleSheet(
+            "color: #a0b2c6; background-color: rgba(255, 255, 255, 0.03); "
+            "border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 4px; padding: 4px 8px;"
+        )
         storage_form.addRow(
-            make_setting_label("Recording Folder:", "Folder where Kaffeine saves .m2t recordings. Auto-detected from kaffeinerc or overridden here."),
-            folder_row
+            make_setting_label(
+                "Recording Folder:",
+                "Folder where Kaffeine saves .m2t broadcast recordings, automatically detected from your kaffeinerc configuration."
+            ),
+            self.custom_folder_input
         )
 
         storage_layout.addLayout(storage_form)
@@ -8503,7 +8504,6 @@ class MainWindow(QMainWindow):
         self.config_mgr.auto_cleanup_enabled = self.cleanup_enable_check.isChecked()
         self.config_mgr.retention_days = self.retention_days_spin.value()
         self.config_mgr.min_free_disk_gb = self.min_free_spin.value()
-        self.config_mgr.custom_recording_folder = self.custom_folder_input.text().strip()
 
         # Web Companion settings
         if hasattr(self, "web_enable_check"):
@@ -9023,20 +9023,51 @@ class MainWindow(QMainWindow):
             self._sync_guide_theme_chips()
 
     def _save_current_theme_preset(self):
-        """Prompt user for a preset name and save the current guide grid category colors."""
+        """Prompt user for a preset name and save the current guide grid category colors (max 3 custom presets)."""
+        custom_presets = getattr(self.config_mgr, "custom_theme_presets", {})
+        overwrite_key = None
+        default_name = ""
+
+        if len(custom_presets) >= 3:
+            theme_names = [info["name"] for k, info in custom_presets.items()]
+            keys = list(custom_presets.keys())
+            cur_preset = getattr(self.config_mgr, "theme_preset", "")
+            current_idx = keys.index(cur_preset) if cur_preset in keys else 0
+
+            item, ok = QInputDialog.getItem(
+                self,
+                "Custom Theme Limit Reached (3/3)",
+                "You have reached the maximum limit of 3 saved custom themes.\n"
+                "Select an existing theme to replace with your current colors, or Cancel:",
+                theme_names,
+                current_idx,
+                False
+            )
+            if not ok or not item:
+                return
+            idx = theme_names.index(item)
+            overwrite_key = keys[idx]
+            default_name = item
+
+        dlg_title = "Save Theme Preset" if not overwrite_key else "Replace Theme Preset"
+        dlg_prompt = "Enter a name for this custom theme preset:" if not overwrite_key else f"Enter name for the replacement theme (or keep '{default_name}'):"
+
         name, ok = QInputDialog.getText(
             self,
-            "Save Theme Preset",
-            "Enter a name for this custom theme preset:",
+            dlg_title,
+            dlg_prompt,
             QLineEdit.EchoMode.Normal,
-            ""
+            default_name
         )
         if ok and name.strip():
             preset_name = name.strip()
-            preset_key = self.config_mgr.save_custom_theme_preset(preset_name)
-            self._populate_theme_preset_combo()
-            self.select_guide_theme(preset_key)
-            self.flash_save_indicator(f"Saved Theme Preset: {preset_name}")
+            try:
+                preset_key = self.config_mgr.save_custom_theme_preset(preset_name, overwrite_key=overwrite_key)
+                self._populate_theme_preset_combo()
+                self.select_guide_theme(preset_key)
+                self.flash_save_indicator(f"Saved Theme Preset: {preset_name}")
+            except Exception as e:
+                QMessageBox.warning(self, "Theme Error", str(e))
 
     def _delete_current_theme_preset(self):
         """Delete the currently selected custom theme preset."""
@@ -9139,16 +9170,8 @@ class MainWindow(QMainWindow):
             self._display_program_details(active_prog)
         self.flash_save_indicator("Guide Colors Reset to Defaults")
 
-    def browse_custom_recording_folder(self):
-        current = self.custom_folder_input.text().strip() or str(self.storage_mgr.get_recording_folder())
-        chosen = QFileDialog.getExistingDirectory(self, "Select DVR Recording Folder", current)
-        if chosen:
-            self.custom_folder_input.setText(chosen)
-            self.update_storage_status_ui()
-
     def update_storage_status_ui(self):
-        folder_str = self.custom_folder_input.text().strip() if hasattr(self, "custom_folder_input") else ""
-        target_path = Path(folder_str) if folder_str else self.storage_mgr.get_recording_folder()
+        target_path = self.storage_mgr.get_recording_folder()
         usage = self.storage_mgr.get_disk_usage(target_path)
         if hasattr(self, "storage_status_lbl"):
             free_gb = usage["free_gb"]
