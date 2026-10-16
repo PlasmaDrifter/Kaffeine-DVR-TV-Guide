@@ -368,6 +368,9 @@ class KaffeineDbusClient:
                     cls = subprocess.run([kdotool_bin, "getwindowclassname", wid], env=env, stdout=subprocess.PIPE, text=True, timeout=1.0).stdout.strip().lower()
                     if "dvr" in cls:
                         continue
+                    w_title = subprocess.run([kdotool_bin, "getwindowname", wid], env=env, stdout=subprocess.PIPE, text=True, timeout=1.0).stdout.strip().lower()
+                    if "dvr" in w_title:
+                        continue
                     kaffeine_wids.append(wid)
                     if mode == "tray":
                         subprocess.run(
@@ -440,8 +443,12 @@ class KaffeineDbusClient:
                     kaffeine_wids = []
                     for wid in wids:
                         cls = subprocess.run([kdotool_bin, "getwindowclassname", wid], env=env, stdout=subprocess.PIPE, text=True, timeout=1.0).stdout.strip().lower()
-                        if "dvr" not in cls:
-                            kaffeine_wids.append(wid)
+                        if "dvr" in cls:
+                            continue
+                        w_title = subprocess.run([kdotool_bin, "getwindowname", wid], env=env, stdout=subprocess.PIPE, text=True, timeout=1.0).stdout.strip().lower()
+                        if "dvr" in w_title:
+                            continue
+                        kaffeine_wids.append(wid)
                     if kaffeine_wids:
                         if first_match_time is None:
                             first_match_time = time.time()

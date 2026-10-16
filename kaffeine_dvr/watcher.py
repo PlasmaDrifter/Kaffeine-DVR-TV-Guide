@@ -208,7 +208,31 @@ class Watcher:
                 print(f"[{now_str}] Desktop notification sent for '{n_title}' on {n_channel} (lead: {lead_mins}m, persistent: {persistent}).", flush=True)
 
         # Update in-progress and completed statuses (archive finished to history)
-        self.queue_mgr.update_statuses([], max_history=cfg.max_history_entries)
+        status_res = self.queue_mgr.update_statuses([], max_history=cfg.max_history_entries)
+
+        # Enforce internal background minimization if configured (tray or taskbar)
+        if cfg.launch_mode in ("taskbar", "tray") or getattr(cfg, "launch_minimized", False):
+            # 1. If any recording transitioned to RECORDING right now, Kaffeine's internal playDvb()
+            # invokes QWidget::showNormal(). Start a short async monitor to immediately re-dock it.
+            if status_res and status_res.get("started", 0) > 0:
+                import threading
+                threading.Thread(
+                    target=self.dbus_client._minimize_window_async,
+                    args=(cfg.launch_mode, 6.0, 2.5),
+                    daemon=True
+                ).start()
+
+            # 2. If any recording is currently active (RECORDING) or armed (ARMED), ensure
+            # Kaffeine remains minimized/docked in the tray so it never pops up on the desktop.
+            try:
+                active_recs = [
+                    r for r in self.queue_mgr.list_queue(include_completed=False)
+                    if r.get("status") in ("ARMED", "RECORDING")
+                ]
+                if active_recs and self.dbus_client.is_running():
+                    self.dbus_client.minimize_kaffeine(mode=cfg.launch_mode)
+            except Exception as e:
+                print(f"Error asserting background minimization: {e}", flush=True)
 
         # Run storage retention & auto-cleanup if enabled
         try:
