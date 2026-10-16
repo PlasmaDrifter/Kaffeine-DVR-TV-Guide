@@ -217,7 +217,8 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
       background: #2b1f2e;
     }
     .epg-program-tile.airing-now {
-      border-color: #38bdf8;
+      border: 1.5px solid #38bdf8;
+      box-shadow: 0 0 6px rgba(56, 189, 248, 0.4);
     }
     .epg-rec-dot {
       display: inline-block;
@@ -461,6 +462,13 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
     const TOTAL_SLOTS = 56;
     const TRACK_WIDTH = TOTAL_SLOTS * SLOT_WIDTH;
 
+    function getLocalDateStr(d = new Date()) {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    }
+
     let isPanning = false;
     let panStartX = 0;
     let panStartY = 0;
@@ -533,6 +541,9 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
       localStorage.setItem("kaffeine_guide_view_mode", mode);
       updateGuideViewControls();
       renderGuide();
+      if (mode === "grid") {
+        setTimeout(scrollToCurrentTime, 100);
+      }
     }
 
     function updateGuideViewControls() {
@@ -609,9 +620,8 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
       sel.innerHTML = "";
       const now = new Date();
       for (let i = 0; i < 7; i++) {
-        const d = new Date(now);
-        d.setDate(d.getDate() + i);
-        const iso = d.toISOString().split("T")[0];
+        const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
+        const iso = getLocalDateStr(d);
         const opt = document.createElement("option");
         opt.value = iso;
         opt.textContent = i === 0 ? `Today (${iso})` : i === 1 ? `Tomorrow (${iso})` : `${d.toLocaleDateString('en-US', { weekday: 'short' })} (${iso})`;
@@ -683,8 +693,7 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
         populateChannelDropdown(guideItems);
         renderGuide();
 
-        const now = new Date();
-        const todayStr = now.toISOString().split("T")[0];
+        const todayStr = getLocalDateStr(new Date());
         if (selDate === todayStr && currentGuideViewMode === "grid") {
           setTimeout(scrollToCurrentTime, 120);
         }
@@ -733,7 +742,7 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
 
       const selDate = document.getElementById("guideDateSelect") ? document.getElementById("guideDateSelect").value : "";
       const now = new Date();
-      const todayStr = now.toISOString().split("T")[0];
+      const todayStr = getLocalDateStr(now);
       const isToday = selDate === todayStr;
       const trimCheckbox = document.getElementById("trimPassedCheckbox");
       const shouldTrim = isToday && trimCheckbox && trimCheckbox.checked;
@@ -812,9 +821,10 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       const selDate = document.getElementById("guideDateSelect") ? document.getElementById("guideDateSelect").value : "";
-      const dayStart = new Date(selDate + "T00:00:00");
+      const dateParts = selDate.split("-").map(Number);
+      const dayStart = dateParts.length === 3 ? new Date(dateParts[0], dateParts[1] - 1, dateParts[2], 0, 0, 0) : new Date();
       const now = new Date();
-      const todayStr = now.toISOString().split("T")[0];
+      const todayStr = getLocalDateStr(now);
       const isToday = selDate === todayStr;
 
       // Build Timeline Header slots
@@ -885,12 +895,13 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
       const pane = document.getElementById("epgTimelinePane");
       if (!pane) return;
       const selDate = document.getElementById("guideDateSelect") ? document.getElementById("guideDateSelect").value : "";
-      const dayStart = new Date(selDate + "T00:00:00");
+      const dateParts = selDate.split("-").map(Number);
+      const dayStart = dateParts.length === 3 ? new Date(dateParts[0], dateParts[1] - 1, dateParts[2], 0, 0, 0) : new Date();
       const now = new Date();
       const diffMins = (now - dayStart) / 60000;
       if (diffMins >= 0 && diffMins <= TOTAL_SLOTS * 30) {
         const nowPx = Math.round((diffMins / 30) * SLOT_WIDTH);
-        pane.scrollTo({ left: Math.max(0, nowPx - 120), behavior: 'smooth' });
+        pane.scrollTo({ left: Math.max(0, nowPx - 140), behavior: 'smooth' });
       } else {
         pane.scrollTo({ left: 0, behavior: 'smooth' });
       }
