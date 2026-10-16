@@ -6421,7 +6421,7 @@ class MainWindow(QMainWindow):
         scale_ctrl_row.addStretch()
         scale_layout.addLayout(scale_ctrl_row)
 
-        lbl_scale_hint = QLabel("(Enlarges text, inputs &amp; documentation)")
+        lbl_scale_hint = QLabel("(Enlarges text, inputs & documentation)")
         lbl_scale_hint.setStyleSheet("color: #94a3b8;")
         scale_layout.addWidget(lbl_scale_hint)
         scale_layout.addStretch()
