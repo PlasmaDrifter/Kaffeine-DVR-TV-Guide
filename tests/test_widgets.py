@@ -1002,6 +1002,17 @@ def test_kaffeine_launch_mode_label(qtbot, isolated_config):
     assert any("Kaffeine Launch Mode:" in lbl for lbl in labels)
     assert not any("Recording Launch Mode:" in lbl for lbl in labels)
 
+    # Check that open_kaffeine_setup_btn exists
+    assert hasattr(win, "open_kaffeine_setup_btn")
+    assert win.open_kaffeine_setup_btn.text() == "Open Kaffeine for Setup (Visible)"
+
+    # Verify FirstRunWelcomeDialog has launch_mode_combo
+    from kaffeine_dvr.gui import FirstRunWelcomeDialog
+    dlg = FirstRunWelcomeDialog(isolated_config, win)
+    qtbot.addWidget(dlg)
+    assert hasattr(dlg, "launch_mode_combo")
+    assert dlg.launch_mode_combo.currentData() == "tray"
+
 
 def test_live_badge_text_contrast(qtbot, isolated_config):
     from PyQt6.QtCore import QRect

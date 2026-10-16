@@ -4131,6 +4131,26 @@ class FirstRunWelcomeDialog(BaseFramelessDialog):
         self.service_check = QCheckBox("Enable && start background recording dispatcher service (systemd)")
         self.service_check.setChecked(True)
         options_layout.addWidget(self.service_check)
+
+        launch_mode_row = QHBoxLayout()
+        launch_mode_row.setSpacing(10)
+        launch_mode_lbl = QLabel("Kaffeine Launch Mode:")
+        launch_mode_lbl.setStyleSheet("color: #dce1e8; font-size: 13px; background: transparent;")
+        self.launch_mode_combo = ThemedComboBox()
+        self.launch_mode_combo.addItem("Minimize to System Tray (-m minimal)", "tray")
+        self.launch_mode_combo.addItem("Minimized to Taskbar (Panel)", "taskbar")
+        self.launch_mode_combo.addItem("Normal Window (Visible desktop)", "normal")
+        cur_mode = self.config_mgr.launch_mode
+        idx = self.launch_mode_combo.findData(cur_mode)
+        if idx >= 0:
+            self.launch_mode_combo.setCurrentIndex(idx)
+        else:
+            self.launch_mode_combo.setCurrentIndex(0)
+        self.launch_mode_combo.setFixedWidth(270)
+        launch_mode_row.addWidget(launch_mode_lbl)
+        launch_mode_row.addWidget(self.launch_mode_combo)
+        launch_mode_row.addStretch()
+        options_layout.addLayout(launch_mode_row)
         layout.addWidget(options_box)
 
         layout.addSpacing(10)
@@ -6628,23 +6648,40 @@ class MainWindow(QMainWindow):
         )
 
         self.launch_mode_combo = ThemedComboBox()
-        self.launch_mode_combo.addItem("Minimized to Taskbar (Panel)", "taskbar")
         self.launch_mode_combo.addItem("Minimize to System Tray (-m minimal)", "tray")
+        self.launch_mode_combo.addItem("Minimized to Taskbar (Panel)", "taskbar")
         self.launch_mode_combo.addItem("Normal Window (Visible desktop)", "normal")
         self.launch_mode_combo.setFixedWidth(290)
         cur_mode = self.config_mgr.launch_mode
         mode_idx = self.launch_mode_combo.findData(cur_mode)
         if mode_idx >= 0:
             self.launch_mode_combo.setCurrentIndex(mode_idx)
+
+        launch_mode_container = QWidget()
+        launch_mode_lay = QHBoxLayout(launch_mode_container)
+        launch_mode_lay.setContentsMargins(0, 0, 0, 0)
+        launch_mode_lay.setSpacing(10)
+        launch_mode_lay.addWidget(self.launch_mode_combo)
+
+        self.open_kaffeine_setup_btn = QPushButton("Open Kaffeine for Setup (Visible)")
+        self.open_kaffeine_setup_btn.setObjectName("secondaryActionBtn")
+        self.open_kaffeine_setup_btn.setToolTip(
+            "Open or un-minimize Kaffeine in a normal desktop window to scan channels or adjust settings without changing your saved tray preference."
+        )
+        self.open_kaffeine_setup_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.open_kaffeine_setup_btn.clicked.connect(self._open_kaffeine_visible)
+        launch_mode_lay.addWidget(self.open_kaffeine_setup_btn)
+        launch_mode_lay.addStretch()
+
         dvr_layout.addRow(
             make_setting_label(
                 "Kaffeine Launch Mode:",
                 "Controls how Kaffeine starts when armed for recording:\n"
-                "• Minimized to Taskbar: Quietly minimizes to your panel taskbar without touching tray.\n"
                 "• Minimize to System Tray: Starts with -m minimal mode and docks into tray.\n"
+                "• Minimized to Taskbar: Quietly minimizes to your panel taskbar without touching tray.\n"
                 "• Normal Window: Opens as an active visible window on your desktop."
             ),
-            self.launch_mode_combo
+            launch_mode_container
         )
 
         # Live TV Playback Player
@@ -8638,6 +8675,12 @@ class MainWindow(QMainWindow):
         if not self.config_mgr.first_run_completed or is_empty:
             dlg = FirstRunWelcomeDialog(self.config_mgr, self)
             if dlg.exec() == QDialog.DialogCode.Accepted:
+                if hasattr(dlg, "launch_mode_combo"):
+                    self.config_mgr.launch_mode = dlg.launch_mode_combo.currentData()
+                    if hasattr(self, "launch_mode_combo"):
+                        idx = self.launch_mode_combo.findData(self.config_mgr.launch_mode)
+                        if idx >= 0:
+                            self.launch_mode_combo.setCurrentIndex(idx)
                 if dlg.import_check.isChecked():
                     self.import_channels_from_kaffeine(silent=True)
                 if getattr(dlg, "service_check", None) and dlg.service_check.isChecked():
@@ -10068,6 +10111,12 @@ class MainWindow(QMainWindow):
     def launch_kaffeine(self):
         self.status_bar.showMessage("Launching Kaffeine...", 3000)
         self.dbus_client.launch_kaffeine(mode=self.config_mgr.launch_mode)
+        QTimer.singleShot(2000, self.update_status_badges)
+
+    def _open_kaffeine_visible(self):
+        """Open or un-minimize Kaffeine in normal visible mode for configuration without altering saved launch mode."""
+        self.status_bar.showMessage("Opening Kaffeine for configuration (visible)...", 3000)
+        self.dbus_client.launch_kaffeine(mode="normal")
         QTimer.singleShot(2000, self.update_status_badges)
 
     def sync_guide(self):

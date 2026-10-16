@@ -246,21 +246,28 @@ class KaffeineDbusClient:
         env["QT_QPA_PLATFORM"] = "xcb"
         return env
 
-    def launch_kaffeine(self, mode: str = "taskbar", minimized: Optional[bool] = None) -> bool:
+    def launch_kaffeine(self, mode: str = "tray", minimized: Optional[bool] = None) -> bool:
         """
         Start Kaffeine with the specified launch mode:
+        - 'tray': start in minimal mode (-m) and dock/minimize to the system tray
         - 'taskbar': start normal window and minimize to taskbar via window manager (kdotool/xdotool)
-        - 'tray': start in minimal mode (-m) and minimize/hide to the system tray
         - 'normal': start normal visible application window
         """
-        if self.is_running():
-            return True
         if minimized is not None:
-            mode = "taskbar" if minimized else "normal"
+            mode = "tray" if minimized else "normal"
+
+        if self.is_running():
+            if mode == "normal":
+                self.restore_kaffeine()
+            elif mode in ("taskbar", "tray"):
+                self.minimize_kaffeine(mode=mode)
+            return True
         try:
             env = self._get_display_env()
             k_bin = self.get_kaffeine_bin()
-            if mode in ("taskbar", "tray"):
+            if mode == "tray":
+                cmd = [k_bin, "-m", "--qwindowgeometry", "1x1+-3000+-3000"]
+            elif mode == "taskbar":
                 cmd = [k_bin, "--qwindowgeometry", "1x1+-3000+-3000"]
             else:
                 cmd = [k_bin]
@@ -281,7 +288,64 @@ class KaffeineDbusClient:
             print(f"Error launching kaffeine: {e}")
             return False
 
-    def minimize_kaffeine(self, mode: str = "taskbar") -> bool:
+    def restore_kaffeine(self) -> bool:
+        """Restore Kaffeine window from minimized or hidden state and bring it to the front."""
+        kdotool_bin = shutil.which("kdotool")
+        xdotool_bin = shutil.which("xdotool")
+        if not kdotool_bin and not xdotool_bin:
+            return False
+        env = self._get_display_env()
+        try:
+            if kdotool_bin:
+                res = subprocess.run(
+                    [kdotool_bin, "search", "--class", "kaffeine"],
+                    env=env,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=1.5
+                )
+                wids = [w.strip() for w in res.stdout.strip().splitlines() if w.strip()]
+                kaffeine_wids = []
+                for wid in wids:
+                    cls = subprocess.run([kdotool_bin, "getwindowclassname", wid], env=env, stdout=subprocess.PIPE, text=True, timeout=1.0).stdout.strip().lower()
+                    if "dvr" in cls:
+                        continue
+                    kaffeine_wids.append(wid)
+                    subprocess.run(
+                        [kdotool_bin, "windowstate", "--remove", "MINIMIZED", "--remove", "SKIP_TASKBAR", "--remove", "SKIP_PAGER", wid],
+                        env=env,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        timeout=1.0
+                    )
+                    subprocess.run([kdotool_bin, "windowraise", wid], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
+                    subprocess.run([kdotool_bin, "windowactivate", wid], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
+                return bool(kaffeine_wids)
+            elif xdotool_bin:
+                res = subprocess.run(
+                    [xdotool_bin, "search", "--class", "^kaffeine$"],
+                    env=env,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=1.5
+                )
+                wids = [w.strip() for w in res.stdout.strip().splitlines() if w.strip()]
+                kaffeine_wids = []
+                for wid in wids:
+                    w_title = subprocess.run([xdotool_bin, "getwindowname", wid], env=env, stdout=subprocess.PIPE, text=True, timeout=1.0).stdout.strip().lower()
+                    if "dvr" in w_title:
+                        continue
+                    kaffeine_wids.append(wid)
+                    subprocess.run([xdotool_bin, "windowmap", wid], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
+                    subprocess.run([xdotool_bin, "windowactivate", wid], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
+                return bool(kaffeine_wids)
+        except Exception:
+            pass
+        return False
+
+    def minimize_kaffeine(self, mode: str = "tray") -> bool:
         """Minimize Kaffeine window to the taskbar or system tray if running."""
         kdotool_bin = shutil.which("kdotool")
         xdotool_bin = shutil.which("xdotool")
@@ -341,7 +405,7 @@ class KaffeineDbusClient:
             pass
         return False
 
-    def _minimize_window_async(self, mode: str = "taskbar", timeout_sec: float = 6.0, post_match_duration: float = 2.5):
+    def _minimize_window_async(self, mode: str = "tray", timeout_sec: float = 12.0, post_match_duration: float = 4.0):
         """
         Poll for Kaffeine's window to appear and persist minimize commands across startup.
         Because KWin rules and Qt map events can un-minimize the window during initial creation,

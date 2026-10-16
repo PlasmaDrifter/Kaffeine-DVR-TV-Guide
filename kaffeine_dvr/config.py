@@ -482,7 +482,7 @@ class ConfigManager:
                     if "launch_minimized" not in data:
                         data["launch_minimized"] = True
                     if "launch_mode" not in data:
-                        data["launch_mode"] = "taskbar" if data.get("launch_minimized", True) else "normal"
+                        data["launch_mode"] = "tray" if data.get("launch_minimized", True) else "normal"
                     if "enable_desktop_notifications" not in data:
                         data["enable_desktop_notifications"] = True
                     if "persistent_desktop_notifications" not in data:
@@ -583,7 +583,7 @@ class ConfigManager:
             "watcher_interval_seconds": 120,
             "lead_time_mins": 5,
             "launch_minimized": True,
-            "launch_mode": "taskbar",
+            "launch_mode": "tray",
             "enable_desktop_notifications": True,
             "persistent_desktop_notifications": False,
             "notification_lead_time_mins": 0,
@@ -783,7 +783,7 @@ class ConfigManager:
 
     @property
     def launch_mode(self) -> str:
-        return self.data.get("launch_mode", "taskbar")
+        return self.data.get("launch_mode", "tray")
 
     @launch_mode.setter
     def launch_mode(self, val: str):
@@ -801,7 +801,7 @@ class ConfigManager:
         if not val:
             self.data["launch_mode"] = "normal"
         elif self.data.get("launch_mode") == "normal":
-            self.data["launch_mode"] = "taskbar"
+            self.data["launch_mode"] = "tray"
         self.save()
 
     @property
