@@ -13,6 +13,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+_CLEAN_RE = re.compile(r'[^a-zA-Z0-9]')
+_WORDS_RE = re.compile(r'\w+')
+
 
 class StorageManager:
     """
@@ -313,8 +316,8 @@ class StorageManager:
         if not folder or not folder.exists():
             return None
 
-        clean_query = re.sub(r'[^a-zA-Z0-9]', '', (show_title or "")).lower()
-        query_words = [w.lower() for w in re.findall(r'\w+', show_title or "") if len(w) > 2]
+        clean_query = _CLEAN_RE.sub('', (show_title or "")).lower()
+        query_words = [w.lower() for w in _WORDS_RE.findall(show_title or "") if len(w) > 2]
 
         now_ts = datetime.now().timestamp()
         candidates = []
@@ -330,7 +333,7 @@ class StorageManager:
                         continue
 
                     fname = item.name
-                    clean_fname = re.sub(r'[^a-zA-Z0-9]', '', fname).lower()
+                    clean_fname = _CLEAN_RE.sub('', fname).lower()
 
                     score = 0
                     if clean_query and clean_query in clean_fname:

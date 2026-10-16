@@ -1,5 +1,14 @@
 # Release Notes
 
+## v0.8.12
+
+- **Remote Web Companion & Downloadable Recordings**: Introduced the lightweight, dependency-free remote web companion with 24-hour EPG Grid and List views, past show trimming, grab-to-pan scrolling, channel filtering, and named file downloads.
+- **Weak or No Signal Detection & Auto Tuner Release**: Implemented real-time stream data monitoring at channel start with configurable buffer timeout. Automatically cancels the recording in Kaffeine via D-Bus, cleans up 0-byte partial files, frees the hardware tuner, and displays an informative warning popup if no signal is received.
+- **EPG Grid View Enhancements**: Redesigned the web companion EPG Grid into a 2-column layout with permanently anchored channel column on the left, compact 44px rows, semi-transparent 30% opacity timeline marker, and grab-to-pan scrolling.
+- **Theme Color Distinctiveness**: Assigned signature representative accent colors to all built-in guide grid theme preset chips (Cyberpunk, Emerald Forest, Midnight Navy, Nordic Frost, OLED High Contrast, Retro Synthwave, Warm Amber) for maximum visual clarity.
+- **Factory Default Settings Refinement**: Updated default preferences to 40-minute sports auto-extend buffer, 180-second watcher polling interval, 2-minute notification lead time, and 2-second timeshift initial buffer.
+- **Performance & Storage Optimizations**: Precompiled regex matching patterns in `StorageManager` to speed up directory searches and active stream detection.
+
 ## v0.8.11
 
 - **Idle CPU Optimization**: Eliminated redundant 1-second stylesheet parsing and canvas invalidation on the top-corner clock, bringing idle CPU consumption down to flat 0.00%.

@@ -6,7 +6,6 @@ from unittest.mock import MagicMock, patch
 
 from PyQt6.QtWidgets import QMessageBox
 
-from kaffeine_dvr.config import ConfigManager
 from kaffeine_dvr.gui import MainWindow
 
 
