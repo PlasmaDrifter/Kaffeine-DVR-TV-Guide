@@ -91,6 +91,11 @@ def get_pip_flags() -> list:
 
 
 EMBEDDED_RELEASE_NOTES: Dict[str, str] = {
+    "0.8.13": (
+        "## What's Changed in v0.8.13\n\n"
+        "• **AppImage Standalone Runtime Fix**: Resolved `ImportError: attempted relative import with no known parent package` when launching packaged standalone AppImage bundles by moving web server and scanner imports to the top-level package namespace with robust fallback handlers.\n"
+        "• **EPG Web Companion Enhancements**: Redesigned the companion web guide into an anchored two-panel layout keeping channel columns permanently fixed on the left while panning horizontally, made row heights compact, added channel filtering dropdown to the toolbar, and preserved grab-to-pan touch and mouse navigation."
+    ),
     "0.8.12": (
         "## What's Changed in v0.8.12\n\n"
         "• **Remote Web Companion & Downloadable Recordings**: Introduced the lightweight, dependency-free remote web companion with 24-hour EPG Grid and List views, past show trimming, grab-to-pan scrolling, channel filtering, and named file downloads.\n"
