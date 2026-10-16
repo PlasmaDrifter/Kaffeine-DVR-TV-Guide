@@ -1378,6 +1378,12 @@ class ChannelSignalHealthDialog(BaseFramelessDialog):
         self.test_single_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
         self._stop_kaffeine_playback()
+        # Restore Kaffeine hidden/minimized state per configured launch mode
+        try:
+            if self.config_mgr and self.config_mgr.launch_mode in ("taskbar", "tray"):
+                KaffeineDbusClient().minimize_kaffeine(mode=self.config_mgr.launch_mode)
+        except Exception:
+            pass
         self._worker = None
 
     def _on_scan_error(self, err_msg: str):
@@ -1387,40 +1393,49 @@ class ChannelSignalHealthDialog(BaseFramelessDialog):
         if self._worker and self._worker.isRunning():
             self.status_lbl.setText("Stopping scan...")
             self._worker.request_stop()
-            self._worker.wait(1500)
             self._stop_kaffeine_playback()
             self.scan_all_btn.setEnabled(True)
             self.test_single_btn.setEnabled(True)
             self.stop_btn.setEnabled(False)
+            try:
+                if self.config_mgr and self.config_mgr.launch_mode in ("taskbar", "tray"):
+                    KaffeineDbusClient().minimize_kaffeine(mode=self.config_mgr.launch_mode)
+            except Exception:
+                pass
 
     def _stop_kaffeine_playback(self):
-        try:
-            import dbus
-            bus = dbus.SessionBus()
-            proxy = bus.get_object("org.mpris.kaffeine", "/Player")
-            iface = dbus.Interface(proxy, "org.freedesktop.MediaPlayer")
-            iface.Stop()
-        except Exception:
-            pass
+        def _do_stop():
+            try:
+                import dbus
+                bus = dbus.SessionBus()
+                proxy = bus.get_object("org.mpris.kaffeine", "/Player", introspect=False)
+                iface = dbus.Interface(proxy, "org.freedesktop.MediaPlayer")
+                iface.Stop(timeout=1.0)
+            except Exception:
+                pass
+        import threading
+        threading.Thread(target=_do_stop, daemon=True).start()
 
     def _close_kaffeine_app(self):
         """Close the running Kaffeine application process."""
         self.stop_scan()
         self._stop_kaffeine_playback()
-        try:
-            import dbus
-            bus = dbus.SessionBus()
-            app_proxy = bus.get_object("org.kde.kaffeine", "/")
-            app_iface = dbus.Interface(app_proxy, "org.freedesktop.MediaPlayer")
-            app_iface.Quit()
-            self.status_lbl.setText("Kaffeine closed. It will automatically restart hidden if the option is set to hidden.")
-        except Exception:
+        def _do_quit():
             try:
-                import subprocess
-                subprocess.run(["pkill", "-x", "kaffeine"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                self.status_lbl.setText("Kaffeine closed. It will automatically restart hidden if the option is set to hidden.")
-            except Exception as e:
-                self.status_lbl.setText(f"Could not close Kaffeine: {e}")
+                import dbus
+                bus = dbus.SessionBus()
+                app_proxy = bus.get_object("org.kde.kaffeine", "/", introspect=False)
+                app_iface = dbus.Interface(app_proxy, "org.freedesktop.MediaPlayer")
+                app_iface.Quit(timeout=1.0)
+            except Exception:
+                try:
+                    import subprocess
+                    subprocess.run(["pkill", "-x", "kaffeine"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                except Exception:
+                    pass
+        import threading
+        threading.Thread(target=_do_quit, daemon=True).start()
+        self.status_lbl.setText("Kaffeine closed. It will automatically restart hidden if the option is set to hidden.")
 
     def closeEvent(self, event):
         self.stop_aiming()

@@ -243,9 +243,9 @@ class ChannelSignalScanWorker(QThread):
         try:
             import dbus
             bus = dbus.SessionBus()
-            tv_proxy = bus.get_object("org.mpris.kaffeine", "/Television")
+            tv_proxy = bus.get_object("org.mpris.kaffeine", "/Television", introspect=False)
             television_iface = dbus.Interface(tv_proxy, "org.freedesktop.MediaPlayer")
-            player_proxy = bus.get_object("org.mpris.kaffeine", "/Player")
+            player_proxy = bus.get_object("org.mpris.kaffeine", "/Player", introspect=False)
             player_iface = dbus.Interface(player_proxy, "org.freedesktop.MediaPlayer")
         except Exception as e:
             self.scan_error.emit(f"Could not connect to Kaffeine D-Bus service: {e}")
@@ -268,10 +268,10 @@ class ChannelSignalScanWorker(QThread):
                 self.channel_started.emit(ch_name, idx, total)
                 self.scan_progress.emit(idx, total)
 
-                # 1. Instruct Kaffeine to tune to this channel
+                # 1. Instruct Kaffeine to tune to this channel (with short 3.0s timeout to prevent hanging)
                 if television_iface:
                     try:
-                        television_iface.PlayChannel(ch_name)
+                        television_iface.PlayChannel(ch_name, timeout=3.0)
                     except Exception:
                         # Log but continue to allow checking status
                         pass
@@ -318,8 +318,17 @@ class ChannelSignalScanWorker(QThread):
             # Crucial: Stop Kaffeine playback completely so background channel audio/video is silent
             if player_iface:
                 try:
-                    player_iface.Stop()
+                    player_iface.Stop(timeout=1.5)
                 except Exception:
                     pass
+
+            # Restore Kaffeine hidden/minimized state per launch mode
+            try:
+                from .config import ConfigManager
+                cfg = ConfigManager()
+                if cfg.launch_mode in ("taskbar", "tray"):
+                    client.minimize_kaffeine(mode=cfg.launch_mode)
+            except Exception:
+                pass
 
             self.scan_finished.emit(all_results)
