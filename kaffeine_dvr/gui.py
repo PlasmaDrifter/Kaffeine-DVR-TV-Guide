@@ -4912,14 +4912,27 @@ class TooltipDelayStyle(QProxyStyle):
         return super().styleHint(hint, option, widget, returnData)
 
 
-def setup_dark_theme(app: Optional[QApplication], theme_key: str = "midnight"):
+def setup_dark_theme(app: Optional[QApplication], theme_key: str = "midnight", force: bool = False):
+    """
+    Applies the specified theme to the QApplication instance.
+    Includes caching to avoid expensive redundant stylesheet re-parsing and proxy style
+    wrapping when the requested theme is already active.
+    """
     if not app:
         return
-    base_style = QStyleFactory.create("Fusion")
-    if base_style:
-        app.setStyle(TooltipDelayStyle(base_style))
-    else:
-        app.setStyle("Fusion")
+
+    # Skip redundant CSS re-parsing and styling if the requested theme is already active
+    if not force and getattr(app, "_current_theme_key", None) == theme_key and getattr(app, "_theme_initialized", False):
+        return
+    app._current_theme_key = theme_key
+    app._theme_initialized = True
+
+    if not isinstance(app.style(), TooltipDelayStyle):
+        base_style = QStyleFactory.create("Fusion")
+        if base_style:
+            app.setStyle(TooltipDelayStyle(base_style))
+        else:
+            app.setStyle("Fusion")
 
     tokens = APP_THEMES.get(theme_key, APP_THEMES["midnight"])
     palette = QPalette()
@@ -5220,7 +5233,7 @@ class MainWindow(QMainWindow):
 
         from .web import KaffeineWebServer
         self.web_server = KaffeineWebServer(self.config_mgr, self.queue_mgr, self.guide_service, self.storage_mgr)
-        if self.config_mgr.web_server_enabled:
+        if self.config_mgr.web_server_enabled and not os.environ.get("PYTEST_CURRENT_TEST"):
             self.web_server.start()
 
         self.init_ui()
@@ -9141,7 +9154,7 @@ class MainWindow(QMainWindow):
         self.config_mgr.apply_app_theme(theme_key)
         app_inst = QApplication.instance()
         if app_inst:
-            setup_dark_theme(app_inst, theme_key)
+            setup_dark_theme(app_inst, theme_key, force=True)
 
         tokens = APP_THEMES[theme_key]
         if hasattr(self, "_refresh_day_nav_styles"):
@@ -10721,6 +10734,11 @@ class MainWindow(QMainWindow):
             bar.setValue(final_val)
 
     def jump_guide_to_now(self, *args, animate: bool = True, **kwargs):
+        if getattr(self, "_is_closed", False):
+            return
+        from PyQt6 import sip
+        if sip.isdeleted(self):
+            return
         # If currently viewing a future or past date, switch back to Today first
         if hasattr(self, "guide_date_combo"):
             today_str = date.today().strftime("%Y-%m-%d")
@@ -10743,13 +10761,28 @@ class MainWindow(QMainWindow):
             self._scroll_list_to_first_active()
 
     def jump_guide_to_start(self, *args, animate: bool = True, **kwargs):
+        if getattr(self, "_is_closed", False):
+            return
+        from PyQt6 import sip
+        if sip.isdeleted(self):
+            return
         self._scroll_grid_to_slot(0, center=False, animate=animate)
 
     def jump_guide_to_noon(self, *args, animate: bool = True, **kwargs):
+        if getattr(self, "_is_closed", False):
+            return
+        from PyQt6 import sip
+        if sip.isdeleted(self):
+            return
         # 12:00 PM (Noon) is hour 12 -> slot 24
         self._scroll_grid_to_slot(24, center=False, animate=animate)
 
     def jump_guide_to_0400(self, *args, animate: bool = True, **kwargs):
+        if getattr(self, "_is_closed", False):
+            return
+        from PyQt6 import sip
+        if sip.isdeleted(self):
+            return
         # 4:00 AM (0400) is hour 4 -> slot 8
         self._scroll_grid_to_slot(8, center=False, animate=animate)
 

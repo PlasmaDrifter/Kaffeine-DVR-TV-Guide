@@ -25,6 +25,7 @@ def isolated_config(tmp_app_dirs):
     cfg.kaffeine_db_path = data_dir / "kaffeine.db"
     cfg.data = cfg.get_default_config()
     cfg.auto_check_updates = False
+    cfg.web_server_enabled = False
     cfg.save()
     return cfg
 
