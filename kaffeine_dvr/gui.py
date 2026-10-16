@@ -6350,23 +6350,20 @@ class MainWindow(QMainWindow):
 
         left_col.addWidget(dvr_group)
 
-        # Application Window Dimensions & UI Scaling (Moved under DVR Scheduling)
-        win_group = QGroupBox("Application Window Dimensions && UI Scaling")
-        win_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+        # Window Dimensions & UI Scaling (Side-by-side boxes under DVR Scheduling)
+        win_scale_row = QHBoxLayout()
+        win_scale_row.setSpacing(15)
+
+        # Left Box: Window Dimensions
+        win_group = QGroupBox("Window Dimensions")
+        win_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Preferred)
         win_layout = QVBoxLayout(win_group)
         win_layout.setContentsMargins(15, 15, 15, 15)
-        win_layout.setSpacing(10)
-
-        win_cols_row = QHBoxLayout()
-        win_cols_row.setSpacing(18)
-
-        # Left Column: Window Dimensions
-        dim_col = QVBoxLayout()
-        dim_col.setSpacing(8)
+        win_layout.setSpacing(8)
 
         self.win_size_lbl = QLabel(self._get_window_size_label_text())
-        self.win_size_lbl.setStyleSheet("color: #a0b2c6; font-size: 13px; font-weight: 500;")
-        dim_col.addWidget(self.win_size_lbl)
+        self.win_size_lbl.setStyleSheet("color: #a0b2c6; font-weight: 500;")
+        win_layout.addWidget(self.win_size_lbl)
 
         win_size_btn_row = QHBoxLayout()
         win_size_btn_row.setContentsMargins(0, 0, 0, 0)
@@ -6385,23 +6382,23 @@ class MainWindow(QMainWindow):
         self.reset_win_size_btn.clicked.connect(self.reset_window_size_to_default)
         win_size_btn_row.addWidget(self.reset_win_size_btn)
         win_size_btn_row.addStretch()
-        dim_col.addLayout(win_size_btn_row)
+        win_layout.addLayout(win_size_btn_row)
 
         self.custom_title_bar_check = QCheckBox("Use Modern Frameless Title Bar")
-        self.custom_title_bar_check.setStyleSheet("color: #e2e8f0; font-size: 13px; font-weight: 500; margin-top: 4px;")
+        self.custom_title_bar_check.setStyleSheet("color: #e2e8f0; font-weight: 500; margin-top: 4px;")
         self.custom_title_bar_check.setChecked(getattr(self.config_mgr, "use_custom_title_bar", True))
         self.custom_title_bar_check.toggled.connect(self._on_custom_title_bar_toggled)
-        dim_col.addWidget(self.custom_title_bar_check)
+        win_layout.addWidget(self.custom_title_bar_check)
+        win_layout.addStretch()
 
-        win_cols_row.addLayout(dim_col, 1)
+        win_scale_row.addWidget(win_group, 1)
 
-        # Right Column: Settings & Help UI Scale (to the right of saving dimensions)
-        scale_col = QVBoxLayout()
-        scale_col.setSpacing(6)
-
-        lbl_scale_title = QLabel("<b>Settings &amp; Help UI Scale</b>")
-        lbl_scale_title.setStyleSheet("color: #e2e8f0; font-size: 13px;")
-        scale_col.addWidget(lbl_scale_title)
+        # Right Box: Settings & Help UI Scale
+        scale_group = QGroupBox("Settings && Help UI Scale")
+        scale_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Preferred)
+        scale_layout = QVBoxLayout(scale_group)
+        scale_layout.setContentsMargins(15, 15, 15, 15)
+        scale_layout.setSpacing(8)
 
         scale_ctrl_row = QHBoxLayout()
         scale_ctrl_row.setContentsMargins(0, 0, 0, 0)
@@ -6412,7 +6409,7 @@ class MainWindow(QMainWindow):
         self.settings_ui_scale_spin.setSingleStep(5)
         self.settings_ui_scale_spin.setValue(getattr(self.config_mgr, "settings_ui_scale", 100))
         self.settings_ui_scale_spin.setSuffix("%")
-        self.settings_ui_scale_spin.setFixedWidth(130)
+        self.settings_ui_scale_spin.setMinimumWidth(110)
         self.settings_ui_scale_spin.valueChanged.connect(self._on_settings_ui_scale_changed)
         scale_ctrl_row.addWidget(self.settings_ui_scale_spin)
 
@@ -6422,18 +6419,16 @@ class MainWindow(QMainWindow):
         self.reset_ui_scale_btn.clicked.connect(lambda: self.settings_ui_scale_spin.setValue(100))
         scale_ctrl_row.addWidget(self.reset_ui_scale_btn)
         scale_ctrl_row.addStretch()
-        scale_col.addLayout(scale_ctrl_row)
+        scale_layout.addLayout(scale_ctrl_row)
 
         lbl_scale_hint = QLabel("(Enlarges text, inputs &amp; documentation)")
-        lbl_scale_hint.setStyleSheet("font-size: 11px; color: #94a3b8;")
-        scale_col.addWidget(lbl_scale_hint)
-        scale_col.addStretch()
+        lbl_scale_hint.setStyleSheet("color: #94a3b8;")
+        scale_layout.addWidget(lbl_scale_hint)
+        scale_layout.addStretch()
 
-        win_cols_row.addLayout(scale_col, 1)
+        win_scale_row.addWidget(scale_group, 1)
 
-        win_layout.addLayout(win_cols_row)
-
-        left_col.addWidget(win_group)
+        left_col.addLayout(win_scale_row)
         left_col.addStretch(1)
         two_col_layout.addLayout(left_col, 40)
 
