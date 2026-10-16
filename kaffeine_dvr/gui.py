@@ -6356,7 +6356,7 @@ class MainWindow(QMainWindow):
 
         # Left Box: Window Dimensions
         win_group = QGroupBox("Window Dimensions")
-        win_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Preferred)
+        win_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         win_layout = QVBoxLayout(win_group)
         win_layout.setContentsMargins(15, 15, 15, 15)
         win_layout.setSpacing(8)
@@ -6395,7 +6395,7 @@ class MainWindow(QMainWindow):
 
         # Right Box: Settings & Help UI Scale
         scale_group = QGroupBox("Settings && Help UI Scale")
-        scale_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Preferred)
+        scale_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         scale_layout = QVBoxLayout(scale_group)
         scale_layout.setContentsMargins(15, 15, 15, 15)
         scale_layout.setSpacing(8)
