@@ -475,7 +475,7 @@ class ConfigManager:
                     if "auto_sync_interval_hours" not in data:
                         data["auto_sync_interval_hours"] = 6
                     if "watcher_interval_seconds" not in data:
-                        data["watcher_interval_seconds"] = 120
+                        data["watcher_interval_seconds"] = 180
                     if "guide_provider" not in data:
                         data["guide_provider"] = "hybrid"
                     if "xmltv_path_or_url" not in data:
@@ -495,7 +495,7 @@ class ConfigManager:
                     if "persistent_desktop_notifications" not in data:
                         data["persistent_desktop_notifications"] = False
                     if "notification_lead_time_mins" not in data:
-                        data["notification_lead_time_mins"] = 0
+                        data["notification_lead_time_mins"] = 2
                     if "first_run_completed" not in data:
                         data["first_run_completed"] = False
                     if "auto_cleanup_enabled" not in data:
@@ -511,7 +511,7 @@ class ConfigManager:
                     if "end_buffer_mins" not in data:
                         data["end_buffer_mins"] = 0
                     if "sports_buffer_mins" not in data:
-                        data["sports_buffer_mins"] = 30
+                        data["sports_buffer_mins"] = 40
                     if "auto_buffer_sports" not in data:
                         data["auto_buffer_sports"] = True
                     if "max_history_entries" not in data:
@@ -587,13 +587,13 @@ class ConfigManager:
             "rules": [],
             "guide_days_ahead": 14,
             "auto_sync_interval_hours": 6,
-            "watcher_interval_seconds": 120,
+            "watcher_interval_seconds": 180,
             "lead_time_mins": 5,
             "launch_minimized": True,
             "launch_mode": "tray",
             "enable_desktop_notifications": True,
             "persistent_desktop_notifications": False,
-            "notification_lead_time_mins": 0,
+            "notification_lead_time_mins": 2,
             "country_code": "US",
             "guide_provider": "hybrid",
             "xmltv_path_or_url": "",
@@ -610,7 +610,7 @@ class ConfigManager:
             "custom_recording_folder": "",
             "custom_kaffeine_path": "",
             "end_buffer_mins": 0,
-            "sports_buffer_mins": 30,
+            "sports_buffer_mins": 40,
             "auto_buffer_sports": True,
             "max_history_entries": 50,
             "auto_check_updates": False,
@@ -736,7 +736,7 @@ class ConfigManager:
 
     @property
     def watcher_interval_seconds(self) -> int:
-        return self.data.get("watcher_interval_seconds", 120)
+        return self.data.get("watcher_interval_seconds", 180)
 
     @watcher_interval_seconds.setter
     def watcher_interval_seconds(self, val: int):
@@ -900,7 +900,7 @@ class ConfigManager:
 
     @property
     def notification_lead_time_mins(self) -> int:
-        return self.data.get("notification_lead_time_mins", 0)
+        return self.data.get("notification_lead_time_mins", 2)
 
     @notification_lead_time_mins.setter
     def notification_lead_time_mins(self, val: int):
@@ -972,7 +972,7 @@ class ConfigManager:
 
     @property
     def sports_buffer_mins(self) -> int:
-        return self.data.get("sports_buffer_mins", 30)
+        return self.data.get("sports_buffer_mins", 40)
 
     @sports_buffer_mins.setter
     def sports_buffer_mins(self, val: int):

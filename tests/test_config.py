@@ -4,14 +4,16 @@ from kaffeine_dvr.config import DEFAULT_CATEGORY_COLORS, ConfigManager
 def test_default_config(isolated_config: ConfigManager):
     cfg = isolated_config
     assert cfg.end_buffer_mins == 0
-    assert cfg.sports_buffer_mins == 30
+    assert cfg.sports_buffer_mins == 40
     assert cfg.auto_buffer_sports is True
     assert cfg.auto_check_updates is False
     assert cfg.update_check_frequency == "weekly"
     assert cfg.grid_visible_rows == 9
     assert cfg.guide_detail_lines == 3
     assert cfg.lead_time_mins == 5
-    assert cfg.watcher_interval_seconds == 120
+    assert cfg.watcher_interval_seconds == 180
+    assert cfg.notification_lead_time_mins == 2
+    assert cfg.timeshift_buffer_seconds == 2
 
 def test_grid_visible_rows_clamping(isolated_config: ConfigManager):
     cfg = isolated_config
