@@ -31,6 +31,13 @@ Kaffeine is a powerful digital TV viewer for KDE and Linux desktop environments,
   - **Double-Click to Watch & Smart State**
   - **Adaptive "Watch Live / Tune Channel" Actions**
   - **Direct Startup Launch**
+- **Remote Web Companion (Mobile & LAN Web App):**
+  - **Touch-Friendly EPG Grid & List Views**
+  - **One-Click Remote Recording from Phone or Tablet**
+  - **In-Browser Video Playback & Streaming (RFC 7233 Seekable)**
+  - **Remote DVR Queue & History Management**
+  - **Optional Salted SHA-256 Authentication for Tailscale / LAN**
+  - **Zero Extra Dependencies (Built with Standard Library HTTP Server)**
 - **Configurable Recording End Buffers (Post-Roll Padding):**
   - **Global Post-Roll Buffer**
   - **Sports Broadcast Auto-Extend**
@@ -161,6 +168,31 @@ To get complete 24/7 continuous schedules with local morning/evening news, dayti
    ```
 4. Click **Save Station IDs**. The app verifies connectivity and triggers background synchronization immediately. In Free Hybrid mode, TV Passport automatically supersedes TVMaze for those stations to provide full 24/7 local affiliate schedules, while TVMaze continues covering any remaining national channels with zero setup and no duplicates.
 
+### 4. Remote Web Companion & Mobile TV Guide
+Kaffeine DVR includes a built-in, dependency-free HTTP server and responsive web interface designed for phones, tablets, and remote browsers:
+- **Mobile & Tablet-Friendly EPG Guide**: Browse your electronic program guide on phones, tablets, or laptops. Features a two-column layout with permanently anchored channel headers on the left, smooth grab-and-drag panning, channel filtering, and genre color pills.
+- **One-Click Remote Recording**: Tap **Record** on any upcoming broadcast from your phone to schedule it on your home DVR system immediately.
+- **Queue & History Management**: Monitor currently recording broadcasts, view scheduled programs, and cancel queued timers remotely.
+- **In-Browser Video Playback & Streaming**: Stream completed recordings directly inside your web browser with RFC 7233 HTTP Range chunking for instant video scrubbing, or download recorded video files.
+- **Secure Access Control**: Optional password protection with salted SHA-256 session token authentication for secure LAN or Tailscale remote access.
+- **Zero Extra Dependencies**: Powered entirely by Python's standard library HTTP server with no external web frameworks or heavy runtimes required.
+
+#### Setup:
+1. In the TV Guide desktop application, navigate to **Settings > Web Companion**.
+2. Check **Enable Local / Tailscale Web Companion**.
+3. (Optional) Set a custom port (default: `8088`) and configure an access password.
+4. Click **Start Web Companion** or click the URL button to open it directly in your browser.
+
+#### Headless CLI Launch:
+You can also launch the web companion standalone in headless mode without opening the desktop GUI:
+```bash
+# Run web companion on default port (8088)
+kaffeine-dvr --web
+
+# Run on a custom port
+kaffeine-dvr --web --port 8080
+```
+
 ---
 
 ## CLI & Launch Usage
@@ -183,6 +215,10 @@ kaffeine-dvr --list
 
 # Run the background watcher daemon in terminal
 kaffeine-dvr --watch
+
+# Run the remote web companion server (headless)
+kaffeine-dvr --web
+kaffeine-dvr --web --port 8080
 ```
 
 ---

@@ -8289,6 +8289,29 @@ class MainWindow(QMainWindow):
         services_layout.addWidget(services_text)
         layout.addWidget(services_box)
 
+        # Section 4: Remote Web Companion & Mobile TV Guide
+        web_box = QGroupBox("4. Remote Web Companion & Mobile TV Guide")
+        web_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        web_box.setStyleSheet(make_group_style("#a855f7"))
+        web_layout = QVBoxLayout(web_box)
+        web_layout.setContentsMargins(15, 15, 15, 15)
+        web_text = QLabel(
+            "• <b style='color: #a855f7;'>Touch-Friendly Mobile &amp; Tablet EPG Guide:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Access your TV Guide from any mobile device, tablet, or browser on your local network or Tailscale mesh.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Features an anchored 2-column channel list, smooth grab-and-drag panning, and genre color pills.<br><br>"
+            "• <b style='color: #a855f7;'>One-Click Remote Recording &amp; Streaming:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Tap <b>Record</b> on any upcoming broadcast from your phone to schedule it on your home DVR.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Stream completed recordings in-browser with HTML5 video player and instant RFC 7233 seekable scrubbing, or download recordings.<br><br>"
+            "• <b style='color: #a855f7;'>Enabling Web Companion (Settings &gt; Web Companion):</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Check <b>Enable Local / Tailscale Web Companion</b> to start the lightweight internal HTTP server.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Configure a custom port (default: <code>8088</code>) and optional password protection.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Headless CLI launch: <code>kaffeine-dvr --web</code> or <code>kaffeine-dvr --web --port 8080</code>."
+        )
+        web_text.setWordWrap(True)
+        web_text.setStyleSheet(body_style)
+        web_layout.addWidget(web_text)
+        layout.addWidget(web_box)
+
         layout.addStretch()
         scroll.setWidget(container)
         return scroll
