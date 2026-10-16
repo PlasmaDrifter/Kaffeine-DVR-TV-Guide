@@ -8910,18 +8910,16 @@ class MainWindow(QMainWindow):
         target_custom_grid.addWidget(custom_chip, 0, 0, Qt.AlignmentFlag.AlignLeft)
         self._guide_theme_chips["custom"] = custom_chip
 
-        # 3. Saved custom presets listed starting at slot 1, preserving Custom anchor at (0, 0)
+        # 3. Saved custom presets (max 3) stacked directly vertically under Custom
         custom_presets = self.config_mgr.custom_theme_presets if self.config_mgr else {}
-        custom_sorted = sorted(custom_presets.items(), key=lambda x: x[1]["name"].lower())
-        c_slot = 1
-        for p_key, p_info in custom_sorted:
+        custom_sorted = sorted(custom_presets.items(), key=lambda x: x[1]["name"].lower())[:3]
+        for row_idx, (p_key, p_info) in enumerate(custom_sorted, start=1):
             self.theme_preset_combo.addItem(p_info["name"], p_key)
             dot_color = p_info["colors"].get("sports", "#38bdf8")
             chip = ThemeChip(p_key, p_info["name"], dot_color, parent=self, fixed_width=chip_w)
             chip.chip_clicked.connect(self.select_guide_theme)
-            target_custom_grid.addWidget(chip, c_slot // num_cols, c_slot % num_cols, Qt.AlignmentFlag.AlignLeft)
+            target_custom_grid.addWidget(chip, row_idx, 0, Qt.AlignmentFlag.AlignLeft)
             self._guide_theme_chips[p_key] = chip
-            c_slot += 1
 
         p_idx = self.theme_preset_combo.findData(cur_preset)
         self.theme_preset_combo.setCurrentIndex(max(p_idx, 0))
