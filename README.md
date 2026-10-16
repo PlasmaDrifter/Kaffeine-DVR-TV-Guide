@@ -195,7 +195,7 @@ This is an independent, non-commercial open-source companion tool. It is not aff
 
 ## License
 
-GPL-3.0-or-later. See LICENSE for details.
+MIT. See LICENSE for details.
 
 ---
 
