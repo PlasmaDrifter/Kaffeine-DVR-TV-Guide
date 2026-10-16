@@ -2510,7 +2510,7 @@ class CompactColorPickerDialog(QDialog):
         anchor_widget: Optional[QWidget] = None,
     ):
         super().__init__(parent)
-        self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
+        self.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.anchor_widget = anchor_widget
         self.initial_hex = self._normalize_hex(initial_hex) or "#3B82F6"
@@ -2732,20 +2732,32 @@ class CompactColorPickerDialog(QDialog):
                 self._update_all(normalized, update_hex=False, update_slider=True, update_gradient=True)
 
     def _position_at_anchor(self):
-        if self.anchor_widget and self.anchor_widget.isVisible():
-            pt = self.anchor_widget.mapToGlobal(QPoint(0, 0))
-            target_x = pt.x() + (self.anchor_widget.width() // 2) - (self.width() // 2)
-            target_y = pt.y() + self.anchor_widget.height() + 6
-            screen = QApplication.screenAt(pt) or QApplication.primaryScreen()
-            if screen:
-                screen_geo = screen.availableGeometry()
-                if target_x + self.width() > screen_geo.right() - 12:
-                    target_x = screen_geo.right() - self.width() - 12
-                if target_x < screen_geo.left() + 12:
-                    target_x = screen_geo.left() + 12
-                if target_y + self.height() > screen_geo.bottom() - 12:
-                    target_y = max(screen_geo.top() + 12, pt.y() - self.height() - 6)
-            self.move(target_x, target_y)
+        if not self.anchor_widget:
+            return
+        pt = self.anchor_widget.mapToGlobal(QPoint(0, 0))
+        btn_w = self.anchor_widget.width()
+        btn_h = self.anchor_widget.height()
+        dlg_w = self.width()
+        dlg_h = self.height()
+
+        # Center horizontally on the anchor button
+        target_x = pt.x() + (btn_w // 2) - (dlg_w // 2)
+        # Place directly below the button with a 4px gap
+        target_y = pt.y() + btn_h + 4
+
+        screen = QApplication.screenAt(pt) or QApplication.primaryScreen()
+        if screen:
+            screen_geo = screen.availableGeometry()
+            # If overflowing the bottom of the screen, place directly above the button
+            if target_y + dlg_h > screen_geo.bottom() - 8:
+                target_y = max(screen_geo.top() + 8, pt.y() - dlg_h - 4)
+            # Constrain horizontally within screen bounds
+            if target_x + dlg_w > screen_geo.right() - 8:
+                target_x = screen_geo.right() - dlg_w - 8
+            if target_x < screen_geo.left() + 8:
+                target_x = screen_geo.left() + 8
+
+        self.move(target_x, target_y)
 
     def showEvent(self, event):
         super().showEvent(event)
