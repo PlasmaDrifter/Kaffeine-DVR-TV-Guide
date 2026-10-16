@@ -2349,9 +2349,9 @@ def get_theme_chip_fixed_width(font: Optional[QFont] = None) -> int:
     Calculate a set uniform width for theme pills based on the largest theme entry
     across Application Themes and Guide Themes, padded by a few characters.
     """
-    names = [t["name"].split(" (")[0] for t in APP_THEMES.values()]
-    names += [p["name"].split(" (")[0] for p in THEME_PRESETS.values()]
-    names.append("Custom")
+    names = [t["name"] for t in APP_THEMES.values()]
+    names += [p["name"] for p in THEME_PRESETS.values()]
+    names.append("Custom (save up to 3)")
     longest_name = max(names, key=len)
 
     if font is not None:
@@ -2383,7 +2383,7 @@ class ThemeChip(QPushButton):
         super().__init__(parent)
         self.key = key
         self.display_name = display_name
-        self.short_name = display_name.split(" (")[0]
+        self.short_name = display_name
         self.dot_color = dot_color
         self._is_selected = False
 
@@ -8900,12 +8900,13 @@ class MainWindow(QMainWindow):
             self.guide_theme_grid.addWidget(chip, slot_idx // num_cols, slot_idx % num_cols, Qt.AlignmentFlag.AlignLeft)
             self._guide_theme_chips[p_key] = chip
 
-        # 2. Custom (Manual) pill permanently anchors slot 0 (0, 0)
+        # 2. Custom (save up to 3) pill permanently anchors slot 0 (0, 0)
+        custom_chip_w = 175
         target_custom_grid = self.guide_custom_grid if hasattr(self, "guide_custom_grid") else self.guide_theme_grid
-        self.theme_preset_combo.addItem("Custom (Manual)", "custom")
+        self.theme_preset_combo.addItem("Custom (save up to 3)", "custom")
         cur_colors = self.config_mgr.category_colors if self.config_mgr else DEFAULT_CATEGORY_COLORS
         custom_dot = cur_colors.get("sports", "#ffa028")
-        custom_chip = ThemeChip("custom", "Custom (Manual)", custom_dot, parent=self, fixed_width=chip_w)
+        custom_chip = ThemeChip("custom", "Custom (save up to 3)", custom_dot, parent=self, fixed_width=custom_chip_w)
         custom_chip.chip_clicked.connect(self.select_guide_theme)
         target_custom_grid.addWidget(custom_chip, 0, 0, Qt.AlignmentFlag.AlignLeft)
         self._guide_theme_chips["custom"] = custom_chip
@@ -8916,7 +8917,7 @@ class MainWindow(QMainWindow):
         for row_idx, (p_key, p_info) in enumerate(custom_sorted, start=1):
             self.theme_preset_combo.addItem(p_info["name"], p_key)
             dot_color = p_info["colors"].get("sports", "#38bdf8")
-            chip = ThemeChip(p_key, p_info["name"], dot_color, parent=self, fixed_width=chip_w)
+            chip = ThemeChip(p_key, p_info["name"], dot_color, parent=self, fixed_width=custom_chip_w)
             chip.chip_clicked.connect(self.select_guide_theme)
             target_custom_grid.addWidget(chip, row_idx, 0, Qt.AlignmentFlag.AlignLeft)
             self._guide_theme_chips[p_key] = chip
