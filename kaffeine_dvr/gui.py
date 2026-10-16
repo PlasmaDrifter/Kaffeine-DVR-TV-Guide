@@ -54,7 +54,6 @@ from PyQt6.QtWidgets import (
     QApplication,
     QButtonGroup,
     QCheckBox,
-    QColorDialog,
     QComboBox,
     QDialog,
     QFileDialog,
@@ -2444,6 +2443,330 @@ class ThemeChip(QPushButton):
                     color: #f8fafc;
                 }
             """)
+
+
+def compute_color_shade(base_hex: str, val: int) -> str:
+    """
+    Compute shaded hex color based on lightness slider value 0-100:
+    0 = pure black, 50 = original base_hex, 100 = pure white.
+    Matches Romcat's color picker shading formula.
+    """
+    clean_hex = base_hex.lstrip("#")
+    if len(clean_hex) == 3:
+        clean_hex = "".join(c * 2 for c in clean_hex)
+    try:
+        r = int(clean_hex[0:2], 16)
+        g = int(clean_hex[2:4], 16)
+        b = int(clean_hex[4:6], 16)
+    except (ValueError, IndexError):
+        return base_hex.upper()
+
+    if val <= 50:
+        factor = val / 50.0
+        out_r = round(r * factor)
+        out_g = round(g * factor)
+        out_b = round(b * factor)
+    else:
+        factor = (val - 50.0) / 50.0
+        out_r = round(r + (255 - r) * factor)
+        out_g = round(g + (255 - g) * factor)
+        out_b = round(b + (255 - b) * factor)
+
+    out_r = max(0, min(255, out_r))
+    out_g = max(0, min(255, out_g))
+    out_b = max(0, min(255, out_b))
+    return f"#{out_r:02X}{out_g:02X}{out_b:02X}"
+
+
+ROMCAT_PRESET_COLORS = [
+    "#ef4444",  # Red
+    "#f97316",  # Orange
+    "#eab308",  # Yellow
+    "#84cc16",  # Lime
+    "#22c55e",  # Green
+    "#06b6d4",  # Cyan
+    "#3b82f6",  # Blue
+    "#9146ff",  # Purple
+    "#ec4899",  # Pink
+    "#ffffff",  # White
+]
+
+
+class CompactColorPickerDialog(QDialog):
+    """
+    Compact popup color picker modeled after the Romcat design.
+    Features:
+    - Header with uppercase label, Cancel, and Done buttons.
+    - 10 curated preset color chips.
+    - Live preview square, interactive lightness/shade slider with dynamic gradient track,
+      and #HEX input field with real-time sync.
+    """
+
+    def __init__(
+        self,
+        parent: Optional[QWidget] = None,
+        initial_hex: str = "#3B82F6",
+        title: str = "Color Picker",
+        anchor_widget: Optional[QWidget] = None,
+    ):
+        super().__init__(parent)
+        self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.anchor_widget = anchor_widget
+        self.initial_hex = self._normalize_hex(initial_hex) or "#3B82F6"
+        self.base_color = self.initial_hex
+        self.current_color = self.initial_hex
+
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+
+        card = QFrame()
+        card.setObjectName("pickerCard")
+        card.setStyleSheet("""
+            QFrame#pickerCard {
+                background-color: #141a24;
+                border: 1px solid #1e293b;
+                border-radius: 10px;
+            }
+        """)
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(14, 12, 14, 12)
+        card_layout.setSpacing(10)
+
+        # Header: Title + Cancel + Done
+        hdr = QHBoxLayout()
+        self.lbl_title = QLabel(title.upper())
+        self.lbl_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #f8fafc; letter-spacing: 0.5px; background: transparent;")
+        hdr.addWidget(self.lbl_title)
+        hdr.addStretch()
+
+        self.btn_cancel = QPushButton("Cancel")
+        self.btn_cancel.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_cancel.setStyleSheet("""
+            QPushButton {
+                background-color: #1e293b;
+                color: #94a3b8;
+                border: 1px solid #334155;
+                border-radius: 6px;
+                padding: 4px 12px;
+                font-size: 12px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #334155;
+                color: #ffffff;
+            }
+        """)
+        self.btn_cancel.clicked.connect(self.reject)
+        hdr.addWidget(self.btn_cancel)
+
+        self.btn_done = QPushButton("Done")
+        self.btn_done.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_done.setStyleSheet("""
+            QPushButton {
+                background-color: #2563eb;
+                color: #ffffff;
+                border: 1px solid #3b82f6;
+                border-radius: 6px;
+                padding: 4px 14px;
+                font-size: 12px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #1d4ed8;
+            }
+        """)
+        self.btn_done.clicked.connect(self.accept)
+        hdr.addWidget(self.btn_done)
+        card_layout.addLayout(hdr)
+
+        # Preset color chips
+        chips_row = QHBoxLayout()
+        chips_row.setSpacing(6)
+        self.chip_buttons: list[tuple[QPushButton, str]] = []
+        for col in ROMCAT_PRESET_COLORS:
+            btn = QPushButton()
+            btn.setFixedSize(26, 20)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            norm_col = self._normalize_hex(col) or col.upper()
+            btn.clicked.connect(lambda checked=False, c=norm_col: self._on_chip_clicked(c))
+            chips_row.addWidget(btn)
+            self.chip_buttons.append((btn, norm_col))
+        card_layout.addLayout(chips_row)
+
+        # Bottom row: Preview square + Shade Slider + Hex input
+        bot_row = QHBoxLayout()
+        bot_row.setSpacing(10)
+
+        self.preview_dot = QFrame()
+        self.preview_dot.setFixedSize(26, 26)
+        bot_row.addWidget(self.preview_dot)
+
+        self.slider = QSlider(Qt.Orientation.Horizontal)
+        self.slider.setRange(0, 100)
+        self.slider.setValue(50)
+        self.slider.setFixedHeight(26)
+        self.slider.valueChanged.connect(self._on_slider_changed)
+        bot_row.addWidget(self.slider, 1)
+
+        hex_box = QFrame()
+        hex_box.setObjectName("hexBox")
+        hex_box.setStyleSheet("""
+            QFrame#hexBox {
+                background-color: #0b0f17;
+                border: 1px solid #334155;
+                border-radius: 6px;
+            }
+        """)
+        hex_layout = QHBoxLayout(hex_box)
+        hex_layout.setContentsMargins(6, 2, 6, 2)
+        hex_layout.setSpacing(4)
+        lbl_hash = QLabel("#")
+        lbl_hash.setStyleSheet("color: #94a3b8; font-weight: bold; font-size: 13px; background: transparent; border: none;")
+        hex_layout.addWidget(lbl_hash)
+        self.txt_hex = QLineEdit()
+        self.txt_hex.setMaxLength(6)
+        self.txt_hex.setFixedWidth(64)
+        self.txt_hex.setStyleSheet("""
+            QLineEdit {
+                background: transparent;
+                color: #f8fafc;
+                border: none;
+                font-family: monospace;
+                font-size: 12px;
+                font-weight: bold;
+                padding: 0px;
+                margin: 0px;
+            }
+        """)
+        self.txt_hex.textEdited.connect(self._on_hex_edited)
+        hex_layout.addWidget(self.txt_hex)
+        bot_row.addWidget(hex_box)
+
+        card_layout.addLayout(bot_row)
+        main_layout.addWidget(card)
+
+        self.resize(360, 130)
+        self._update_all(self.initial_hex, update_hex=True, update_slider=True, update_gradient=True)
+
+    def _normalize_hex(self, hex_str: str) -> str:
+        s = hex_str.strip().lstrip("#")
+        if len(s) == 3:
+            s = "".join(c * 2 for c in s)
+        if len(s) == 6:
+            try:
+                int(s, 16)
+                return f"#{s.upper()}"
+            except ValueError:
+                pass
+        return ""
+
+    def _update_all(self, hex_val: str, update_hex: bool = True, update_slider: bool = True, update_gradient: bool = True):
+        self.current_color = hex_val.upper()
+        self.preview_dot.setStyleSheet(f"""
+            background-color: {self.current_color};
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+        """)
+        if update_hex:
+            self.txt_hex.setText(self.current_color.lstrip("#").upper())
+
+        if update_gradient:
+            base_col = self.base_color
+            self.slider.setStyleSheet(f"""
+                QSlider::groove:horizontal {{
+                    height: 12px;
+                    border-radius: 6px;
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #000000, stop:0.5 {base_col}, stop:1 #ffffff);
+                }}
+                QSlider::handle:horizontal {{
+                    width: 18px;
+                    height: 18px;
+                    margin: -3px 0;
+                    border-radius: 9px;
+                    background: #ffffff;
+                    border: 2px solid #0f172a;
+                }}
+                QSlider::handle:horizontal:hover {{
+                    background: #f8fafc;
+                    border-color: #2563eb;
+                }}
+            """)
+        if update_slider:
+            self.slider.blockSignals(True)
+            self.slider.setValue(50)
+            self.slider.blockSignals(False)
+
+        # Update chip active borders
+        cur_upper = self.current_color
+        for btn, col in self.chip_buttons:
+            is_active = (col == cur_upper)
+            border_css = "2px solid #ffffff" if is_active else "1px solid rgba(255, 255, 255, 0.2)"
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {col};
+                    border: {border_css};
+                    border-radius: 5px;
+                }}
+                QPushButton:hover {{
+                    border: 2px solid #ffffff;
+                }}
+            """)
+
+    def _on_chip_clicked(self, col: str):
+        norm = self._normalize_hex(col) or col.upper()
+        self.base_color = norm
+        self._update_all(norm, update_hex=True, update_slider=True, update_gradient=True)
+
+    def _on_slider_changed(self, val: int):
+        shaded = compute_color_shade(self.base_color, val)
+        self._update_all(shaded, update_hex=True, update_slider=False, update_gradient=False)
+
+    def _on_hex_edited(self, text: str):
+        clean = text.strip().replace("#", "")
+        if len(clean) in (3, 6):
+            normalized = self._normalize_hex(clean)
+            if normalized:
+                self.base_color = normalized
+                self._update_all(normalized, update_hex=False, update_slider=True, update_gradient=True)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if self.anchor_widget and self.anchor_widget.isVisible():
+            pt = self.anchor_widget.mapToGlobal(QPoint(0, 0))
+            target_x = pt.x() + (self.anchor_widget.width() // 2) - (self.width() // 2)
+            target_y = pt.y() + self.anchor_widget.height() + 6
+            screen = QApplication.screenAt(pt) or QApplication.primaryScreen()
+            if screen:
+                screen_geo = screen.availableGeometry()
+                if target_x + self.width() > screen_geo.right() - 12:
+                    target_x = screen_geo.right() - self.width() - 12
+                if target_x < screen_geo.left() + 12:
+                    target_x = screen_geo.left() + 12
+                if target_y + self.height() > screen_geo.bottom() - 12:
+                    target_y = max(screen_geo.top() + 12, pt.y() - self.height() - 6)
+            self.move(target_x, target_y)
+
+    def get_selected_hex(self) -> str:
+        return self.current_color
+
+    @classmethod
+    def get_color(
+        cls,
+        parent: Optional[QWidget] = None,
+        initial_hex: str = "#3B82F6",
+        title: str = "Color Picker",
+        anchor_widget: Optional[QWidget] = None,
+    ) -> Tuple[str, bool]:
+        """
+        Open the compact color picker dialog.
+        Returns (chosen_hex_str, ok_bool).
+        """
+        dialog = cls(parent, initial_hex=initial_hex, title=title, anchor_widget=anchor_widget)
+        result = dialog.exec()
+        if result == QDialog.DialogCode.Accepted:
+            return dialog.get_selected_hex(), True
+        return initial_hex, False
 
 
 def format_american_datetime(val: Any) -> str:
@@ -9090,20 +9413,19 @@ class MainWindow(QMainWindow):
             self.flash_save_indicator(f"Deleted Theme Preset: {preset_name}")
 
     def _choose_category_color(self, category_key: str, category_label: str):
-        """Open dark-themed QColorDialog to select a custom color for a guide category."""
+        """Open compact custom color picker to select a custom color for a guide category."""
         cur_hex = self.config_mgr.category_colors.get(
             category_key,
             DEFAULT_CATEGORY_COLORS.get(category_key, "#ffffff")
         )
-        initial_color = QColor(cur_hex)
-        chosen_color = QColorDialog.getColor(
-            initial_color,
-            self,
-            f"Select Color for {category_label}",
-            options=QColorDialog.ColorDialogOption.DontUseNativeDialog
+        anchor = self._cat_swatches.get(category_key) if hasattr(self, "_cat_swatches") else None
+        new_hex, ok = CompactColorPickerDialog.get_color(
+            parent=self,
+            initial_hex=cur_hex,
+            title=category_label,
+            anchor_widget=anchor,
         )
-        if chosen_color.isValid():
-            new_hex = chosen_color.name()
+        if ok and new_hex:
             self.config_mgr.set_category_color(category_key, new_hex)
 
             # Mark theme preset as custom
