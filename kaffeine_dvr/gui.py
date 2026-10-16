@@ -12789,13 +12789,18 @@ class MainWindow(QMainWindow):
             qid = rec_info.get("id")
 
         buf_secs = getattr(self.config_mgr, "timeshift_buffer_seconds", 2)
+        timeout_secs = max(3.0, float(buf_secs))
         pname = self.config_mgr.live_tv_watch_mode.upper()
-        self.status_bar.showMessage(f"Buffering live stream ({buf_secs}s) before opening in {pname}...", (buf_secs + 4) * 1000)
+        self.status_bar.showMessage(f"Buffering live stream ({buf_secs}s) before opening in {pname}...", int((timeout_secs + 3) * 1000))
+        start_time = time.time()
+        initial_delay = min(int(buf_secs * 1000), 1000)
         QTimer.singleShot(
-            buf_secs * 1000,
+            max(initial_delay, 500),
             lambda: self._on_timeshift_buffer_ready(
                 prog,
-                retries_left=6,
+                start_time=start_time,
+                timeout_secs=timeout_secs,
+                buf_secs=buf_secs,
                 was_already_scheduled=was_already_scheduled,
                 queue_id=qid,
                 rec_title=rec_title
@@ -12805,7 +12810,9 @@ class MainWindow(QMainWindow):
     def _on_timeshift_buffer_ready(
         self,
         prog: Dict[str, Any],
-        retries_left: int = 6,
+        start_time: float,
+        timeout_secs: float,
+        buf_secs: int,
         was_already_scheduled: bool = False,
         queue_id: Optional[int] = None,
         rec_title: Optional[str] = None
@@ -12841,51 +12848,148 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
+        elapsed = time.time() - start_time
+
         if active_file and active_file.exists():
-            proc = self.dbus_client.play_file(
-                str(active_file),
-                player=self.config_mgr.live_tv_watch_mode,
-                custom_cmd=self.config_mgr.custom_live_tv_player_cmd,
-                standalone=True
-            )
-            pname = self.config_mgr.live_tv_watch_mode.upper()
-            self.status_bar.showMessage(f"Playing live broadcast '{title}' in {pname}.", 5000)
+            try:
+                file_size = active_file.stat().st_size
+            except Exception:
+                file_size = 0
 
-            ch_key = (ch or "").strip().lower()
-            iso_key = (prog.get("start_iso") or "")[:16]
-            rec_info = self.queue_mgr.get_active_scheduled_map().get((ch_key, iso_key))
+            # Ensure minimum playable size (> 16 KB) and respect configured buffer delay
+            if file_size > 16384:
+                if elapsed < buf_secs:
+                    remaining_ms = max(int((buf_secs - elapsed) * 1000), 200)
+                    QTimer.singleShot(
+                        remaining_ms,
+                        lambda: self._on_timeshift_buffer_ready(
+                            prog,
+                            start_time=start_time,
+                            timeout_secs=timeout_secs,
+                            buf_secs=0,
+                            was_already_scheduled=was_already_scheduled,
+                            queue_id=queue_id,
+                            rec_title=rec_title
+                        )
+                    )
+                    return
 
-            self._active_timeshift = {
-                "title": lookup_title,
-                "channel": ch,
-                "queue_id": queue_id or (rec_info.get("id") if rec_info else None),
-                "kaffeine_key": rec_info.get("kaffeine_key") if rec_info else None,
-                "process": proc,
-                "file_path": str(active_file),
-                "is_scheduled_recording": was_already_scheduled
-            }
-            if proc and hasattr(self, "_timeshift_poll_timer"):
-                self._timeshift_poll_timer.start()
-            if hasattr(self, "guide_grid_vheader") and self.guide_grid_vheader:
-                self.guide_grid_vheader.viewport().update()
-            self._display_program_details(prog)
-            return
+                proc = self.dbus_client.play_file(
+                    str(active_file),
+                    player=self.config_mgr.live_tv_watch_mode,
+                    custom_cmd=self.config_mgr.custom_live_tv_player_cmd,
+                    standalone=True
+                )
+                pname = self.config_mgr.live_tv_watch_mode.upper()
+                self.status_bar.showMessage(f"Playing live broadcast '{title}' in {pname}.", 5000)
 
-        if retries_left > 0:
-            self.status_bar.showMessage("Buffering stream data...", 1000)
+                ch_key = (ch or "").strip().lower()
+                iso_key = (prog.get("start_iso") or "")[:16]
+                rec_info = self.queue_mgr.get_active_scheduled_map().get((ch_key, iso_key))
+
+                self._active_timeshift = {
+                    "title": lookup_title,
+                    "channel": ch,
+                    "queue_id": queue_id or (rec_info.get("id") if rec_info else None),
+                    "kaffeine_key": rec_info.get("kaffeine_key") if rec_info else None,
+                    "process": proc,
+                    "file_path": str(active_file),
+                    "is_scheduled_recording": was_already_scheduled
+                }
+                if proc and hasattr(self, "_timeshift_poll_timer"):
+                    self._timeshift_poll_timer.start()
+                if hasattr(self, "guide_grid_vheader") and self.guide_grid_vheader:
+                    self.guide_grid_vheader.viewport().update()
+                self._display_program_details(prog)
+                return
+
+        if elapsed < timeout_secs:
+            rem_secs = max(1, int(round(timeout_secs - elapsed)))
+            self.status_bar.showMessage(f"Buffering stream on {ch}... ({rem_secs}s remaining)", 1000)
             QTimer.singleShot(
-                600,
+                500,
                 lambda: self._on_timeshift_buffer_ready(
                     prog,
-                    retries_left - 1,
+                    start_time=start_time,
+                    timeout_secs=timeout_secs,
+                    buf_secs=buf_secs,
                     was_already_scheduled=was_already_scheduled,
                     queue_id=queue_id,
                     rec_title=rec_title
                 )
             )
         else:
+            self._handle_timeshift_signal_failure(
+                prog,
+                queue_id=queue_id,
+                rec_title=rec_title,
+                was_already_scheduled=was_already_scheduled,
+                timeout_secs=timeout_secs
+            )
+
+    def _handle_timeshift_signal_failure(
+        self,
+        prog: Dict[str, Any],
+        queue_id: Optional[int],
+        rec_title: Optional[str],
+        was_already_scheduled: bool,
+        timeout_secs: float
+    ):
+        title = prog.get("show_title") or prog.get("title") or "Live Program"
+        ch = prog.get("kaffeine_channel") or prog.get("channel", "")
+        lookup_title = rec_title or title
+
+        if not was_already_scheduled:
+            # Cancel temporary recording in Kaffeine to immediately free the hardware tuner
+            try:
+                self.dbus_client.cancel_recording(channel=ch, title=lookup_title)
+            except Exception as e:
+                print(f"Error cancelling Kaffeine recording on signal timeout: {e}")
+
+            # Remove from queue manager
+            if queue_id:
+                try:
+                    self.queue_mgr.remove_recording(int(queue_id))
+                except Exception:
+                    pass
+
+            # Clean up any empty 0-byte or stalled partial file in recording folder
+            try:
+                rec_folder = self.storage_mgr.get_recording_folder()
+                if rec_folder and rec_folder.exists():
+                    now_ts = time.time()
+                    clean_lookup = re.sub(r'[^a-zA-Z0-9]', '', lookup_title).lower()
+                    for ext in StorageManager.VIDEO_EXTENSIONS:
+                        for vf in rec_folder.glob(f"*{ext}"):
+                            try:
+                                st = vf.stat()
+                                if (now_ts - st.st_mtime) < 60 and st.st_size < 16384:
+                                    clean_vf = re.sub(r'[^a-zA-Z0-9]', '', vf.stem).lower()
+                                    if clean_lookup in clean_vf or clean_vf in clean_lookup:
+                                        vf.unlink(missing_ok=True)
+                            except Exception:
+                                pass
+            except Exception:
+                pass
+
+            self.refresh_recordings()
+            self._refresh_guide_view(keep_scroll=True)
+            if hasattr(self, "guide_grid_vheader") and self.guide_grid_vheader:
+                self.guide_grid_vheader.viewport().update()
+
+            self.status_bar.showMessage(f"Weak or no signal on {ch}. Tuner released.", 5000)
+
+            secs_display = int(round(timeout_secs))
+            QMessageBox.warning(
+                self,
+                "Weak or No Signal",
+                f"Unable to start live TV on channel {ch}.\n\n"
+                f"No broadcast stream data was received within {secs_display} seconds (weak or unavailable signal).\n\n"
+                "The tuner has been released so you can tune to other channels."
+            )
+        else:
             self.status_bar.showMessage(
-                f"Recording started on '{title}', but could not locate playable .m2t file yet. Check recording folder.", 6000
+                f"Scheduled recording '{title}' on {ch} has not written stream data yet (possible weak signal).", 6000
             )
 
     def _poll_timeshift_session(self):
