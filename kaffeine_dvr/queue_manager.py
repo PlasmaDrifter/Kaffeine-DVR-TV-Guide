@@ -57,6 +57,8 @@ class QueueManager:
             cur.execute("ALTER TABLE recording_queue ADD COLUMN buffer_mins INTEGER DEFAULT 0")
         if "notified" not in existing_cols:
             cur.execute("ALTER TABLE recording_queue ADD COLUMN notified INTEGER DEFAULT 0")
+        if "is_timeshift" not in existing_cols:
+            cur.execute("ALTER TABLE recording_queue ADD COLUMN is_timeshift INTEGER DEFAULT 0")
 
         cur.execute("CREATE INDEX IF NOT EXISTS idx_queue_status ON recording_queue(status)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_queue_start ON recording_queue(start_iso)")
@@ -99,7 +101,8 @@ class QueueManager:
         start_iso: str,
         duration_iso: str,
         lead_time_mins: int = 5,
-        buffer_mins: int = 0
+        buffer_mins: int = 0,
+        is_timeshift: bool = False
     ) -> int:
         # Calculate end_iso and buffered duration
         try:
@@ -131,6 +134,7 @@ class QueueManager:
         except Exception:
             pass
         initial_notified = 1 if is_already_started else 0
+        is_timeshift_val = 1 if is_timeshift else 0
 
         # Check for duplicates or update if still QUEUED
         cur.execute("""
@@ -145,9 +149,10 @@ class QueueManager:
                     UPDATE recording_queue
                     SET title = ?, duration_iso = ?, start_time_local = ?,
                         end_iso = ?, lead_time_mins = ?, buffer_mins = ?,
-                        notified = CASE WHEN ? = 1 THEN 1 ELSE notified END
+                        notified = CASE WHEN ? = 1 THEN 1 ELSE notified END,
+                        is_timeshift = ?
                     WHERE id = ?
-                """, (title, effective_duration_iso, start_display, end_iso, lead_time_mins, buffer_mins, initial_notified, existing_id))
+                """, (title, effective_duration_iso, start_display, end_iso, lead_time_mins, buffer_mins, initial_notified, is_timeshift_val, existing_id))
                 conn.commit()
             elif is_already_started:
                 cur.execute("UPDATE recording_queue SET notified = 1 WHERE id = ?", (existing_id,))
@@ -160,9 +165,9 @@ class QueueManager:
         cur.execute("""
             INSERT INTO recording_queue (
                 title, channel, start_iso, duration_iso, start_time_local,
-                end_iso, lead_time_mins, status, created_at, buffer_mins, notified
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'QUEUED', ?, ?, ?)
-        """, (title, channel, start_iso, effective_duration_iso, start_display, end_iso, lead_time_mins, now_str, buffer_mins, initial_notified))
+                end_iso, lead_time_mins, status, created_at, buffer_mins, notified, is_timeshift
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'QUEUED', ?, ?, ?, ?)
+        """, (title, channel, start_iso, effective_duration_iso, start_display, end_iso, lead_time_mins, now_str, buffer_mins, initial_notified, is_timeshift_val))
         new_id = cur.lastrowid
         conn.commit()
         conn.close()

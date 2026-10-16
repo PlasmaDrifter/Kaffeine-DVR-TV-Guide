@@ -532,6 +532,8 @@ class ConfigManager:
                         data["live_tv_watch_mode"] = "timeshift"
                     if "timeshift_buffer_seconds" not in data:
                         data["timeshift_buffer_seconds"] = 2
+                    if "zero_byte_recording_timeout_secs" not in data:
+                        data["zero_byte_recording_timeout_secs"] = 8
                     if "delete_timeshift_on_exit" not in data:
                         data["delete_timeshift_on_exit"] = True
                     if "grid_visible_rows" not in data:
@@ -621,6 +623,7 @@ class ConfigManager:
             "custom_playback_player_cmd": "",
             "live_tv_watch_mode": "timeshift",
             "timeshift_buffer_seconds": 2,
+            "zero_byte_recording_timeout_secs": 8,
             "delete_timeshift_on_exit": True,
             "grid_visible_rows": 9,
             "guide_detail_lines": 3,
@@ -884,6 +887,15 @@ class ConfigManager:
     @timeshift_buffer_seconds.setter
     def timeshift_buffer_seconds(self, val: int):
         self.data["timeshift_buffer_seconds"] = max(1, min(30, int(val)))
+        self.save()
+
+    @property
+    def zero_byte_recording_timeout_secs(self) -> int:
+        return int(self.data.get("zero_byte_recording_timeout_secs", 8))
+
+    @zero_byte_recording_timeout_secs.setter
+    def zero_byte_recording_timeout_secs(self, val: int):
+        self.data["zero_byte_recording_timeout_secs"] = max(3, min(120, int(val)))
         self.save()
 
     @property

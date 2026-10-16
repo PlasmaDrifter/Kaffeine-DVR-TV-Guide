@@ -7,6 +7,7 @@ and triggers automatic background guide sync and storage retention cycles.
 """
 
 import os
+import re
 import subprocess
 import time
 from datetime import datetime, timedelta
@@ -45,10 +46,17 @@ def send_desktop_notification(title: str, channel: str, start_display: str, lead
         print(f"Error sending desktop notification: {e}", flush=True)
 
 class Watcher:
-    def __init__(self, dbus_client: Optional[KaffeineDbusClient] = None, queue_mgr: Optional[QueueManager] = None):
+    def __init__(
+        self,
+        dbus_client: Optional[KaffeineDbusClient] = None,
+        queue_mgr: Optional[QueueManager] = None,
+        storage_mgr: Optional[StorageManager] = None,
+        config_mgr: Optional[ConfigManager] = None,
+    ):
+        self.config_mgr = config_mgr or ConfigManager()
         self.dbus_client = dbus_client or KaffeineDbusClient()
         self.queue_mgr = queue_mgr or QueueManager()
-        self.storage_mgr = StorageManager(queue_mgr=self.queue_mgr)
+        self.storage_mgr = storage_mgr or StorageManager(config_mgr=self.config_mgr, queue_mgr=self.queue_mgr)
         self.running = True
         self.last_sync_time = 0.0
 
@@ -222,6 +230,127 @@ class Watcher:
                 except Exception as e:
                     print(f"Error evaluating stale history recording: {e}", flush=True)
 
+    def enforce_zero_byte_recording_cleanup(self):
+        """
+        Watchdog that checks in-progress recordings (status == 'RECORDING').
+        If a recording has been active for more than zero_byte_recording_timeout_secs
+        (default 45s) and has received NO broadcast data (file is missing or <= 16KB),
+        it cancels the dead recording in Kaffeine, cleans up the queue and stalled files,
+        and immediately frees the hardware tuner.
+        """
+        if not self.dbus_client.is_running():
+            return
+
+        cfg = self.config_mgr
+        timeout_threshold = getattr(cfg, "zero_byte_recording_timeout_secs", 8)
+        now = datetime.now()
+        active_queue = self.queue_mgr.list_queue(include_completed=False)
+        rec_folder = self.storage_mgr.get_recording_folder()
+
+        for rec in active_queue:
+            if rec.get("status") != "RECORDING":
+                continue
+
+            try:
+                start_dt = datetime.fromisoformat(rec["start_iso"])
+                created_dt = datetime.fromisoformat(rec["created_at"]) if rec.get("created_at") else start_dt
+                effective_start = max(start_dt, created_dt)
+                elapsed = (now - effective_start).total_seconds()
+            except Exception:
+                continue
+
+            if elapsed < timeout_threshold:
+                continue
+
+            title = rec.get("title", "")
+            channel = rec.get("channel", "")
+            qid = rec.get("id")
+            k_key = rec.get("kaffeine_key")
+
+            # Check if valid file exists and has written stream data (> 16 KB)
+            has_data = False
+            active_file = (
+                self.storage_mgr.find_active_or_recent_recording_file(title, max_age_seconds=int(elapsed + 120), min_size_bytes=16384)
+            )
+            if active_file and active_file.exists():
+                try:
+                    if active_file.stat().st_size > 16384:
+                        has_data = True
+                except Exception:
+                    pass
+
+            # Fallback: scan recording folder for any recent video file modified since effective_start - 30s
+            if not has_data and rec_folder and rec_folder.exists():
+                try:
+                    clean_title = re.sub(r'[^a-zA-Z0-9]', '', title).lower()
+                    for ext in StorageManager.VIDEO_EXTENSIONS:
+                        for vf in rec_folder.glob(f"*{ext}"):
+                            try:
+                                st = vf.stat()
+                                if st.st_mtime >= (effective_start.timestamp() - 30):
+                                    clean_stem = re.sub(r'[^a-zA-Z0-9]', '', vf.stem).lower()
+                                    if clean_title in clean_stem or clean_stem in clean_title:
+                                        if st.st_size > 16384:
+                                            has_data = True
+                                            break
+                            except Exception:
+                                pass
+                        if has_data:
+                            break
+                except Exception:
+                    pass
+
+            if not has_data:
+                now_str = now.strftime('%Y-%m-%d %H:%M:%S')
+                print(
+                    f"[{now_str}] Zero-Byte Watchdog: Recording '{title}' on channel {channel} "
+                    f"has received 0 bytes of stream data after {int(elapsed)}s (weak/dead signal). "
+                    f"Halting dead recording and removing from queue to free tuner.",
+                    flush=True
+                )
+
+                # 1. Cancel in Kaffeine via D-Bus
+                try:
+                    self.dbus_client.cancel_recording(key=k_key, channel=channel, title=title)
+                except Exception as e:
+                    print(f"Error cancelling dead recording via D-Bus: {e}", flush=True)
+
+                # 2. Remove from queue manager to release tuner reservation
+                try:
+                    self.queue_mgr.remove_recording(qid)
+                except Exception as e:
+                    print(f"Error removing dead recording from queue: {e}", flush=True)
+
+                # 3. Clean up any 0-byte or corrupted header orphan files
+                if rec_folder and rec_folder.exists():
+                    try:
+                        clean_title = re.sub(r'[^a-zA-Z0-9]', '', title).lower()
+                        for ext in StorageManager.VIDEO_EXTENSIONS:
+                            for vf in rec_folder.glob(f"*{ext}"):
+                                try:
+                                    st = vf.stat()
+                                    if (now.timestamp() - st.st_mtime) < (elapsed + 60) and st.st_size <= 16384:
+                                        clean_stem = re.sub(r'[^a-zA-Z0-9]', '', vf.stem).lower()
+                                        if clean_title in clean_stem or clean_stem in clean_title:
+                                            vf.unlink(missing_ok=True)
+                                except Exception:
+                                    pass
+                    except Exception:
+                        pass
+
+                # 4. Send desktop notification if enabled
+                if cfg.enable_desktop_notifications:
+                    try:
+                        send_desktop_notification(
+                            title=f"Recording Aborted: {title}",
+                            channel=channel,
+                            start_display="No signal received (0 bytes). Tuner released.",
+                            lead_mins=0,
+                            persistent=False
+                        )
+                    except Exception:
+                        pass
+
     def check_and_dispatch(self, notify: bool = True) -> int:
         self.reap_children()
         # Resolve any back-to-back buffer conflicts across different channels before arming
@@ -230,6 +359,8 @@ class Watcher:
         self.stop_lingering_buffers_for_upcoming_shows()
         # Enforce watchdog to clean up any stale running streams holding the tuner past end time
         self.enforce_stale_recording_cleanup()
+        # Enforce watchdog to abort dead recordings receiving 0 bytes of data to free tuner
+        self.enforce_zero_byte_recording_cleanup()
         due = self.queue_mgr.get_due_to_arm()
         armed_count = 0
         cfg = ConfigManager()
@@ -367,7 +498,7 @@ class Watcher:
             active = self.queue_mgr.list_queue(include_completed=False)
             now = datetime.now()
             if any(r.get("status") == "RECORDING" for r in active):
-                return 5
+                return 2
             for r in active:
                 if r.get("status") in ("QUEUED", "ARMED"):
                     try:

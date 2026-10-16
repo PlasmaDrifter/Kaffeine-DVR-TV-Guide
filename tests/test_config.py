@@ -14,6 +14,19 @@ def test_default_config(isolated_config: ConfigManager):
     assert cfg.watcher_interval_seconds == 180
     assert cfg.notification_lead_time_mins == 2
     assert cfg.timeshift_buffer_seconds == 2
+    assert cfg.zero_byte_recording_timeout_secs == 8
+
+
+def test_zero_byte_timeout_clamping(isolated_config: ConfigManager):
+    cfg = isolated_config
+    cfg.zero_byte_recording_timeout_secs = 1
+    assert cfg.zero_byte_recording_timeout_secs == 3
+
+    cfg.zero_byte_recording_timeout_secs = 200
+    assert cfg.zero_byte_recording_timeout_secs == 120
+
+    cfg.zero_byte_recording_timeout_secs = 5
+    assert cfg.zero_byte_recording_timeout_secs == 5
 
 def test_grid_visible_rows_clamping(isolated_config: ConfigManager):
     cfg = isolated_config

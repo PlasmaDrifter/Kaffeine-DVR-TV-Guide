@@ -138,14 +138,31 @@ You can check for and apply updates directly inside the application under **Sett
 
 ## Configuration & Guide Sources
 
-### 1. Channel Source
-Open **Settings > Channel Source**. Click **Import Channels from Kaffeine** to read your scanned channels directly from `~/.local/share/kaffeine/sqlite.db`.
+### 1. Channel Source, Renaming & Grid Order
+Navigate to **Settings > Channel Source**. Click **Import Channels from Kaffeine** to automatically read your scanned channels directly from Kaffeine's tuner database (`~/.local/share/kaffeine/sqlite.db`).
 
-Lineup format:
+In this section, you can **rename channels** for clean guide presentation and **custom-sort the grid order** in which channels appear in your electronic program guide.
+
+#### Channel Renaming Format:
+Each channel mapping is defined as:
 ```text
-Guide Network Name = Kaffeine Tuned Name
+Guide Display Name = Kaffeine Tuned Name
 ```
-Examples:
+- **Guide Display Name** (Left): The user-friendly name displayed across the EPG grid, search filters, and recording rules. This is also the network name matched against EPG guide data.
+- **Kaffeine Tuned Name** (Right): The exact station name stored in Kaffeine's hardware channel database so the tuner knows which physical frequency/multiplex to lock for viewing and recording.
+
+#### Real-World Tuner Example (Before Renaming):
+When channels are first scanned by your TV tuner hardware, Kaffeine typically names them using their physical channel numbers, subchannel prefixes, and broadcast call signs (for example, in a standard metropolitan market):
+```text
+Fox = 010-1 KSAZ-HD
+NBC = 012-1 KPNX-HD
+CBS = 005-1 KPHO-HD
+ABC = 015-1 KNXV-HD
+The CW = 061-1 KASW-HD
+```
+
+#### If Already Renamed in Kaffeine:
+If you have already renamed or simplified your channels directly inside Kaffeine before importing, your mapping will look straightforward:
 ```text
 Fox = Fox
 NBC = NBC
@@ -153,6 +170,12 @@ CBS = CBS
 ABC = ABC
 The CW = CW6
 ```
+
+#### Customizing Grid Sort Order:
+The **TV Guide Channel Order** list allows you to arrange the exact vertical sequence of channels in the guide grid:
+- Select any channel and click **Move Up** or **Move Down** to reorder (e.g. major networks first, followed by news, sports, and subchannels).
+- Right-click any channel to open the context menu, or press `Delete` / `Backspace` to remove unwanted subchannels from the guide view.
+- Changes are instantly saved and synchronized across both the desktop grid view and the mobile web companion.
 
 ### 2. TV Guide Sources & Zero-Configuration TVMaze
 - **TVMaze (Zero Configuration Required):** Out of the box, national broadcast networks (**FOX, CBS, NBC, ABC, PBS, and The CW**) work automatically with **no accounts, no API keys, and no manual setup**. As soon as the application opens, it downloads 7 days of prime-time listings for all mapped channels.

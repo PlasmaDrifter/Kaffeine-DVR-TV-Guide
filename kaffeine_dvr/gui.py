@@ -1326,11 +1326,15 @@ class ChannelSignalHealthDialog(BaseFramelessDialog):
     def scan_all_channels(self):
         if self._worker and self._worker.isRunning():
             return
+        if not self._check_tuner_available():
+            return
         self.stop_aiming()
         self._start_scan(self.channels)
 
     def test_selected_channel(self):
         if self._worker and self._worker.isRunning():
+            return
+        if not self._check_tuner_available():
             return
         self.stop_aiming()
         row = self.table.currentRow()
@@ -1338,6 +1342,44 @@ class ChannelSignalHealthDialog(BaseFramelessDialog):
             return
         ch = self.channels[row]
         self._start_scan([ch])
+
+    def _check_tuner_available(self) -> bool:
+        """Check if Kaffeine currently has active recording timers blocking the physical tuner."""
+        client = KaffeineDbusClient()
+        if not client.is_running():
+            return True
+        try:
+            active = client.get_active_recordings()
+            if not active:
+                # Double-check full schedule
+                entries = client.list_recordings()
+                active = [e for e in entries if e.get("is_running")]
+            if active:
+                rec_names = ", ".join([f"'{e.get('name', 'Recording')}' on {e.get('channel', 'channel')}" for e in active])
+                reply = QMessageBox.question(
+                    self,
+                    "Tuner In Use",
+                    f"Kaffeine is currently busy with an active recording:\n{rec_names}\n\n"
+                    "Scanning channel signal health requires tuning to each channel frequency.\n\n"
+                    "Would you like to stop these active recordings to proceed with the scan?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No
+                )
+                if reply == QMessageBox.StandardButton.Yes:
+                    for e in active:
+                        key = e.get("id")
+                        ch = e.get("channel")
+                        nm = e.get("name")
+                        try:
+                            client.cancel_recording(key=key, channel=ch, title=nm)
+                        except Exception:
+                            if key:
+                                client.remove_recording(int(key))
+                    return True
+                return False
+        except Exception:
+            pass
+        return True
 
     def _start_scan(self, channels_to_scan: List[Dict[str, Any]]):
         self.scan_all_btn.setEnabled(False)
@@ -6921,6 +6963,20 @@ class MainWindow(QMainWindow):
             self.timeshift_buffer_spin
         )
 
+        self.zero_byte_timeout_spin = NumberStepper()
+        self.zero_byte_timeout_spin.setRange(3, 60)
+        self.zero_byte_timeout_spin.setSuffix(" sec")
+        self.zero_byte_timeout_spin.setFixedWidth(160)
+        self.zero_byte_timeout_spin.setValue(getattr(self.config_mgr, "zero_byte_recording_timeout_secs", 8))
+
+        dvr_layout.addRow(
+            make_setting_label(
+                "Dead Stream Abort Timeout:",
+                "Duration (seconds) to wait for broadcast stream data before automatically aborting a dead channel recording (zero bytes received) and releasing the tuner hardware."
+            ),
+            self.zero_byte_timeout_spin
+        )
+
         self.delete_timeshift_check = QCheckBox("Delete temporary timeshift buffer files when player closes")
         self.delete_timeshift_check.setChecked(getattr(self.config_mgr, "delete_timeshift_on_exit", True))
         dvr_layout.addRow(
@@ -7903,6 +7959,11 @@ class MainWindow(QMainWindow):
             self.timeshift_buffer_spin.blockSignals(True)
             self.timeshift_buffer_spin.setValue(self.config_mgr.timeshift_buffer_seconds)
             self.timeshift_buffer_spin.blockSignals(False)
+
+        if hasattr(self, "zero_byte_timeout_spin"):
+            self.zero_byte_timeout_spin.blockSignals(True)
+            self.zero_byte_timeout_spin.setValue(self.config_mgr.zero_byte_recording_timeout_secs)
+            self.zero_byte_timeout_spin.blockSignals(False)
 
         if hasattr(self, "delete_timeshift_check"):
             self.delete_timeshift_check.blockSignals(True)
@@ -9123,6 +9184,8 @@ class MainWindow(QMainWindow):
             self.config_mgr.custom_playback_player_cmd = cmd
         if hasattr(self, "timeshift_buffer_spin"):
             self.config_mgr.timeshift_buffer_seconds = self.timeshift_buffer_spin.value()
+        if hasattr(self, "zero_byte_timeout_spin"):
+            self.config_mgr.zero_byte_recording_timeout_secs = self.zero_byte_timeout_spin.value()
         if hasattr(self, "delete_timeshift_check"):
             self.config_mgr.delete_timeshift_on_exit = self.delete_timeshift_check.isChecked()
         self.config_mgr.enable_desktop_notifications = self.notify_check.isChecked()
@@ -12934,7 +12997,7 @@ class MainWindow(QMainWindow):
         ch_key = (ch or "").strip().lower()
         iso_key = (prog.get("start_iso") or "")[:16]
         rec_info = active_map.get((ch_key, iso_key))
-        was_already_scheduled = bool(rec_info)
+        was_already_scheduled = bool(rec_info and not rec_info.get("is_timeshift"))
 
         # Compute recording title for this specific program
         cat = prog.get("_category") or classify_guide_category(prog)
@@ -12987,7 +13050,8 @@ class MainWindow(QMainWindow):
 
                 qid = self.queue_mgr.add_recording(
                     rec_title, ch, start_iso, duration_iso,
-                    lead_time_mins=0, buffer_mins=0
+                    lead_time_mins=0, buffer_mins=0,
+                    is_timeshift=True
                 )
                 self.watcher.check_and_dispatch(notify=False)
                 active_map = self.queue_mgr.get_active_scheduled_map()
@@ -13206,6 +13270,29 @@ class MainWindow(QMainWindow):
             self.status_bar.showMessage(
                 f"Scheduled recording '{title}' on {ch} has not written stream data yet (possible weak signal).", 6000
             )
+            reply = QMessageBox.question(
+                self,
+                "Weak or No Signal",
+                f"Scheduled recording '{title}' on channel {ch} is not receiving broadcast stream data (0 bytes written).\n\n"
+                "Would you like to cancel this recording to free the tuner?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                try:
+                    self.dbus_client.cancel_recording(channel=ch, title=lookup_title)
+                except Exception as e:
+                    print(f"Error cancelling Kaffeine recording on signal timeout: {e}")
+                if queue_id:
+                    try:
+                        self.queue_mgr.remove_recording(int(queue_id))
+                    except Exception:
+                        pass
+                self.refresh_recordings()
+                self._refresh_guide_view(keep_scroll=True)
+                if hasattr(self, "guide_grid_vheader") and self.guide_grid_vheader:
+                    self.guide_grid_vheader.viewport().update()
+                self.status_bar.showMessage(f"Cancelled recording on {ch}. Tuner released.", 5000)
 
     def _poll_timeshift_session(self):
         if not getattr(self, "_active_timeshift", None):

@@ -779,18 +779,26 @@ class KaffeineDbusClient:
 
         return self._list_via_sqlite()
 
+    def list_recordings(self) -> List[Dict[str, Any]]:
+        """Alias for list_scheduled_recordings."""
+        return self.list_scheduled_recordings()
+
+    def get_active_recordings(self) -> List[Dict[str, Any]]:
+        """Returns currently recording entries (is_running == True)."""
+        return [e for e in self.list_scheduled_recordings() if e.get("is_running")]
+
     def _list_via_dbus(self) -> List[Dict[str, Any]]:
         import dbus
         bus = dbus.SessionBus()
-        proxy = bus.get_object(self.service_name, self.object_path)
+        proxy = bus.get_object(self.service_name, self.object_path, introspect=False)
 
         # Call ListProgramSchedule
         # Try through interface or direct method call
         try:
             iface = dbus.Interface(proxy, dbus_interface=self.interface_name)
-            raw_entries = iface.ListProgramSchedule()
+            raw_entries = iface.ListProgramSchedule(timeout=3.0)
         except Exception:
-            raw_entries = proxy.ListProgramSchedule()
+            raw_entries = proxy.ListProgramSchedule(timeout=3.0)
 
         recordings = []
         for entry in raw_entries:
@@ -895,12 +903,12 @@ class KaffeineDbusClient:
             try:
                 import dbus
                 bus = dbus.SessionBus()
-                proxy = bus.get_object(self.service_name, self.object_path)
+                proxy = bus.get_object(self.service_name, self.object_path, introspect=False)
                 try:
                     iface = dbus.Interface(proxy, dbus_interface=self.interface_name)
-                    key = iface.ScheduleProgram(name, channel, begin_iso, duration_iso, dbus.Int32(repeat))
+                    key = iface.ScheduleProgram(name, channel, begin_iso, duration_iso, dbus.Int32(repeat), timeout=3.0)
                 except Exception:
-                    key = proxy.ScheduleProgram(name, channel, begin_iso, duration_iso, repeat)
+                    key = proxy.ScheduleProgram(name, channel, begin_iso, duration_iso, repeat, timeout=3.0)
                 return int(key)
             except Exception as e:
                 # Fallback to qdbus CLI
@@ -990,12 +998,12 @@ class KaffeineDbusClient:
         try:
             import dbus
             bus = dbus.SessionBus()
-            proxy = bus.get_object(self.service_name, self.object_path)
+            proxy = bus.get_object(self.service_name, self.object_path, introspect=False)
             try:
                 iface = dbus.Interface(proxy, dbus_interface=self.interface_name)
-                iface.RemoveProgram(dbus.UInt32(key_int))
+                iface.RemoveProgram(dbus.UInt32(key_int), timeout=3.0)
             except Exception:
-                proxy.RemoveProgram(key_int)
+                proxy.RemoveProgram(key_int, timeout=3.0)
             success = True
         except Exception:
             # Fallback to qdbus CLI
@@ -1031,7 +1039,25 @@ class KaffeineDbusClient:
         2. Cleans matching records from Kaffeine's sqlite.db with strict channel guards.
         """
         removed_any = False
-        ch_target = (channel or "").strip().lower()
+        ch_targets = set()
+        if channel:
+            ch_strip = str(channel).strip().lower()
+            ch_targets.add(ch_strip)
+            try:
+                from .config import ConfigManager
+                cfg = ConfigManager()
+                if cfg.channel_map:
+                    # If channel is a guide name, add tuned name
+                    if channel in cfg.channel_map:
+                        ch_targets.add(cfg.channel_map[channel].strip().lower())
+                    # If channel is a tuned name, add guide name
+                    for g_name, t_name in cfg.channel_map.items():
+                        if t_name.strip().lower() == ch_strip or g_name.strip().lower() == ch_strip:
+                            ch_targets.add(g_name.strip().lower())
+                            ch_targets.add(t_name.strip().lower())
+            except Exception:
+                pass
+
         t_target = (title or "").strip().lower()
 
         # Step 1: Query active/scheduled timers in Kaffeine via D-Bus
@@ -1049,14 +1075,14 @@ class KaffeineDbusClient:
 
                     # Safety Guard: If a target channel is specified, NEVER remove an entry on a different channel!
                     # Kaffeine recycles small numeric IDs (1, 2, ...), so key collision across different channels occurs.
-                    if ch_target and e_ch != ch_target:
+                    if ch_targets and e_ch not in ch_targets:
                         continue
 
                     match_show = False
-                    if ch_target and t_target:
-                        match_show = (e_ch == ch_target) and ((e_name == t_target) or (t_target in e_name) or (e_name in t_target))
-                    elif ch_target:
-                        match_show = (e_ch == ch_target)
+                    if ch_targets and t_target:
+                        match_show = (e_ch in ch_targets) and ((e_name == t_target) or (t_target in e_name) or (e_name in t_target))
+                    elif ch_targets:
+                        match_show = (e_ch in ch_targets)
                     elif t_target:
                         match_show = (e_name == t_target) or (t_target in e_name) or (e_name in t_target)
                     elif key is not None and int(key) == int(e_id):
@@ -1072,7 +1098,7 @@ class KaffeineDbusClient:
                 print(f"Error checking Kaffeine schedule during cancellation: {e}", flush=True)
 
         # Step 2: Fallback to removing by key ONLY if no channel or title was specified
-        if not removed_any and key is not None and not ch_target and not t_target:
+        if not removed_any and key is not None and not ch_targets and not t_target:
             try:
                 k_int = int(key)
                 if k_int > 0:
@@ -1086,23 +1112,24 @@ class KaffeineDbusClient:
             try:
                 conn = sqlite3.connect(str(self.kaffeine_db_path), timeout=10.0)
                 cur = conn.cursor()
-                if ch_target and t_target:
-                    cur.execute(
-                        "DELETE FROM RecordingSchedule WHERE LOWER(Channel) = LOWER(?) AND (LOWER(Name) = LOWER(?) OR Name LIKE ?)",
-                        (ch_target, t_target, f"%{t_target}%")
-                    )
-                elif ch_target and key is not None:
-                    cur.execute(
-                        "DELETE FROM RecordingSchedule WHERE Id = ? AND LOWER(Channel) = LOWER(?)",
-                        (int(key), ch_target)
-                    )
-                elif ch_target:
-                    cur.execute(
-                        "DELETE FROM RecordingSchedule WHERE LOWER(Channel) = LOWER(?)",
-                        (ch_target,)
-                    )
-                elif key is not None:
-                    cur.execute("DELETE FROM RecordingSchedule WHERE Id = ?", (int(key),))
+                for c_t in (ch_targets or [None]):
+                    if c_t and t_target:
+                        cur.execute(
+                            "DELETE FROM RecordingSchedule WHERE LOWER(Channel) = LOWER(?) AND (LOWER(Name) = LOWER(?) OR Name LIKE ?)",
+                            (c_t, t_target, f"%{t_target}%")
+                        )
+                    elif c_t and key is not None:
+                        cur.execute(
+                            "DELETE FROM RecordingSchedule WHERE Id = ? AND LOWER(Channel) = LOWER(?)",
+                            (int(key), c_t)
+                        )
+                    elif c_t:
+                        cur.execute(
+                            "DELETE FROM RecordingSchedule WHERE LOWER(Channel) = LOWER(?)",
+                            (c_t,)
+                        )
+                    elif key is not None:
+                        cur.execute("DELETE FROM RecordingSchedule WHERE Id = ?", (int(key),))
                 conn.commit()
                 conn.close()
             except Exception as e:

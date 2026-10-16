@@ -2,11 +2,13 @@
 Tests for weak/no signal detection, automatic tuner release, and warning popup.
 """
 
+from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 from PyQt6.QtWidgets import QMessageBox
 
-from kaffeine_dvr.gui import MainWindow
+from kaffeine_dvr.gui import ChannelSignalHealthDialog, MainWindow
+from kaffeine_dvr.watcher import Watcher
 
 
 def test_signal_timeout_duration_logic(qtbot, isolated_config):
@@ -84,9 +86,10 @@ def test_handle_timeshift_signal_failure_releases_tuner(qtbot, isolated_config, 
         assert "tuner has been released" in args[2]
 
 
-def test_handle_timeshift_signal_failure_scheduled_recording_status(qtbot, isolated_config):
+def test_handle_timeshift_signal_failure_scheduled_recording_declines_cancel(qtbot, isolated_config):
     """
-    Test that scheduled recordings display a status bar warning without auto-canceling user schedule.
+    Test that when user declines to cancel a scheduled recording with no signal,
+    it displays a status bar warning without canceling.
     """
     cfg = isolated_config
     win = MainWindow(config_mgr=cfg)
@@ -101,17 +104,155 @@ def test_handle_timeshift_signal_failure_scheduled_recording_status(qtbot, isola
         "channel": "5.1 KPIX",
     }
 
-    win._handle_timeshift_signal_failure(
-        prog=prog,
-        queue_id=99,
-        rec_title="Scheduled Weak Show",
-        was_already_scheduled=True,
-        timeout_secs=4.0
-    )
+    with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.No) as mock_q:
+        win._handle_timeshift_signal_failure(
+            prog=prog,
+            queue_id=99,
+            rec_title="Scheduled Weak Show",
+            was_already_scheduled=True,
+            timeout_secs=4.0
+        )
 
-    # Should NOT cancel pre-scheduled recording
-    win.dbus_client.cancel_recording.assert_not_called()
-    win.queue_mgr.remove_recording.assert_not_called()
-    win.status_bar.showMessage.assert_called_once()
-    msg = win.status_bar.showMessage.call_args[0][0]
-    assert "Scheduled recording 'Scheduled Weak Show' on 5.1 KPIX has not written stream data yet" in msg
+        mock_q.assert_called_once()
+        win.dbus_client.cancel_recording.assert_not_called()
+        win.queue_mgr.remove_recording.assert_not_called()
+        win.status_bar.showMessage.assert_called_once()
+        msg = win.status_bar.showMessage.call_args[0][0]
+        assert "Scheduled recording 'Scheduled Weak Show' on 5.1 KPIX has not written stream data yet" in msg
+
+
+def test_handle_timeshift_signal_failure_scheduled_recording_confirms_cancel(qtbot, isolated_config):
+    """
+    Test that when user confirms canceling a scheduled recording with no signal,
+    it cancels via D-Bus, removes from queue, and releases tuner.
+    """
+    cfg = isolated_config
+    win = MainWindow(config_mgr=cfg)
+    qtbot.addWidget(win)
+
+    win.dbus_client = MagicMock()
+    win.queue_mgr = MagicMock()
+    win.status_bar.showMessage = MagicMock()
+
+    prog = {
+        "show_title": "Scheduled Weak Show",
+        "channel": "5.1 KPIX",
+    }
+
+    with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes) as mock_q:
+        win._handle_timeshift_signal_failure(
+            prog=prog,
+            queue_id=99,
+            rec_title="Scheduled Weak Show",
+            was_already_scheduled=True,
+            timeout_secs=4.0
+        )
+
+        mock_q.assert_called_once()
+        win.dbus_client.cancel_recording.assert_called_once_with(channel="5.1 KPIX", title="Scheduled Weak Show")
+        win.queue_mgr.remove_recording.assert_called_once_with(99)
+
+
+def test_channel_signal_health_check_tuner_available_prompt(qtbot, isolated_config):
+    """
+    Test that ChannelSignalHealthDialog warns when Kaffeine is busy recording,
+    and cancels the recording to free the tuner if user confirms.
+    """
+    cfg = isolated_config
+    dialog = ChannelSignalHealthDialog(channels=[{"channel": "7.1 KGO"}], config_mgr=cfg)
+    qtbot.addWidget(dialog)
+
+    mock_client = MagicMock()
+    mock_client.is_running.return_value = True
+    mock_client.get_active_recordings.return_value = [
+        {"id": 1, "name": "Active Show", "channel": "7.1 KGO", "is_running": True}
+    ]
+
+    with patch("kaffeine_dvr.gui.KaffeineDbusClient", return_value=mock_client):
+        with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes) as mock_q:
+            res = dialog._check_tuner_available()
+            assert res is True
+            mock_q.assert_called_once()
+            mock_client.cancel_recording.assert_called_once_with(key=1, channel="7.1 KGO", title="Active Show")
+
+
+def test_watcher_enforce_zero_byte_recording_cleanup(isolated_config, tmp_path):
+    """
+    Test that Watcher automatically detects dead recordings with 0 bytes after timeout,
+    cancels them in Kaffeine, and removes them from the queue.
+    """
+    cfg = isolated_config
+    cfg.zero_byte_recording_timeout_secs = 30
+    cfg.custom_recording_folder = str(tmp_path)
+
+    mock_dbus = MagicMock()
+    mock_dbus.is_running.return_value = True
+
+    mock_queue = MagicMock()
+    start_dt = datetime.now() - timedelta(seconds=40)
+    mock_queue.list_queue.return_value = [
+        {
+            "id": 101,
+            "title": "Dead Channel Show",
+            "channel": "365",
+            "start_iso": start_dt.strftime("%Y-%m-%dT%H:%M:%S"),
+            "created_at": start_dt.strftime("%Y-%m-%dT%H:%M:%S"),
+            "status": "RECORDING",
+            "kaffeine_key": 5
+        }
+    ]
+
+    mock_storage = MagicMock()
+    mock_storage.get_recording_folder.return_value = tmp_path
+    mock_storage.find_active_or_recent_recording_file.return_value = None
+
+    watcher = Watcher(config_mgr=cfg, dbus_client=mock_dbus, queue_mgr=mock_queue, storage_mgr=mock_storage)
+
+    with patch("kaffeine_dvr.watcher.send_desktop_notification") as mock_notify:
+        watcher.enforce_zero_byte_recording_cleanup()
+
+        # Should cancel dead recording in Kaffeine and remove from queue
+        mock_dbus.cancel_recording.assert_called_once_with(key=5, channel="365", title="Dead Channel Show")
+        mock_queue.remove_recording.assert_called_once_with(101)
+        mock_notify.assert_called_once()
+
+
+def test_watcher_zero_byte_cleanup_keeps_healthy_recording(isolated_config, tmp_path):
+    """
+    Test that Watcher does not cancel active recordings that are writing valid data (>16KB).
+    """
+    cfg = isolated_config
+    cfg.zero_byte_recording_timeout_secs = 30
+    cfg.custom_recording_folder = str(tmp_path)
+
+    mock_dbus = MagicMock()
+    mock_dbus.is_running.return_value = True
+
+    start_dt = datetime.now() - timedelta(seconds=40)
+    mock_queue = MagicMock()
+    mock_queue.list_queue.return_value = [
+        {
+            "id": 102,
+            "title": "Healthy Show",
+            "channel": "7.1",
+            "start_iso": start_dt.strftime("%Y-%m-%dT%H:%M:%S"),
+            "created_at": start_dt.strftime("%Y-%m-%dT%H:%M:%S"),
+            "status": "RECORDING",
+            "kaffeine_key": 6
+        }
+    ]
+
+    healthy_file = tmp_path / "HealthyShow.m2t"
+    healthy_file.write_bytes(b"x" * 20000)
+
+    mock_storage = MagicMock()
+    mock_storage.get_recording_folder.return_value = tmp_path
+    mock_storage.find_active_or_recent_recording_file.return_value = healthy_file
+
+    watcher = Watcher(config_mgr=cfg, dbus_client=mock_dbus, queue_mgr=mock_queue, storage_mgr=mock_storage)
+
+    watcher.enforce_zero_byte_recording_cleanup()
+
+    # Should NOT cancel healthy recording
+    mock_dbus.cancel_recording.assert_not_called()
+    mock_queue.remove_recording.assert_not_called()
