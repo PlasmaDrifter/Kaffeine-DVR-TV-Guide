@@ -3,6 +3,7 @@ Tests for weak/no signal detection, automatic tuner release, and warning popup.
 """
 
 from datetime import datetime, timedelta
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from PyQt6.QtCore import QEvent, QPoint
@@ -385,4 +386,354 @@ def test_guide_grid_vertical_header_tooltip(qtbot, isolated_config):
             assert "WeakChan" in tip_text
             assert "Weak Signal / Carrier (No Lock)" in tip_text
             assert "35%" in tip_text
+
+
+def test_is_same_channel(isolated_config):
+    """
+    Test MainWindow._is_same_channel correctly identifies channel equality
+    across direct matches and channel_map aliases.
+    """
+    cfg = isolated_config
+    cfg.channel_map = {
+        "Fox": "010-1 KSAZ-HD",
+        "NBC": "012-1 KPNX-HD",
+    }
+    win = MainWindow(config_mgr=cfg)
+
+    # Direct equality
+    assert win._is_same_channel("Fox", "fox") is True
+    assert win._is_same_channel("010-1 KSAZ-HD", "010-1 KSAZ-HD") is True
+
+    # Guide name to tuned name
+    assert win._is_same_channel("Fox", "010-1 KSAZ-HD") is True
+    assert win._is_same_channel("010-1 KSAZ-HD", "Fox") is True
+
+    # Different channels
+    assert win._is_same_channel("Fox", "NBC") is False
+    assert win._is_same_channel("Fox", "012-1 KPNX-HD") is False
+    assert win._is_same_channel("CBS", "Fox") is False
+    assert win._is_same_channel("", "Fox") is False
+
+
+def test_start_timeshift_playback_active_recording_conflict_declined(qtbot, isolated_config):
+    """
+    Test that when user attempts to watch live TV on Channel B while Channel A is actively recording,
+    a confirmation dialog is shown. When declined (No), the active recording is preserved and tuning is aborted.
+    """
+    cfg = isolated_config
+    cfg.channel_map = {
+        "Fox": "010-1 KSAZ-HD",
+        "NBC": "012-1 KPNX-HD",
+    }
+    win = MainWindow(config_mgr=cfg)
+    qtbot.addWidget(win)
+
+    win.dbus_client = MagicMock()
+    win.queue_mgr = MagicMock()
+    win.status_bar.showMessage = MagicMock()
+
+    # Active recording in queue on Fox
+    win.queue_mgr.list_queue.return_value = [
+        {
+            "id": 100,
+            "title": "Evening News",
+            "channel": "010-1 KSAZ-HD",
+            "status": "RECORDING",
+            "is_timeshift": False,
+            "kaffeine_key": 77
+        }
+    ]
+    win.dbus_client.get_active_recordings.return_value = []
+
+    prog_nbc = {
+        "show_title": "NBC Special",
+        "title": "NBC Special",
+        "channel": "NBC",
+        "kaffeine_channel": "012-1 KPNX-HD",
+    }
+
+    with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.No) as mock_q:
+        win.start_timeshift_playback(prog_nbc)
+
+        # 1. Dialog was shown warning about Evening News on 010-1 KSAZ-HD
+        mock_q.assert_called_once()
+        args = mock_q.call_args[0]
+        assert "Tuner In Use" in args[1]
+        assert "Evening News" in args[2]
+        assert "010-1 KSAZ-HD" in args[2]
+
+        # 2. Because user declined, active recording was NOT cancelled
+        win.queue_mgr.remove_recording.assert_not_called()
+        win.dbus_client.cancel_recording.assert_not_called()
+
+        # 3. Status bar shows active recording preserved
+        win.status_bar.showMessage.assert_called_once()
+        msg = win.status_bar.showMessage.call_args[0][0]
+        assert "preserved" in msg.lower()
+
+
+def test_start_timeshift_playback_active_recording_conflict_accepted(qtbot, isolated_config):
+    """
+    Test that when user confirms (Yes) stopping the active recording to watch another channel,
+    the conflicting recording is cancelled via D-Bus, removed from queue, and tuning proceeds.
+    """
+    cfg = isolated_config
+    cfg.channel_map = {
+        "Fox": "010-1 KSAZ-HD",
+        "NBC": "012-1 KPNX-HD",
+    }
+    win = MainWindow(config_mgr=cfg)
+    qtbot.addWidget(win)
+
+    win.dbus_client = MagicMock()
+    win.queue_mgr = MagicMock()
+
+    win.queue_mgr.list_queue.return_value = [
+        {
+            "id": 105,
+            "title": "Conflicting Game",
+            "channel": "010-1 KSAZ-HD",
+            "status": "RECORDING",
+            "is_timeshift": False,
+            "kaffeine_key": 88
+        }
+    ]
+    win.dbus_client.get_active_recordings.return_value = []
+    win.queue_mgr.get_active_scheduled_map.return_value = {}
+
+    prog_nbc = {
+        "show_title": "NBC Special",
+        "title": "NBC Special",
+        "channel": "NBC",
+        "kaffeine_channel": "012-1 KPNX-HD",
+    }
+
+    with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes) as mock_q, \
+         patch.object(win, "_on_timeshift_buffer_ready"):
+        win.start_timeshift_playback(prog_nbc)
+
+        mock_q.assert_called_once()
+        # Active recording cancelled via D-Bus and removed from queue
+        win.queue_mgr.remove_recording.assert_any_call(105)
+        win.dbus_client.cancel_recording.assert_any_call(key=88, channel="010-1 KSAZ-HD", title="Conflicting Game")
+        if hasattr(win, "_timeshift_buffer_timer") and win._timeshift_buffer_timer:
+            win._timeshift_buffer_timer.stop()
+
+
+
+def test_start_timeshift_playback_same_channel_as_active_recording_no_prompt(qtbot, isolated_config, tmp_path):
+    """
+    Test that when watching the SAME channel that is actively recording, no confirmation prompt
+    is shown and the active recording file is played directly.
+    """
+    cfg = isolated_config
+    cfg.custom_recording_folder = str(tmp_path)
+    cfg.channel_map = {
+        "Fox": "010-1 KSAZ-HD",
+    }
+    win = MainWindow(config_mgr=cfg)
+    qtbot.addWidget(win)
+
+    win.dbus_client = MagicMock()
+    win.queue_mgr = MagicMock()
+
+    rec_fox = {
+        "id": 110,
+        "title": "Active Fox Show",
+        "channel": "010-1 KSAZ-HD",
+        "start_iso": "2026-10-16T13:00:00",
+        "status": "RECORDING",
+        "is_timeshift": False,
+        "kaffeine_key": 99
+    }
+    win.queue_mgr.list_queue.return_value = [rec_fox]
+    win.queue_mgr.get_active_scheduled_map.return_value = {
+        ("010-1 ksaz-hd", "2026-10-16T13:00"): rec_fox,
+        ("fox", "2026-10-16T13:00"): rec_fox,
+    }
+    win.dbus_client.get_active_recordings.return_value = []
+
+    # Active file exists on disk with sufficient data (> 64 KB)
+    rec_file = tmp_path / "ActiveFoxShow.m2t"
+    rec_file.write_bytes(b"x" * 100000)
+
+    prog_fox = {
+        "show_title": "Active Fox Show",
+        "title": "Active Fox Show",
+        "channel": "Fox",
+        "kaffeine_channel": "010-1 KSAZ-HD",
+        "start_iso": "2026-10-16T13:00:00",
+    }
+
+
+    with patch.object(QMessageBox, "question") as mock_q:
+        win.start_timeshift_playback(prog_fox)
+
+        # No confirmation question should be asked since it's the same channel
+        mock_q.assert_not_called()
+        win.dbus_client.play_file.assert_called_once()
+        win.dbus_client.cancel_recording.assert_not_called()
+
+
+def test_multi_tuner_config_and_effective_count(isolated_config):
+    """
+    Test auto-detection and manual overrides for hardware tuner count.
+    """
+    cfg = isolated_config
+    assert cfg.tuner_count == 0  # Default is auto-detect
+
+    # Mock /dev/dvb detection
+    with patch("pathlib.Path.exists", return_value=True), \
+         patch("pathlib.Path.glob", return_value=[Path("/dev/dvb/adapter0/frontend0"), Path("/dev/dvb/adapter1/frontend0")]):
+        assert cfg.get_detected_tuner_count() == 2
+        assert cfg.get_effective_tuner_count() == 2
+
+    # User overrides tuner count manually to 3
+    cfg.tuner_count = 3
+    assert cfg.get_effective_tuner_count() == 3
+
+    # Reset back to auto-detect (0)
+    cfg.tuner_count = 0
+    with patch("pathlib.Path.exists", return_value=False):
+        assert cfg.get_detected_tuner_count() == 1
+        assert cfg.get_effective_tuner_count() == 1
+
+
+def test_multi_tuner_watching_other_channel_does_not_prompt_when_tuner_idle(qtbot, isolated_config):
+    """
+    When the system has 2 tuners and 1 active recording is in progress on Fox,
+    tuning to NBC does NOT prompt or interrupt because a second tuner is available.
+    """
+    cfg = isolated_config
+    cfg.tuner_count = 2  # Dual tuner system
+    cfg.channel_map = {
+        "Fox": "010-1 KSAZ-HD",
+        "NBC": "012-1 KPNX-HD",
+    }
+    win = MainWindow(config_mgr=cfg)
+    qtbot.addWidget(win)
+
+    win.dbus_client = MagicMock()
+    win.queue_mgr = MagicMock()
+
+    # 1 recording active on Fox
+    win.queue_mgr.list_queue.return_value = [
+        {
+            "id": 120,
+            "title": "Fox Active Show",
+            "channel": "010-1 KSAZ-HD",
+            "status": "RECORDING",
+            "is_timeshift": False,
+            "kaffeine_key": 42
+        }
+    ]
+    win.dbus_client.get_active_recordings.return_value = []
+    win.queue_mgr.get_active_scheduled_map.return_value = {}
+
+    prog_nbc = {
+        "show_title": "NBC Nightly News",
+        "title": "NBC Nightly News",
+        "channel": "NBC",
+        "kaffeine_channel": "012-1 KPNX-HD",
+    }
+
+    with patch.object(QMessageBox, "question") as mock_q, \
+         patch.object(win, "_on_timeshift_buffer_ready"):
+        win.start_timeshift_playback(prog_nbc)
+
+        # Since an idle tuner is available, no question prompt is shown!
+        mock_q.assert_not_called()
+        # Recording on Fox is NOT cancelled
+        win.queue_mgr.remove_recording.assert_not_called()
+        win.dbus_client.cancel_recording.assert_not_called()
+        if hasattr(win, "_timeshift_buffer_timer") and win._timeshift_buffer_timer:
+            win._timeshift_buffer_timer.stop()
+
+
+
+def test_multi_tuner_prompts_when_all_tuners_are_busy(qtbot, isolated_config):
+    """
+    When the system has 2 tuners and 2 active recordings are in progress on Fox and CBS,
+    attempting to watch NBC prompts that all tuners are busy.
+    """
+    cfg = isolated_config
+    cfg.tuner_count = 2  # Dual tuner system
+    cfg.channel_map = {
+        "Fox": "010-1 KSAZ-HD",
+        "CBS": "005-1 KPHO-HD",
+        "NBC": "012-1 KPNX-HD",
+    }
+    win = MainWindow(config_mgr=cfg)
+    qtbot.addWidget(win)
+
+    win.dbus_client = MagicMock()
+    win.queue_mgr = MagicMock()
+
+    # 2 recordings active, occupying both tuners
+    win.queue_mgr.list_queue.return_value = [
+        {
+            "id": 121,
+            "title": "Fox Show",
+            "channel": "010-1 KSAZ-HD",
+            "status": "RECORDING",
+            "is_timeshift": False,
+            "kaffeine_key": 50
+        },
+        {
+            "id": 122,
+            "title": "CBS Show",
+            "channel": "005-1 KPHO-HD",
+            "status": "RECORDING",
+            "is_timeshift": False,
+            "kaffeine_key": 51
+        }
+    ]
+    win.dbus_client.get_active_recordings.return_value = []
+    win.queue_mgr.get_active_scheduled_map.return_value = {}
+
+    prog_nbc = {
+        "show_title": "NBC Show",
+        "title": "NBC Show",
+        "channel": "NBC",
+        "kaffeine_channel": "012-1 KPNX-HD",
+    }
+
+    with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.No) as mock_q:
+        win.start_timeshift_playback(prog_nbc)
+
+        # Dialog was shown indicating all tuners are busy
+        mock_q.assert_called_once()
+        args = mock_q.call_args[0]
+        assert "Tuner In Use" in args[1]
+        assert "All TV tuners (2)" in args[2]
+
+        # Declined, so no recordings cancelled
+        win.queue_mgr.remove_recording.assert_not_called()
+        win.dbus_client.cancel_recording.assert_not_called()
+
+
+def test_channel_signal_health_multi_tuner_idle(qtbot, isolated_config):
+    """
+    Test that ChannelSignalHealthDialog allows scanning without prompt when
+    system has 2 tuners and only 1 active recording.
+    """
+    cfg = isolated_config
+    cfg.tuner_count = 2  # Dual tuner
+    dialog = ChannelSignalHealthDialog(channels=[{"channel": "7.1 KGO"}], config_mgr=cfg)
+    qtbot.addWidget(dialog)
+
+    mock_client = MagicMock()
+    mock_client.is_running.return_value = True
+    mock_client.get_active_recordings.return_value = [
+        {"id": 1, "name": "Active Show", "channel": "7.1 KGO", "is_running": True}
+    ]
+
+    with patch("kaffeine_dvr.gui.KaffeineDbusClient", return_value=mock_client):
+        with patch.object(QMessageBox, "question") as mock_q:
+            res = dialog._check_tuner_available()
+            assert res is True
+            # With 1 recording and 2 tuners, an idle tuner is available so no prompt is shown
+            mock_q.assert_not_called()
+
+
 

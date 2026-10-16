@@ -536,6 +536,8 @@ class ConfigManager:
                         data["zero_byte_recording_timeout_secs"] = 8
                     if "delete_timeshift_on_exit" not in data:
                         data["delete_timeshift_on_exit"] = True
+                    if "tuner_count" not in data:
+                        data["tuner_count"] = 0
                     if "grid_visible_rows" not in data:
                         data["grid_visible_rows"] = 9
                     if "guide_detail_lines" not in data:
@@ -625,6 +627,7 @@ class ConfigManager:
             "timeshift_buffer_seconds": 2,
             "zero_byte_recording_timeout_secs": 8,
             "delete_timeshift_on_exit": True,
+            "tuner_count": 0,
             "grid_visible_rows": 9,
             "guide_detail_lines": 3,
             "guide_detail_collapsed": True,
@@ -690,6 +693,52 @@ class ConfigManager:
     def channel_map(self, val: Dict[str, str]):
         self.data["channel_map"] = val
         self.save()
+
+    def resolve_channel(self, channel_or_network: Optional[str]) -> str:
+        """
+        Resolves a channel name or guide network to the exact tuned Kaffeine channel name.
+        Performs exact match, case-insensitive match, and reverse alias lookup against channel_map.
+        If no mapping is found, returns the stripped original string.
+        """
+        if not channel_or_network:
+            return ""
+        raw = str(channel_or_network).strip()
+        cmap = self.channel_map
+        if not cmap:
+            return raw
+
+        # 1. Exact key match
+        if raw in cmap:
+            return cmap[raw]
+
+        # 2. Case-insensitive key match
+        raw_upper = raw.upper()
+        for k, v in cmap.items():
+            if k.strip().upper() == raw_upper:
+                return v
+
+        # 3. Exact value match (already a tuned channel name)
+        for k, v in cmap.items():
+            if v.strip() == raw:
+                return v
+
+        # 4. Case-insensitive value match
+        for k, v in cmap.items():
+            if v.strip().upper() == raw_upper:
+                return v
+
+        # 5. Fuzzy network alias matching (e.g., FOX -> Fox, THE CW -> CW)
+        for k, v in cmap.items():
+            k_upper = k.strip().upper()
+            if ("CW" in raw_upper and "CW" in k_upper) or (raw_upper in ("THE CW", "CW") and "CW" in k_upper):
+                return v
+            if raw_upper == "FOX" and "FOX" in k_upper:
+                return v
+            if raw_upper == "PBS" and "PBS" in k_upper:
+                return v
+
+        return raw
+
 
     @property
     def channel_order(self) -> List[str]:
@@ -1441,5 +1490,37 @@ class ConfigManager:
         salt = self.data.get("web_server_salt", "")
         cand_hash = hashlib.sha256((salt + password).encode("utf-8")).hexdigest()
         return hmac.compare_digest(stored_hash, cand_hash)
+
+    @property
+    def tuner_count(self) -> int:
+        """User-configured tuner count (0 = Auto-detect)."""
+        return int(self.data.get("tuner_count", 0))
+
+    @tuner_count.setter
+    def tuner_count(self, val: int):
+        self.data["tuner_count"] = max(0, int(val))
+        self.save()
+
+    def get_detected_tuner_count(self) -> int:
+        """Auto-detect the number of physical DVB frontend tuners on the system."""
+        try:
+            dvb_path = Path("/dev/dvb")
+            if dvb_path.exists():
+                frontends = list(dvb_path.glob("adapter*/frontend*"))
+                if frontends:
+                    return len(frontends)
+        except Exception:
+            pass
+        return 1
+
+    def get_effective_tuner_count(self) -> int:
+        """
+        Return user-configured tuner count if set (> 0),
+        otherwise the auto-detected physical tuner count (minimum 1).
+        """
+        configured = self.tuner_count
+        if configured > 0:
+            return configured
+        return max(1, self.get_detected_tuner_count())
 
 

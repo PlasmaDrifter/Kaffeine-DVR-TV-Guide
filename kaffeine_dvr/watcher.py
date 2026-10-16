@@ -393,7 +393,7 @@ class Watcher:
                         time.sleep(0.25)
                 elif cfg.launch_mode in ("taskbar", "tray") or cfg.launch_minimized:
                     self.dbus_client.minimize_kaffeine(mode=cfg.launch_mode)
-                kaff_channel = cfg.channel_map.get(channel, channel)
+                kaff_channel = cfg.resolve_channel(channel)
                 key = self.dbus_client.schedule_recording(title, kaff_channel, dispatch_start_iso, dispatch_dur_iso, 0)
                 if key and key > 0:
                     self.queue_mgr.mark_armed(rec_id, key)

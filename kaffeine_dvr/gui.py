@@ -1218,6 +1218,9 @@ class ChannelSignalHealthDialog(BaseFramelessDialog):
         if not ch_name:
             return
 
+        if not self._check_tuner_available():
+            return
+
         self._aim_channel = ch
         self._aim_peak_strength = 0.0
 
@@ -1355,13 +1358,15 @@ class ChannelSignalHealthDialog(BaseFramelessDialog):
                 # Double-check full schedule
                 entries = client.list_recordings()
                 active = [e for e in entries if e.get("is_running")]
-            if active:
+            total_tuners = self.config_mgr.get_effective_tuner_count() if self.config_mgr else 1
+            if len(active) >= total_tuners:
                 rec_names = ", ".join([f"'{e.get('name', 'Recording')}' on {e.get('channel', 'channel')}" for e in active])
+                tuner_label = f"All TV tuners ({total_tuners}) are" if total_tuners > 1 else "The TV tuner is"
                 reply = QMessageBox.question(
                     self,
                     "Tuner In Use",
-                    f"Kaffeine is currently busy with an active recording:\n{rec_names}\n\n"
-                    "Scanning channel signal health requires tuning to each channel frequency.\n\n"
+                    f"Kaffeine is currently busy with active recording(s):\n{rec_names}\n\n"
+                    f"{tuner_label} in use. Scanning channel signal health requires tuning to each channel frequency.\n\n"
                     "Would you like to stop these active recordings to proceed with the scan?",
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                     QMessageBox.StandardButton.No
@@ -7073,6 +7078,31 @@ class MainWindow(QMainWindow):
             self.delete_timeshift_check
         )
 
+        self.tuner_count_combo = ThemedComboBox()
+        det_tuners = self.config_mgr.get_detected_tuner_count()
+        self.tuner_count_combo.addItem(f"Auto-detect ({det_tuners} detected)", 0)
+        self.tuner_count_combo.addItem("1 Tuner", 1)
+        self.tuner_count_combo.addItem("2 Tuners", 2)
+        self.tuner_count_combo.addItem("3 Tuners", 3)
+        self.tuner_count_combo.addItem("4 Tuners", 4)
+        self.tuner_count_combo.addItem("8 Tuners", 8)
+        self.tuner_count_combo.setFixedWidth(200)
+
+        cur_tuners = getattr(self.config_mgr, "tuner_count", 0)
+        t_idx = self.tuner_count_combo.findData(cur_tuners)
+        if t_idx >= 0:
+            self.tuner_count_combo.setCurrentIndex(t_idx)
+
+        dvr_layout.addRow(
+            make_setting_label(
+                "Hardware TV Tuners:",
+                "Number of physical DVB/ATSC frontend tuners available.\n"
+                "• Auto-detect discovers all frontend devices at /dev/dvb.\n"
+                "• When 2 or more tuners are present, you can watch live TV while scheduled recordings run simultaneously on other channels without interruption."
+            ),
+            self.tuner_count_combo
+        )
+
         left_col.addWidget(dvr_group)
 
         # Window Dimensions & UI Scaling (Side-by-side boxes under DVR Scheduling)
@@ -7755,6 +7785,8 @@ class MainWindow(QMainWindow):
             self.custom_live_player_edit.textChanged.connect(self._auto_save_automation_settings)
         if hasattr(self, "timeshift_buffer_spin"):
             self.timeshift_buffer_spin.valueChanged.connect(self._auto_save_automation_settings)
+        if hasattr(self, "tuner_count_combo"):
+            self.tuner_count_combo.currentIndexChanged.connect(self._auto_save_automation_settings)
         if hasattr(self, "delete_timeshift_check"):
             self.delete_timeshift_check.stateChanged.connect(self._auto_save_automation_settings)
         self.notify_check.stateChanged.connect(self._auto_save_automation_settings)
@@ -8055,6 +8087,13 @@ class MainWindow(QMainWindow):
             self.delete_timeshift_check.blockSignals(True)
             self.delete_timeshift_check.setChecked(self.config_mgr.delete_timeshift_on_exit)
             self.delete_timeshift_check.blockSignals(False)
+
+        if hasattr(self, "tuner_count_combo"):
+            self.tuner_count_combo.blockSignals(True)
+            t_idx = self.tuner_count_combo.findData(getattr(self.config_mgr, "tuner_count", 0))
+            if t_idx >= 0:
+                self.tuner_count_combo.setCurrentIndex(t_idx)
+            self.tuner_count_combo.blockSignals(False)
 
         if hasattr(self, "custom_title_bar_check"):
             self.custom_title_bar_check.blockSignals(True)
@@ -9299,6 +9338,8 @@ class MainWindow(QMainWindow):
             self.config_mgr.zero_byte_recording_timeout_secs = self.zero_byte_timeout_spin.value()
         if hasattr(self, "delete_timeshift_check"):
             self.config_mgr.delete_timeshift_on_exit = self.delete_timeshift_check.isChecked()
+        if hasattr(self, "tuner_count_combo"):
+            self.config_mgr.tuner_count = self.tuner_count_combo.currentData()
         self.config_mgr.enable_desktop_notifications = self.notify_check.isChecked()
         if hasattr(self, "notify_persistent_check"):
             self.config_mgr.persistent_desktop_notifications = self.notify_persistent_check.isChecked()
@@ -13083,6 +13124,95 @@ class MainWindow(QMainWindow):
         self.status_bar.showMessage(f"Starting continuous stream on {ch} (Now: {current_show_title})...", 5000)
         self.start_timeshift_playback(continuous_prog)
 
+    def _is_same_channel(self, ch1: str, ch2: str) -> bool:
+        """Determines if two channel strings refer to the same channel, checking channel_map aliases."""
+        c1 = (ch1 or "").strip().lower()
+        c2 = (ch2 or "").strip().lower()
+        if not c1 or not c2:
+            return False
+        if c1 == c2:
+            return True
+        cmap = getattr(self.config_mgr, "channel_map", {}) or {}
+        if cmap.get(ch1, "").strip().lower() == c2:
+            return True
+        if cmap.get(ch2, "").strip().lower() == c1:
+            return True
+        for g_name, t_name in cmap.items():
+            g_low = g_name.strip().lower()
+            t_low = t_name.strip().lower()
+            if (c1 in (g_low, t_low)) and (c2 in (g_low, t_low)):
+                return True
+        return False
+
+    def _get_conflicting_active_recordings(self, target_channel: str) -> List[Dict[str, Any]]:
+        """
+        Returns a list of currently active scheduled recordings running on a DIFFERENT channel than target_channel.
+        Excludes live timeshift sessions.
+        """
+        conflicts = []
+        seen_keys = set()
+
+        # 1. Check queue manager for active recordings (status == RECORDING or active timeslot)
+        try:
+            active_queue = self.queue_mgr.list_queue(include_completed=False)
+            now = datetime.now()
+            for r in active_queue:
+                # Ignore live timeshift sessions
+                if r.get("is_timeshift"):
+                    continue
+                st = r.get("status")
+                is_active = (st == "RECORDING")
+                if not is_active and st == "DISPATCHED":
+                    try:
+                        s_dt = datetime.fromisoformat(r["start_iso"])
+                        d_parts = [int(p) for p in r.get("duration_iso", "01:00:00").split(":")]
+                        dur = timedelta(hours=d_parts[0], minutes=d_parts[1], seconds=d_parts[2])
+                        if s_dt <= now <= (s_dt + dur):
+                            is_active = True
+                    except Exception:
+                        pass
+
+                if is_active:
+                    rec_ch = r.get("channel", "")
+                    if not self._is_same_channel(rec_ch, target_channel):
+                        ident = (rec_ch.strip().lower(), (r.get("title") or "").strip().lower())
+                        if ident not in seen_keys:
+                            seen_keys.add(ident)
+                            conflicts.append(r)
+        except Exception as e:
+            print(f"Error checking queue for conflicting recordings: {e}")
+
+        # 2. Check live Kaffeine D-Bus schedule
+        try:
+            if hasattr(self, "dbus_client") and self.dbus_client and self.dbus_client.is_running():
+                dbus_active = self.dbus_client.get_active_recordings()
+                cur_ts = getattr(self, "_active_timeshift", None)
+                cur_ts_key = cur_ts.get("kaffeine_key") if cur_ts else None
+                cur_ts_ch = cur_ts.get("channel", "").strip().lower() if cur_ts else ""
+                cur_ts_is_sched = cur_ts.get("is_scheduled_recording", False) if cur_ts else False
+
+                for e in dbus_active:
+                    e_key = e.get("id")
+                    e_ch = e.get("channel", "")
+                    # If this D-Bus entry is our own non-scheduled timeshift session, ignore it
+                    if not cur_ts_is_sched and (e_key == cur_ts_key or (e_ch.strip().lower() == cur_ts_ch and cur_ts_ch)):
+                        continue
+                    if not self._is_same_channel(e_ch, target_channel):
+                        ident = (e_ch.strip().lower(), (e.get("name") or "").strip().lower())
+                        if ident not in seen_keys:
+                            seen_keys.add(ident)
+                            conflicts.append({
+                                "id": None,
+                                "kaffeine_key": e_key,
+                                "title": e.get("name", "Active Recording"),
+                                "channel": e_ch,
+                                "source": "dbus"
+                            })
+        except Exception as e:
+            print(f"Error checking D-Bus for conflicting recordings: {e}")
+
+        return conflicts
+
     def start_timeshift_playback(self, prog: Dict[str, Any]):
         """
         Timeshifts a live broadcast in the user's selected video player:
@@ -13095,6 +13225,73 @@ class MainWindow(QMainWindow):
 
         title = prog.get("show_title") or prog.get("title") or "Live Program"
         ch = prog.get("kaffeine_channel") or prog.get("channel", "")
+
+        # Multi-tuner capacity check:
+        # Each active recording on a different channel consumes 1 physical tuner.
+        # If total active conflicting recordings is less than total available tuners,
+        # an idle tuner is available to handle the new channel without conflict!
+        conflicts = self._get_conflicting_active_recordings(ch)
+        total_tuners = self.config_mgr.get_effective_tuner_count()
+        if len(conflicts) >= total_tuners:
+            if total_tuners > 1:
+                c_lines = "\n".join([f"  • '{c.get('title') or c.get('name')}' on channel {c.get('channel')}" for c in conflicts])
+                prompt_msg = (
+                    f"All TV tuners ({total_tuners}) are currently in use recording on other channels:\n\n"
+                    f"{c_lines}\n\n"
+                    f"Watching '{title}' on channel {ch} requires an available tuner, "
+                    f"which will stop and abort an active recording.\n\n"
+                    f"Do you want to stop the recording to watch {ch}?"
+                )
+            elif len(conflicts) == 1:
+                c = conflicts[0]
+                rec_name = c.get("title") or c.get("name") or "Scheduled Recording"
+                rec_ch = c.get("channel") or "another channel"
+                prompt_msg = (
+                    f"An active recording is currently in progress:\n\n"
+                    f"  • '{rec_name}' on channel {rec_ch}\n\n"
+                    f"Watching '{title}' on channel {ch} requires switching the TV tuner to another channel, "
+                    f"which will stop and abort the active recording on {rec_ch}.\n\n"
+                    f"Do you want to stop recording '{rec_name}' to watch {ch}?"
+                )
+            else:
+                c_lines = "\n".join([f"  • '{c.get('title') or c.get('name')}' on channel {c.get('channel')}" for c in conflicts])
+                prompt_msg = (
+                    f"Active recordings are currently in progress:\n\n"
+                    f"{c_lines}\n\n"
+                    f"Watching '{title}' on channel {ch} requires switching the TV tuner to another channel, "
+                    f"which will stop and abort these active recordings.\n\n"
+                    f"Do you want to stop the active recordings to watch {ch}?"
+                )
+
+            reply = QMessageBox.question(
+                self,
+                "Tuner In Use",
+                prompt_msg,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                rec_label = conflicts[0].get("channel") if len(conflicts) == 1 else "active channels"
+                self.status_bar.showMessage(f"Watch live cancelled. Active recording preserved on {rec_label}.", 5000)
+                return
+
+            # User explicitly confirmed stopping the conflicting recording(s)
+            for c in conflicts:
+                qid = c.get("id")
+                k_key = c.get("kaffeine_key")
+                c_ch = c.get("channel")
+                c_title = c.get("title") or c.get("name")
+                if qid:
+                    try:
+                        self.queue_mgr.remove_recording(int(qid))
+                    except Exception:
+                        pass
+                try:
+                    self.dbus_client.cancel_recording(key=k_key, channel=c_ch, title=c_title)
+                except Exception as e:
+                    print(f"Error cancelling conflicting recording on {c_ch}: {e}")
+            self.refresh_recordings()
+            self._refresh_guide_view(keep_scroll=True)
 
         # If switching from an existing timeshift channel, stop previous session first
         if getattr(self, "_active_timeshift", None):
@@ -13121,35 +13318,37 @@ class MainWindow(QMainWindow):
         else:
             rec_title = f"{show} - {ep}" if ep else show
 
-        # Check if file is already active on disk (search by title or rec_title)
-        active_file = (
-            self.storage_mgr.find_active_or_recent_recording_file(rec_title, max_age_seconds=7200)
-            or self.storage_mgr.find_active_or_recent_recording_file(title, max_age_seconds=7200)
-        )
-        if active_file and active_file.exists():
-            proc = self.dbus_client.play_file(
-                str(active_file),
-                player=self.config_mgr.live_tv_watch_mode,
-                custom_cmd=self.config_mgr.custom_live_tv_player_cmd,
-                standalone=True
+        # Check if file is already active on disk FOR THIS SHOW (only if already actively scheduled/recording)
+        if was_already_scheduled:
+            active_file = (
+                self.storage_mgr.find_active_or_recent_recording_file(rec_title, max_age_seconds=7200)
+                or self.storage_mgr.find_active_or_recent_recording_file(title, max_age_seconds=7200)
             )
-            pname = self.config_mgr.live_tv_watch_mode.upper()
-            self.status_bar.showMessage(f"Playing active recording '{title}' in {pname}.", 5000)
-            self._active_timeshift = {
-                "title": rec_title,
-                "channel": ch,
-                "queue_id": rec_info.get("id") if rec_info else None,
-                "kaffeine_key": rec_info.get("kaffeine_key") if rec_info else None,
-                "process": proc,
-                "file_path": str(active_file),
-                "is_scheduled_recording": was_already_scheduled
-            }
-            if proc and hasattr(self, "_timeshift_poll_timer"):
-                self._timeshift_poll_timer.start()
-            if hasattr(self, "guide_grid_vheader") and self.guide_grid_vheader:
-                self.guide_grid_vheader.viewport().update()
-            self._display_program_details(prog)
-            return
+            if active_file and active_file.exists():
+                proc = self.dbus_client.play_file(
+                    str(active_file),
+                    player=self.config_mgr.live_tv_watch_mode,
+                    custom_cmd=self.config_mgr.custom_live_tv_player_cmd,
+                    standalone=True
+                )
+                pname = self.config_mgr.live_tv_watch_mode.upper()
+                self.status_bar.showMessage(f"Playing active recording '{title}' in {pname}.", 5000)
+                self._active_timeshift = {
+                    "title": rec_title,
+                    "channel": ch,
+                    "queue_id": rec_info.get("id") if rec_info else None,
+                    "kaffeine_key": rec_info.get("kaffeine_key") if rec_info else None,
+                    "process": proc,
+                    "file_path": str(active_file),
+                    "is_scheduled_recording": was_already_scheduled
+                }
+                if proc and hasattr(self, "_timeshift_poll_timer"):
+                    self._timeshift_poll_timer.start()
+                if hasattr(self, "guide_grid_vheader") and self.guide_grid_vheader:
+                    self.guide_grid_vheader.viewport().update()
+                self._display_program_details(prog)
+                return
+
 
         # Ensure program is queued specifically for prog and recording is dispatched
         qid = None
@@ -13184,8 +13383,9 @@ class MainWindow(QMainWindow):
         self.status_bar.showMessage(f"Buffering live stream ({buf_secs}s) before opening in {pname}...", int((timeout_secs + 3) * 1000))
         start_time = time.time()
         initial_delay = min(int(buf_secs * 1000), 1000)
-        QTimer.singleShot(
-            max(initial_delay, 500),
+        self._timeshift_buffer_timer = QTimer(self)
+        self._timeshift_buffer_timer.setSingleShot(True)
+        self._timeshift_buffer_timer.timeout.connect(
             lambda: self._on_timeshift_buffer_ready(
                 prog,
                 start_time=start_time,
@@ -13196,6 +13396,7 @@ class MainWindow(QMainWindow):
                 rec_title=rec_title
             )
         )
+        self._timeshift_buffer_timer.start(max(initial_delay, 500))
 
     def _on_timeshift_buffer_ready(
         self,
@@ -13216,18 +13417,19 @@ class MainWindow(QMainWindow):
             or self.storage_mgr.find_active_or_recent_recording_file(title, max_age_seconds=600)
         )
         if not active_file or not active_file.exists():
-            # If title search had no hit, check if any recent file appeared in recording folder
+            # If title search had no hit, check if a newly created file appeared since start_time
             try:
                 rec_folder = self.storage_mgr.get_recording_folder()
                 if rec_folder and rec_folder.exists():
-                    now_ts = time.time()
                     newest_file = None
                     newest_mtime = 0
+                    # Only accept files created or modified after start_time (- 3s leeway)
+                    min_allowed_mtime = start_time - 3.0
                     for ext in StorageManager.VIDEO_EXTENSIONS:
                         for vf in rec_folder.glob(f"*{ext}"):
                             try:
                                 st = vf.stat()
-                                if (now_ts - st.st_mtime) < 120 and st.st_size > 16384:
+                                if st.st_mtime >= min_allowed_mtime and st.st_size > 16384:
                                     if st.st_mtime > newest_mtime:
                                         newest_mtime = st.st_mtime
                                         newest_file = vf
@@ -13237,6 +13439,7 @@ class MainWindow(QMainWindow):
                         active_file = newest_file
             except Exception:
                 pass
+
 
         elapsed = time.time() - start_time
 
@@ -13296,18 +13499,24 @@ class MainWindow(QMainWindow):
         if elapsed < timeout_secs:
             rem_secs = max(1, int(round(timeout_secs - elapsed)))
             self.status_bar.showMessage(f"Buffering stream on {ch}... ({rem_secs}s remaining)", 1000)
-            QTimer.singleShot(
-                500,
-                lambda: self._on_timeshift_buffer_ready(
-                    prog,
-                    start_time=start_time,
-                    timeout_secs=timeout_secs,
-                    buf_secs=buf_secs,
-                    was_already_scheduled=was_already_scheduled,
-                    queue_id=queue_id,
-                    rec_title=rec_title
+            if hasattr(self, "_timeshift_buffer_timer") and self._timeshift_buffer_timer:
+                self._timeshift_buffer_timer.stop()
+                try:
+                    self._timeshift_buffer_timer.timeout.disconnect()
+                except Exception:
+                    pass
+                self._timeshift_buffer_timer.timeout.connect(
+                    lambda: self._on_timeshift_buffer_ready(
+                        prog,
+                        start_time=start_time,
+                        timeout_secs=timeout_secs,
+                        buf_secs=buf_secs,
+                        was_already_scheduled=was_already_scheduled,
+                        queue_id=queue_id,
+                        rec_title=rec_title
+                    )
                 )
-            )
+                self._timeshift_buffer_timer.start(500)
         else:
             self._handle_timeshift_signal_failure(
                 prog,
@@ -13803,7 +14012,7 @@ class MainWindow(QMainWindow):
         cur_ts_ch = (self._active_timeshift.get("channel") or "").strip().lower() if has_active_ts else ""
         sel_ch = (channel or "").strip().lower()
         if has_active_ts and (cur_ts_ch == sel_ch or state == "live"):
-            _add_pill(f"Stop Timeshift ({self._active_timeshift.get('channel')})", "#475569", "#334155", "#1e293b", self.stop_timeshift, "guidePillStopTimeshift")
+            _add_pill(f"Stop Timeshift ({self._active_timeshift.get('channel')})", "#475569", "#334155", "#1e293b", lambda: self.stop_timeshift_session(user_initiated=True), "guidePillStopTimeshift")
 
         # 2. Record Program pill second
         active_map = self.queue_mgr.get_active_scheduled_map()

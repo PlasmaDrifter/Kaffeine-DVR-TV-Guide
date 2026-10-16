@@ -91,6 +91,15 @@ def get_pip_flags() -> list:
 
 
 EMBEDDED_RELEASE_NOTES: Dict[str, str] = {
+    "0.8.14": (
+        "## What's Changed in v0.8.14\n\n"
+        "• **Active Recording Conflict Protection**: Added protection to prevent active scheduled recordings from being stopped or deleted when attempting to watch another channel from the Guide. Prompts with a confirmation dialog before switching channels, and directly plays active recordings on the same channel without prompt or interruption.\n"
+        "• **Multi-Tuner Hardware Auto-Detection & Capacity Guard**: Automatically detects physical DVB/ATSC frontend tuners under `/dev/dvb` with configurable manual override in Settings > General. Systems with 2 or more tuners allow simultaneous live TV viewing and background recording across different channels without prompt or interruption, only prompting when all available hardware tuners are occupied.\n"
+        "• **Zero-Byte Dead Stream Watchdog & Fast Tuner Release**: Added automated stream monitoring in the background Watcher daemon that detects stalled or dead broadcast streams (0 bytes written after configurable timeout, default 8s down to 3s). Automatically cancels dead recordings in Kaffeine via D-Bus, cleans up 0-byte orphan files, and immediately releases the hardware tuner.\n"
+        "• **Signal Health Status Dots in Guide Grid**: Added real-time visual signal health indicator dots directly under channel names in the Guide Grid vertical headers (Yellow for weak carrier/no lock, Red for no carrier/no signal) with interactive status hover tooltips and bi-directional channel alias matching.\n"
+        "• **Cross-Distribution SSL/TLS Certificate Auto-Resolution**: Fixed `[SSL: CERTIFICATE_VERIFY_FAILED]` errors on Debian, Ubuntu, Kubuntu, Linux Mint, and HTPC systems when running the standalone AppImage. Automatically detects host system CA certificate bundles across all Linux distributions (`/etc/ssl/certs/ca-certificates.crt`, `/etc/pki/tls/certs`, etc.) and includes a bundled fallback certificate authority inside the AppImage.\n"
+        "• **Documentation & Walkthrough Clarifications**: Expanded README and in-app Quick Setup walkthrough with initial 1:1 raw hardware tuner import mappings vs. cleaned GUI display names and TV Passport affiliate configuration."
+    ),
     "0.8.13": (
         "## What's Changed in v0.8.13\n\n"
         "• **AppImage Standalone Runtime Fix**: Resolved `ImportError: attempted relative import with no known parent package` when launching packaged standalone AppImage bundles by moving web server and scanner imports to the top-level package namespace with robust fallback handlers.\n"

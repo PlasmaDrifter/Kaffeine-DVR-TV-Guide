@@ -340,12 +340,19 @@ class StorageManager:
                         score = 100
                     elif clean_fname and clean_fname in clean_query:
                         score = 80
-                    elif query_words and any(w in clean_fname for w in query_words):
-                        matches = sum(1 for w in query_words if w in clean_fname)
-                        score = int((matches / len(query_words)) * 60)
+                    else:
+                        stop_words = {"the", "and", "for", "with", "from", "show", "live", "news"}
+                        meaningful_words = [w for w in query_words if w not in stop_words and len(w) > 3]
+                        words_to_check = meaningful_words if meaningful_words else [w for w in query_words if len(w) > 3]
+                        if words_to_check:
+                            matches = sum(1 for w in words_to_check if w in clean_fname)
+                            ratio = matches / len(words_to_check)
+                            if ratio >= 0.5:
+                                score = int(ratio * 60)
 
                     if score > 0:
                         candidates.append((score, stat.st_mtime, item))
+
                 except Exception:
                     continue
         except Exception as e:

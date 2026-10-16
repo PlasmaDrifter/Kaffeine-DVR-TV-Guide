@@ -63,12 +63,53 @@ DESK
 
 cp AppDir/kaffeine-dvr.desktop AppDir/usr/share/applications/kaffeine-dvr.desktop
 
+# Bundle CA certificate fallback directly in AppDir
+if [ -f "assets/cacert.pem" ]; then
+    cp assets/cacert.pem AppDir/usr/share/kaffeine-dvr/cacert.pem
+    cp assets/cacert.pem AppDir/usr/bin/cacert.pem
+    [ -d AppDir/usr/bin/_internal ] && cp assets/cacert.pem AppDir/usr/bin/_internal/cacert.pem
+fi
+
 # AppRun launcher
 cat << 'APPRUN' > AppDir/AppRun
 #!/bin/bash
 HERE="$(dirname "$(readlink -f "${0}")")"
 export PATH="${HERE}/usr/bin:${PATH}"
 export LD_LIBRARY_PATH="${HERE}/usr/bin/_internal:${HERE}/usr/lib:${LD_LIBRARY_PATH}"
+
+# Ensure SSL CA certificates are found across all Linux distributions (Ubuntu, Debian, Fedora, Arch, etc.)
+if [ -z "$SSL_CERT_FILE" ] || [ ! -f "$SSL_CERT_FILE" ]; then
+    for cert_path in \
+        /etc/ssl/certs/ca-certificates.crt \
+        /etc/pki/tls/certs/ca-bundle.crt \
+        /etc/ssl/ca-bundle.pem \
+        /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem \
+        /etc/ca-certificates/extracted/tls-ca-bundle.pem \
+        /etc/ssl/cert.pem \
+        "${HERE}/usr/share/kaffeine-dvr/cacert.pem" \
+        "${HERE}/usr/bin/cacert.pem" \
+        "${HERE}/usr/bin/assets/cacert.pem"
+    do
+        if [ -f "$cert_path" ]; then
+            export SSL_CERT_FILE="$cert_path"
+            break
+        fi
+    done
+fi
+
+if [ -z "$SSL_CERT_DIR" ] || [ ! -d "$SSL_CERT_DIR" ]; then
+    for cert_dir in \
+        /etc/ssl/certs \
+        /etc/pki/tls/certs \
+        /system/etc/security/cacerts
+    do
+        if [ -d "$cert_dir" ]; then
+            export SSL_CERT_DIR="$cert_dir"
+            break
+        fi
+    done
+fi
+
 exec "${HERE}/usr/bin/kaffeine-dvr" "$@"
 APPRUN
 chmod +x AppDir/AppRun
