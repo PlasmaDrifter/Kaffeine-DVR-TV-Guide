@@ -1016,7 +1016,7 @@ def test_kaffeine_launch_mode_label(qtbot, isolated_config):
 
     # Check that open_kaffeine_setup_btn exists
     assert hasattr(win, "open_kaffeine_setup_btn")
-    assert win.open_kaffeine_setup_btn.text() == "Open Kaffeine for Setup (Visible)"
+    assert win.open_kaffeine_setup_btn.text() == "Open Kaffeine"
 
     # Verify FirstRunWelcomeDialog has launch_mode_combo
     from kaffeine_dvr.gui import FirstRunWelcomeDialog

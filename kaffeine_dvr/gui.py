@@ -6956,7 +6956,7 @@ class MainWindow(QMainWindow):
         launch_mode_lay.setSpacing(10)
         launch_mode_lay.addWidget(self.launch_mode_combo)
 
-        self.open_kaffeine_setup_btn = QPushButton("Open Kaffeine for Setup (Visible)")
+        self.open_kaffeine_setup_btn = QPushButton("Open Kaffeine")
         self.open_kaffeine_setup_btn.setObjectName("secondaryActionBtn")
         self.open_kaffeine_setup_btn.setToolTip(
             "Open or un-minimize Kaffeine in a normal desktop window to scan channels or adjust settings without changing your saved tray preference."
