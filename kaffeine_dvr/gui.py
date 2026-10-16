@@ -6350,142 +6350,44 @@ class MainWindow(QMainWindow):
 
         left_col.addWidget(dvr_group)
 
-        # Storage & Auto-Cleanup Card (Moved under DVR Scheduling)
-        storage_box = QGroupBox("Storage && Video Retention")
-        storage_layout = QVBoxLayout(storage_box)
-        storage_layout.setContentsMargins(15, 15, 15, 15)
-        storage_layout.setSpacing(12)
+        # Application Window Dimensions (Moved under DVR Scheduling)
+        win_group = QGroupBox("Application Window Dimensions")
+        win_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+        win_layout = QVBoxLayout(win_group)
+        win_layout.setContentsMargins(15, 15, 15, 15)
+        win_layout.setSpacing(10)
 
-        self.storage_status_lbl = QLabel("Checking storage space...")
-        self.storage_status_lbl.setStyleSheet("font-weight: bold; font-size: 13px; color: #55a84c;")
-        storage_layout.addWidget(self.storage_status_lbl)
+        self.win_size_lbl = QLabel(self._get_window_size_label_text())
+        self.win_size_lbl.setStyleSheet("color: #a0b2c6; font-size: 13px; font-weight: 500;")
+        win_layout.addWidget(self.win_size_lbl)
 
-        storage_form = QFormLayout()
-        storage_form.setSpacing(10)
+        win_size_btn_row = QHBoxLayout()
+        win_size_btn_row.setContentsMargins(0, 0, 0, 0)
+        win_size_btn_row.setSpacing(10)
 
-        self.cleanup_enable_check = QCheckBox("Enable Automatic Video Cleanup")
-        self.cleanup_enable_check.setChecked(self.config_mgr.auto_cleanup_enabled)
-        self.cleanup_enable_check.stateChanged.connect(self._auto_save_automation_settings)
-        storage_form.addRow(
-            make_setting_label("Auto-Cleanup:", "Automatically purges unprotected videos matching age or disk thresholds."),
-            self.cleanup_enable_check
-        )
+        self.save_win_size_btn = QPushButton("Save Size")
+        self.save_win_size_btn.setObjectName("primaryActionBtn")
+        self.save_win_size_btn.clicked.connect(self.save_current_window_size)
+        win_size_btn_row.addWidget(self.save_win_size_btn)
 
-        self.retention_days_spin = NumberStepper()
-        self.retention_days_spin.setRange(0, 365)
-        self.retention_days_spin.setValue(self.config_mgr.retention_days)
-        self.retention_days_spin.setSuffix(" days")
-        self.retention_days_spin.setFixedWidth(160)
-        self.retention_days_spin.valueChanged.connect(self._auto_save_automation_settings)
-        storage_form.addRow(
-            make_setting_label("Retention Window:", "Delete recordings older than this age. Set to 0 to disable age-based pruning."),
-            self.retention_days_spin
-        )
+        self.restore_win_size_btn = QPushButton("Restore Size")
+        self.restore_win_size_btn.clicked.connect(self.restore_saved_window_size)
+        win_size_btn_row.addWidget(self.restore_win_size_btn)
 
-        self.min_free_spin = NumberStepper()
-        self.min_free_spin.setRange(0, 1000)
-        self.min_free_spin.setSingleStep(5)
-        self.min_free_spin.setValue(self.config_mgr.min_free_disk_gb)
-        self.min_free_spin.setSuffix(" GB")
-        self.min_free_spin.setFixedWidth(160)
-        self.min_free_spin.valueChanged.connect(self._auto_save_automation_settings)
-        storage_form.addRow(
-            make_setting_label("Min Free Space:", "If free disk space drops below this limit, oldest unprotected recordings are purged first."),
-            self.min_free_spin
-        )
+        self.reset_win_size_btn = QPushButton("Reset Default")
+        self.reset_win_size_btn.clicked.connect(self.reset_window_size_to_default)
+        win_size_btn_row.addWidget(self.reset_win_size_btn)
+        win_size_btn_row.addStretch()
+        win_layout.addLayout(win_size_btn_row)
 
-        detected_folder = str(self.storage_mgr.get_recording_folder())
-        folder_row = QHBoxLayout()
-        folder_row.setContentsMargins(0, 0, 0, 0)
-        folder_row.setSpacing(8)
-        self.custom_folder_input = QLineEdit()
-        self.custom_folder_input.setText(self.config_mgr.custom_recording_folder)
-        self.custom_folder_input.setPlaceholderText(f"Auto-detected: {detected_folder}")
-        self.custom_folder_input.textChanged.connect(self._auto_save_automation_settings)
-        folder_row.addWidget(self.custom_folder_input)
-        self.browse_folder_btn = QPushButton("Browse...")
-        self.browse_folder_btn.clicked.connect(self.browse_custom_recording_folder)
-        folder_row.addWidget(self.browse_folder_btn)
-        storage_form.addRow(
-            make_setting_label("Recording Folder:", "Folder where Kaffeine saves .m2t recordings. Auto-detected from kaffeinerc or overridden here."),
-            folder_row
-        )
+        self.custom_title_bar_check = QCheckBox("Use Modern Frameless Title Bar (Custom drag, minimize && close)")
+        self.custom_title_bar_check.setStyleSheet("color: #e2e8f0; font-size: 13px; font-weight: 500; margin-top: 4px;")
+        self.custom_title_bar_check.setChecked(getattr(self.config_mgr, "use_custom_title_bar", True))
+        self.custom_title_bar_check.toggled.connect(self._on_custom_title_bar_toggled)
+        win_layout.addWidget(self.custom_title_bar_check)
 
-        storage_layout.addLayout(storage_form)
-
-        storage_btn_row = QHBoxLayout()
-        storage_btn_row.setSpacing(10)
-        self.run_cleanup_btn = QPushButton("Run Retention Cleanup Now")
-        self.run_cleanup_btn.setStyleSheet("color: #ff5252; font-weight: bold;")
-        self.run_cleanup_btn.clicked.connect(self.run_manual_cleanup)
-        storage_btn_row.addWidget(self.run_cleanup_btn)
-
-        self.refresh_storage_btn = QPushButton("Refresh Disk Usage")
-        self.refresh_storage_btn.clicked.connect(self.update_storage_status_ui)
-        storage_btn_row.addWidget(self.refresh_storage_btn)
-        storage_btn_row.addStretch()
-        storage_layout.addLayout(storage_btn_row)
-
-        left_col.addWidget(storage_box)
-
-        # Web Companion & Remote Tailscale Access Card
-        web_box = QGroupBox("Remote Web Access (Tailscale / LAN)")
-        web_layout = QVBoxLayout(web_box)
-        web_layout.setContentsMargins(15, 15, 15, 15)
-        web_layout.setSpacing(10)
-
-        web_form = QFormLayout()
-        web_form.setSpacing(10)
-
-        self.web_enable_check = QCheckBox("Enable Local / Tailscale Web Companion")
-        self.web_enable_check.setChecked(self.config_mgr.web_server_enabled)
-        web_form.addRow(
-            make_setting_label("Web Access:", "Run a secure web companion server to browse the TV guide, schedule shows, and stream videos from your phone, tablet, or remote PC over Tailscale/LAN."),
-            self.web_enable_check
-        )
-
-        web_port_row = QHBoxLayout()
-        web_port_row.setContentsMargins(0, 0, 0, 0)
-        self.web_port_spin = NumberStepper()
-        self.web_port_spin.setRange(1024, 65535)
-        self.web_port_spin.setValue(self.config_mgr.web_server_port)
-        self.web_port_spin.setFixedWidth(160)
-        web_port_row.addWidget(self.web_port_spin)
-        web_port_row.addStretch()
-        web_form.addRow(
-            make_setting_label("Port Number:", "TCP port for the web interface (default: 8088)."),
-            web_port_row
-        )
-
-        web_pass_row = QHBoxLayout()
-        web_pass_row.setContentsMargins(0, 0, 0, 0)
-        self.web_pass_edit = QLineEdit()
-        self.web_pass_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        self.web_pass_edit.setPlaceholderText("Set or change access password" if not self.config_mgr.has_web_password else "•••••••• (Password protected)")
-        self.web_pass_edit.setFixedWidth(200)
-        web_pass_row.addWidget(self.web_pass_edit)
-
-        self.set_web_pass_btn = QPushButton("Save Password")
-        self.set_web_pass_btn.clicked.connect(self._save_web_companion_password)
-        web_pass_row.addWidget(self.set_web_pass_btn)
-        web_pass_row.addStretch()
-        web_form.addRow(
-            make_setting_label("Access Password:", "Password required to access the web companion. Strongly recommended for Tailscale and network access."),
-            web_pass_row
-        )
-
-        web_layout.addLayout(web_form)
-
-        self.web_status_lbl = QLabel()
-        self._update_web_status_label()
-        web_layout.addWidget(self.web_status_lbl)
-
-        self.web_enable_check.toggled.connect(self._on_web_enable_toggled)
-        self.web_port_spin.valueChanged.connect(self._auto_save_automation_settings)
-
-        left_col.addWidget(web_box)
-
-        left_col.addStretch()
+        left_col.addWidget(win_group)
+        left_col.addStretch(1)
         two_col_layout.addLayout(left_col, 40)
 
         # ------------------ RIGHT COLUMN: Grid Guide & Themes ------------------
@@ -6924,43 +6826,147 @@ class MainWindow(QMainWindow):
 
         right_col.addWidget(guide_theme_box)
 
-        # Application Window Dimensions (Under Themes & Styling)
-        win_group = QGroupBox("Application Window Dimensions")
-        win_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
-        win_layout = QVBoxLayout(win_group)
-        win_layout.setContentsMargins(15, 15, 15, 15)
-        win_layout.setSpacing(10)
+        # ------------------ Storage & Web Access Row (Side-by-side below Themes & Styling) ------------------
+        # Storage & Auto-Cleanup Card
+        storage_box = QGroupBox("Storage && Video Retention")
+        storage_box.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+        storage_layout = QVBoxLayout(storage_box)
+        storage_layout.setContentsMargins(15, 15, 15, 15)
+        storage_layout.setSpacing(12)
 
-        self.win_size_lbl = QLabel(self._get_window_size_label_text())
-        self.win_size_lbl.setStyleSheet("color: #a0b2c6; font-size: 13px; font-weight: 500;")
-        win_layout.addWidget(self.win_size_lbl)
+        self.storage_status_lbl = QLabel("Checking storage space...")
+        self.storage_status_lbl.setStyleSheet("font-weight: bold; font-size: 13px; color: #55a84c;")
+        storage_layout.addWidget(self.storage_status_lbl)
 
-        win_size_btn_row = QHBoxLayout()
-        win_size_btn_row.setContentsMargins(0, 0, 0, 0)
-        win_size_btn_row.setSpacing(10)
+        storage_form = QFormLayout()
+        storage_form.setSpacing(10)
 
-        self.save_win_size_btn = QPushButton("Save Size")
-        self.save_win_size_btn.setObjectName("primaryActionBtn")
-        self.save_win_size_btn.clicked.connect(self.save_current_window_size)
-        win_size_btn_row.addWidget(self.save_win_size_btn)
+        self.cleanup_enable_check = QCheckBox("Enable Automatic Video Cleanup")
+        self.cleanup_enable_check.setChecked(self.config_mgr.auto_cleanup_enabled)
+        self.cleanup_enable_check.stateChanged.connect(self._auto_save_automation_settings)
+        storage_form.addRow(
+            make_setting_label("Auto-Cleanup:", "Automatically purges unprotected videos matching age or disk thresholds."),
+            self.cleanup_enable_check
+        )
 
-        self.restore_win_size_btn = QPushButton("Restore Size")
-        self.restore_win_size_btn.clicked.connect(self.restore_saved_window_size)
-        win_size_btn_row.addWidget(self.restore_win_size_btn)
+        self.retention_days_spin = NumberStepper()
+        self.retention_days_spin.setRange(0, 365)
+        self.retention_days_spin.setValue(self.config_mgr.retention_days)
+        self.retention_days_spin.setSuffix(" days")
+        self.retention_days_spin.setFixedWidth(160)
+        self.retention_days_spin.valueChanged.connect(self._auto_save_automation_settings)
+        storage_form.addRow(
+            make_setting_label("Retention Window:", "Delete recordings older than this age. Set to 0 to disable age-based pruning."),
+            self.retention_days_spin
+        )
 
-        self.reset_win_size_btn = QPushButton("Reset Default")
-        self.reset_win_size_btn.clicked.connect(self.reset_window_size_to_default)
-        win_size_btn_row.addWidget(self.reset_win_size_btn)
-        win_size_btn_row.addStretch()
-        win_layout.addLayout(win_size_btn_row)
+        self.min_free_spin = NumberStepper()
+        self.min_free_spin.setRange(0, 1000)
+        self.min_free_spin.setSingleStep(5)
+        self.min_free_spin.setValue(self.config_mgr.min_free_disk_gb)
+        self.min_free_spin.setSuffix(" GB")
+        self.min_free_spin.setFixedWidth(160)
+        self.min_free_spin.valueChanged.connect(self._auto_save_automation_settings)
+        storage_form.addRow(
+            make_setting_label("Min Free Space:", "If free disk space drops below this limit, oldest unprotected recordings are purged first."),
+            self.min_free_spin
+        )
 
-        self.custom_title_bar_check = QCheckBox("Use Modern Frameless Title Bar (Custom drag, minimize && close)")
-        self.custom_title_bar_check.setStyleSheet("color: #e2e8f0; font-size: 13px; font-weight: 500; margin-top: 4px;")
-        self.custom_title_bar_check.setChecked(getattr(self.config_mgr, "use_custom_title_bar", True))
-        self.custom_title_bar_check.toggled.connect(self._on_custom_title_bar_toggled)
-        win_layout.addWidget(self.custom_title_bar_check)
+        detected_folder = str(self.storage_mgr.get_recording_folder())
+        folder_row = QHBoxLayout()
+        folder_row.setContentsMargins(0, 0, 0, 0)
+        folder_row.setSpacing(8)
+        self.custom_folder_input = QLineEdit()
+        self.custom_folder_input.setText(self.config_mgr.custom_recording_folder)
+        self.custom_folder_input.setPlaceholderText(f"Auto-detected: {detected_folder}")
+        self.custom_folder_input.textChanged.connect(self._auto_save_automation_settings)
+        folder_row.addWidget(self.custom_folder_input)
+        self.browse_folder_btn = QPushButton("Browse...")
+        self.browse_folder_btn.clicked.connect(self.browse_custom_recording_folder)
+        folder_row.addWidget(self.browse_folder_btn)
+        storage_form.addRow(
+            make_setting_label("Recording Folder:", "Folder where Kaffeine saves .m2t recordings. Auto-detected from kaffeinerc or overridden here."),
+            folder_row
+        )
 
-        right_col.addWidget(win_group)
+        storage_layout.addLayout(storage_form)
+
+        storage_btn_row = QHBoxLayout()
+        storage_btn_row.setSpacing(8)
+        self.run_cleanup_btn = QPushButton("Run Retention Cleanup Now")
+        self.run_cleanup_btn.setStyleSheet("color: #ff5252; font-weight: bold;")
+        self.run_cleanup_btn.clicked.connect(self.run_manual_cleanup)
+        storage_btn_row.addWidget(self.run_cleanup_btn)
+
+        self.refresh_storage_btn = QPushButton("Refresh Disk Usage")
+        self.refresh_storage_btn.clicked.connect(self.update_storage_status_ui)
+        storage_btn_row.addWidget(self.refresh_storage_btn)
+        storage_btn_row.addStretch()
+        storage_layout.addLayout(storage_btn_row)
+
+        # Web Companion & Remote Tailscale Access Card
+        web_box = QGroupBox("Remote Web Access (Tailscale / LAN)")
+        web_box.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+        web_layout = QVBoxLayout(web_box)
+        web_layout.setContentsMargins(15, 15, 15, 15)
+        web_layout.setSpacing(10)
+
+        web_form = QFormLayout()
+        web_form.setSpacing(10)
+
+        self.web_enable_check = QCheckBox("Enable Local / Tailscale Web Companion")
+        self.web_enable_check.setChecked(self.config_mgr.web_server_enabled)
+        web_form.addRow(
+            make_setting_label("Web Access:", "Run a secure web companion server to browse the TV guide, schedule shows, and stream videos from your phone, tablet, or remote PC over Tailscale/LAN."),
+            self.web_enable_check
+        )
+
+        web_port_row = QHBoxLayout()
+        web_port_row.setContentsMargins(0, 0, 0, 0)
+        self.web_port_spin = NumberStepper()
+        self.web_port_spin.setRange(1024, 65535)
+        self.web_port_spin.setValue(self.config_mgr.web_server_port)
+        self.web_port_spin.setFixedWidth(160)
+        web_port_row.addWidget(self.web_port_spin)
+        web_port_row.addStretch()
+        web_form.addRow(
+            make_setting_label("Port Number:", "TCP port for the web interface (default: 8088)."),
+            web_port_row
+        )
+
+        web_pass_row = QHBoxLayout()
+        web_pass_row.setContentsMargins(0, 0, 0, 0)
+        self.web_pass_edit = QLineEdit()
+        self.web_pass_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.web_pass_edit.setPlaceholderText("Set or change access password" if not self.config_mgr.has_web_password else "•••••••• (Password protected)")
+        self.web_pass_edit.setFixedWidth(180)
+        web_pass_row.addWidget(self.web_pass_edit)
+
+        self.set_web_pass_btn = QPushButton("Save Password")
+        self.set_web_pass_btn.clicked.connect(self._save_web_companion_password)
+        web_pass_row.addWidget(self.set_web_pass_btn)
+        web_pass_row.addStretch()
+        web_form.addRow(
+            make_setting_label("Access Password:", "Password required to access the web companion. Strongly recommended for Tailscale and network access."),
+            web_pass_row
+        )
+
+        web_layout.addLayout(web_form)
+
+        self.web_status_lbl = QLabel()
+        self._update_web_status_label()
+        web_layout.addWidget(self.web_status_lbl)
+
+        self.web_enable_check.toggled.connect(self._on_web_enable_toggled)
+        self.web_port_spin.valueChanged.connect(self._auto_save_automation_settings)
+
+        # Place Storage & Web Access side-by-side in right column
+        storage_web_row = QHBoxLayout()
+        storage_web_row.setSpacing(15)
+        storage_web_row.addWidget(storage_box, 1)
+        storage_web_row.addWidget(web_box, 1)
+
+        right_col.addLayout(storage_web_row)
         right_col.addStretch(1)
         two_col_layout.addLayout(right_col, 60)
 
