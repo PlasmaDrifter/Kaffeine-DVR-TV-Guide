@@ -2349,9 +2349,8 @@ def get_theme_chip_fixed_width(font: Optional[QFont] = None) -> int:
     Calculate a set uniform width for theme pills based on the largest theme entry
     across Application Themes and Guide Themes, padded by a few characters.
     """
-    names = [t["name"] for t in APP_THEMES.values()]
-    names += [p["name"] for p in THEME_PRESETS.values()]
-    names.append("Custom (save up to 3)")
+    names = [t["name"].split(" (")[0] for t in APP_THEMES.values()]
+    names += [p["name"].split(" (")[0] for p in THEME_PRESETS.values()]
     longest_name = max(names, key=len)
 
     if font is not None:
@@ -2383,7 +2382,7 @@ class ThemeChip(QPushButton):
         super().__init__(parent)
         self.key = key
         self.display_name = display_name
-        self.short_name = display_name
+        self.short_name = display_name if key == "custom" else display_name.split(" (")[0]
         self.dot_color = dot_color
         self._is_selected = False
 
@@ -6772,6 +6771,7 @@ class MainWindow(QMainWindow):
         left_grid_wrap.addStretch()
         left_guide_layout.addLayout(left_grid_wrap)
         guide_themes_row.addLayout(left_guide_layout, 0)
+        guide_themes_row.addStretch(1)
 
         # Middle: Custom Themes (next to the grid guide themes)
         right_custom_layout = QVBoxLayout()
@@ -6830,6 +6830,7 @@ class MainWindow(QMainWindow):
         right_custom_layout.addLayout(right_grid_wrap)
         right_custom_layout.addStretch()
         guide_themes_row.addLayout(right_custom_layout, 0)
+        guide_themes_row.addStretch(1)
 
         # Right: Application Theme (moved from separate box into the red square area)
         app_theme_layout = QVBoxLayout()
@@ -6860,7 +6861,6 @@ class MainWindow(QMainWindow):
         app_grid_wrap.addStretch()
         app_theme_layout.addLayout(app_grid_wrap)
         guide_themes_row.addLayout(app_theme_layout, 0)
-        guide_themes_row.addStretch(1)
 
         self._populate_theme_preset_combo()
 
