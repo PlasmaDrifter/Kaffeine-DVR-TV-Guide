@@ -1866,7 +1866,7 @@ class CollapsibleHeaderButton(QToolButton):
             font = QFont(self.font())
             font.setItalic(True)
             font.setBold(False)
-            font.setPointSize(10)
+            font.setPointSize(max(8, self.font().pointSize() - 2))
             painter.setFont(font)
 
             fm = self.fontMetrics()
@@ -1897,7 +1897,6 @@ class CollapsibleSection(QWidget):
             "  background-color: #1e2333; "
             "  color: #d3dae3; "
             "  font-weight: bold; "
-            "  font-size: 12px; "
             "  padding: 8px 12px; "
             "  text-align: left; "
             "} "
@@ -5549,7 +5548,7 @@ class MainWindow(QMainWindow):
         monitor_desc = QLabel(
             "Live monitoring of configured TV guide backends. Check status codes, latency, and program contributions."
         )
-        monitor_desc.setStyleSheet("color: #6c757d; font-size: 11px;")
+        monitor_desc.setStyleSheet("color: #6c757d;")
         health_layout.addWidget(monitor_desc)
 
         self.health_table = QTableWidget()
@@ -5590,7 +5589,7 @@ class MainWindow(QMainWindow):
         btn_row.addWidget(self.sync_guide_btn)
 
         self.guide_status_lbl = QLabel("Guide: Checking...")
-        self.guide_status_lbl.setStyleSheet("font-size: 12px; color: #a4b0c2; font-weight: 500; padding-left: 6px;")
+        self.guide_status_lbl.setStyleSheet("color: #a4b0c2; font-weight: 500; padding-left: 6px;")
         btn_row.addWidget(self.guide_status_lbl)
 
         self.progress_bar = QProgressBar()
@@ -5602,7 +5601,7 @@ class MainWindow(QMainWindow):
         btn_row.addWidget(self.progress_bar)
 
         self.sync_progress_lbl = QLabel("")
-        self.sync_progress_lbl.setStyleSheet("font-size: 12px; color: #52b788; font-weight: 500; padding-left: 6px;")
+        self.sync_progress_lbl.setStyleSheet("color: #52b788; font-weight: 500; padding-left: 6px;")
         self.sync_progress_lbl.setVisible(False)
         btn_row.addWidget(self.sync_progress_lbl)
 
@@ -5623,7 +5622,6 @@ class MainWindow(QMainWindow):
             "  border: 1px solid #d4882c; "
             "  border-radius: 4px; "
             "  padding: 4px 10px; "
-            "  font-size: 11px; "
             "  font-weight: bold; "
             "}"
         )
@@ -5659,7 +5657,7 @@ class MainWindow(QMainWindow):
         pass_instructions.setWordWrap(True)
         pass_instructions.setOpenExternalLinks(True)
         pass_instructions.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
-        pass_instructions.setStyleSheet("color: #cdd6e2; font-size: 13px; line-height: 1.5;")
+        pass_instructions.setStyleSheet("color: #cdd6e2; line-height: 1.5;")
         left_col_layout.addWidget(pass_instructions)
 
         self.passport_notice = QLabel()
@@ -5679,7 +5677,7 @@ class MainWindow(QMainWindow):
         right_col_layout.setSpacing(8)
 
         mapping_hdr = QLabel("<b>Station ID Setup (Guide Name = Station ID):</b>")
-        mapping_hdr.setStyleSheet("color: #9cb0c6; font-size: 12px; font-weight: bold;")
+        mapping_hdr.setStyleSheet("color: #9cb0c6; font-weight: bold;")
         right_col_layout.addWidget(mapping_hdr)
 
         self.passport_stations_text = QTextEdit()
@@ -5707,7 +5705,7 @@ class MainWindow(QMainWindow):
         xml_content = QWidget()
         xml_layout = QFormLayout(xml_content)
         xml_desc = QLabel("Supports local XMLTV files (e.g. from zap2xml or WebGrab+) or remote HTTP/HTTPS XMLTV URLs.")
-        xml_desc.setStyleSheet("color: #6c757d; font-size: 11px;")
+        xml_desc.setStyleSheet("color: #6c757d;")
         xml_layout.addRow(xml_desc)
 
         file_row = QHBoxLayout()
@@ -5743,7 +5741,7 @@ class MainWindow(QMainWindow):
         sd_content = QWidget()
         sd_layout = QFormLayout(sd_content)
         sd_desc = QLabel("Official non-profit EPG service (~$35/year) providing direct Gracenote listings with high reliability.")
-        sd_desc.setStyleSheet("color: #6c757d; font-size: 11px;")
+        sd_desc.setStyleSheet("color: #6c757d;")
         sd_layout.addRow(sd_desc)
 
         sd_data = self.config_mgr.schedules_direct
@@ -5829,7 +5827,6 @@ class MainWindow(QMainWindow):
             "  border: 1.5px solid #3b82f6;"
             "  color: #eff6ff;"
             "  font-weight: bold;"
-            "  font-size: 11px;"
             "  padding: 3px 8px;"
             "  border-radius: 5px;"
             "  text-align: center;"
@@ -5851,7 +5848,6 @@ class MainWindow(QMainWindow):
 
         health_row = QHBoxLayout()
         self.channel_health_badge = QLabel("")
-        self.channel_health_badge.setStyleSheet("font-size: 11px;")
         health_row.addWidget(self.channel_health_badge)
         health_row.addStretch()
         map_layout.addLayout(health_row)
@@ -5870,7 +5866,7 @@ class MainWindow(QMainWindow):
         tip_layout.setContentsMargins(6, 4, 6, 4)
         tip_layout.setSpacing(2)
         tip_lbl = QLabel(
-            "<span style='color: #8a99ad; font-size: 11px;'>"
+            "<span style='color: #8a99ad;'>"
             "<b>Format:</b> Guide Name = Tuned Channel (e.g. <code>Fox = KSAZ-HD</code>). "
             "Colored dots show live reception: "
             "<span style='color: #4ade80; font-weight: bold;'>● Locked</span> &nbsp; "
@@ -5895,11 +5891,11 @@ class MainWindow(QMainWindow):
 
         desc = QLabel("Reorder rows in your EPG TV Guide using drag-and-drop or the Move Up/Down buttons.")
         desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        desc.setStyleSheet("color: #8a99ad; font-size: 11px;")
+        desc.setStyleSheet("color: #8a99ad;")
         order_layout.addWidget(desc)
 
         order_legend = QLabel(
-            "<span style='color: #8a99ad; font-size: 10px;'>"
+            "<span style='color: #8a99ad;'>"
             "Signal: "
             "<span style='color: #4ade80; font-weight: bold;'>● Locked</span> &nbsp; "
             "<span style='color: #facc15; font-weight: bold;'>● Weak</span> &nbsp; "
@@ -5997,7 +5993,9 @@ class MainWindow(QMainWindow):
                 dot_color = "#64748b"      # Slate / Untested
             lines_html.append(f"<span style='color: {dot_color}; font-weight: bold;'>●</span> {html.escape(k)} = {html.escape(v)}")
 
-        html_content = "<div style='font-family: monospace; font-size: 13px; line-height: 1.6;'>" + "<br>".join(lines_html) + "</div>"
+        scale = getattr(self.config_mgr, "settings_ui_scale", 100) if self.config_mgr else 100
+        mono_sz = max(11, int(round(13 * (scale / 100.0))))
+        html_content = f"<div style='font-family: monospace; font-size: {mono_sz}px; line-height: 1.6;'>" + "<br>".join(lines_html) + "</div>"
         self.mapping_text.setHtml(html_content)
 
     def open_channel_health_dialog(self):
@@ -8135,6 +8133,8 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, "Saved", "Schedules Direct credentials saved successfully.")
 
     def update_tvpassport_notice(self):
+        scale = getattr(self.config_mgr, "settings_ui_scale", 100) if self.config_mgr else 100
+        pass_sz = max(11, int(round(13 * (scale / 100.0))))
         unconfigured = self.config_mgr.get_unconfigured_regional_channels()
         if unconfigured:
             ch_list_str = ", ".join(unconfigured)
@@ -8145,7 +8145,7 @@ class MainWindow(QMainWindow):
                 self.passport_header_warning.setVisible(True)
             if hasattr(self, "passport_notice"):
                 self.passport_notice.setText(
-                    f"<div style='border: 1px solid #c8832a; border-radius: 6px; background-color: #2b2214; padding: 10px 14px; color: #ffc107; font-size: 13px; margin-top: 6px; margin-bottom: 8px; line-height: 1.5;'>"
+                    f"<div style='border: 1px solid #c8832a; border-radius: 6px; background-color: #2b2214; padding: 10px 14px; color: #ffc107; font-size: {pass_sz}px; margin-top: 6px; margin-bottom: 8px; line-height: 1.5;'>"
                     f"<b>Action Needed:</b> The following scanned channel(s) are local/regional and not covered by national feeds: "
                     f"<b>{ch_list_str}</b>.<br><br>"
                     f"<b>Where to get Station IDs:</b><br>"
