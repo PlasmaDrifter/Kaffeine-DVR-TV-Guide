@@ -151,8 +151,18 @@ Guide Display Name = Kaffeine Tuned Name
 - **Guide Display Name** (Left): The user-friendly name displayed across the EPG grid, search filters, and recording rules. This is also the network name matched against EPG guide data.
 - **Kaffeine Tuned Name** (Right): The exact station name stored in Kaffeine's hardware channel database so the tuner knows which physical frequency/multiplex to lock for viewing and recording.
 
-#### Real-World Tuner Example (Before Renaming):
-When channels are first scanned by your TV tuner hardware, Kaffeine typically names them using their physical channel numbers, subchannel prefixes, and broadcast call signs (for example, in a standard metropolitan market):
+#### 1. Initial State Upon Import (Raw Tuner Names):
+When you click **Import Channels from Kaffeine**, each scanned channel initially populates as a 1:1 mapping with its raw hardware name on both sides (channel numbers, frequency multiplex prefixes, and FCC call signs):
+```text
+010-1 KSAZ-HD = 010-1 KSAZ-HD
+012-1 KPNX-HD = 012-1 KPNX-HD
+005-1 KPHO-HD = 005-1 KPHO-HD
+015-1 KNXV-HD = 015-1 KNXV-HD
+061-1 KASW-HD = 061-1 KASW-HD
+```
+
+#### 2. Fixed for the GUI (Clean Guide Display Names):
+You then edit the left side to clean, recognizable network names for your EPG grid and guide data matching, while keeping the right side intact so Kaffeine knows which physical tuner channel to lock:
 ```text
 Fox = 010-1 KSAZ-HD
 NBC = 012-1 KPNX-HD
@@ -161,8 +171,8 @@ ABC = 015-1 KNXV-HD
 The CW = 061-1 KASW-HD
 ```
 
-#### If Already Renamed in Kaffeine:
-If you have already renamed or simplified your channels directly inside Kaffeine before importing, your mapping will look straightforward:
+#### 3. If Already Renamed Inside Kaffeine:
+If you already renamed or simplified your channels directly inside Kaffeine's channel editor prior to clicking import, both sides will already appear clean:
 ```text
 Fox = Fox
 NBC = NBC
