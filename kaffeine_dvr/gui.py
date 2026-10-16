@@ -6494,6 +6494,7 @@ class MainWindow(QMainWindow):
 
         # Grid Guide Options Card (Moved to top of right column)
         color_box = QGroupBox("Grid Guide Options")
+        color_box.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
         color_layout = QVBoxLayout(color_box)
         color_layout.setContentsMargins(15, 15, 15, 15)
         color_layout.setSpacing(12)
@@ -6790,6 +6791,7 @@ class MainWindow(QMainWindow):
 
         # ------------------ Themes & Styling Card (Consolidated Theming) ------------------
         guide_theme_box = QGroupBox("Themes && Styling")
+        guide_theme_box.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
         guide_theme_layout = QVBoxLayout(guide_theme_box)
         guide_theme_layout.setContentsMargins(15, 15, 15, 15)
         guide_theme_layout.setSpacing(10)
@@ -6825,7 +6827,6 @@ class MainWindow(QMainWindow):
         left_grid_wrap.addLayout(self.guide_theme_grid)
         left_grid_wrap.addStretch()
         left_guide_layout.addLayout(left_grid_wrap)
-        left_guide_layout.addStretch()
         guide_themes_row.addLayout(left_guide_layout, 0)
 
         # Middle: Custom Themes (next to the grid guide themes)
@@ -6914,7 +6915,6 @@ class MainWindow(QMainWindow):
         app_grid_wrap.addLayout(self.app_theme_grid)
         app_grid_wrap.addStretch()
         app_theme_layout.addLayout(app_grid_wrap)
-        app_theme_layout.addStretch()
         guide_themes_row.addLayout(app_theme_layout, 0)
         guide_themes_row.addStretch(1)
 
@@ -6926,6 +6926,7 @@ class MainWindow(QMainWindow):
 
         # Application Window Dimensions (Under Themes & Styling)
         win_group = QGroupBox("Application Window Dimensions")
+        win_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
         win_layout = QVBoxLayout(win_group)
         win_layout.setContentsMargins(15, 15, 15, 15)
         win_layout.setSpacing(10)
@@ -6960,7 +6961,7 @@ class MainWindow(QMainWindow):
         win_layout.addWidget(self.custom_title_bar_check)
 
         right_col.addWidget(win_group)
-        right_col.addStretch()
+        right_col.addStretch(1)
         two_col_layout.addLayout(right_col, 60)
 
         main_layout.addLayout(two_col_layout)
