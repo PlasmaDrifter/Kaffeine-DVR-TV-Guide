@@ -547,7 +547,7 @@ class ConfigManager:
                     if "guide_auto_advance_minute" not in data:
                         data["guide_auto_advance_minute"] = 50
                     if "guide_detail_collapsed" not in data:
-                        data["guide_detail_collapsed"] = False
+                        data["guide_detail_collapsed"] = True
                     if "guide_maximized" not in data:
                         data["guide_maximized"] = False
                     if "guide_show_time_indicator" not in data:
@@ -624,7 +624,7 @@ class ConfigManager:
             "delete_timeshift_on_exit": True,
             "grid_visible_rows": 9,
             "guide_detail_lines": 3,
-            "guide_detail_collapsed": False,
+            "guide_detail_collapsed": True,
             "guide_maximized": False,
             "live_same_bg_as_others": False,
             "hide_live_badge": False,
@@ -1244,7 +1244,7 @@ class ConfigManager:
 
     @property
     def guide_detail_collapsed(self) -> bool:
-        return bool(self.data.get("guide_detail_collapsed", False))
+        return bool(self.data.get("guide_detail_collapsed", True))
 
     @guide_detail_collapsed.setter
     def guide_detail_collapsed(self, val: bool):

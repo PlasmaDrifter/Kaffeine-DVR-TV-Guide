@@ -5805,7 +5805,7 @@ class MainWindow(QMainWindow):
         self.guide_detail_collapse_btn.setObjectName("guideDetailCollapseBtn")
         self.guide_detail_collapse_btn.setFixedSize(30, 24)
         self.guide_detail_collapse_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.guide_detail_collapse_btn.setToolTip("Collapse description panel")
+        self.guide_detail_collapse_btn.setToolTip("Expand program description box")
         self.guide_detail_collapse_btn.clicked.connect(self.toggle_guide_detail_collapsed)
         detail_header_row.addWidget(self.guide_detail_collapse_btn)
 
@@ -9010,7 +9010,7 @@ class MainWindow(QMainWindow):
 
     def _apply_guide_detail_collapsed_state(self):
         """Show or hide the description box based on guide_detail_collapsed."""
-        collapsed = bool(getattr(self.config_mgr, "guide_detail_collapsed", False))
+        collapsed = bool(getattr(self.config_mgr, "guide_detail_collapsed", True))
         if hasattr(self, "guide_detail_text"):
             self.guide_detail_text.setVisible(not collapsed)
         if hasattr(self, "guide_detail_collapse_btn"):
@@ -9032,7 +9032,7 @@ class MainWindow(QMainWindow):
 
     def toggle_guide_detail_collapsed(self):
         """Toggle collapsed/expanded state of the program description box."""
-        collapsed = not getattr(self.config_mgr, "guide_detail_collapsed", False)
+        collapsed = not getattr(self.config_mgr, "guide_detail_collapsed", True)
         self.config_mgr.guide_detail_collapsed = collapsed
         self._apply_guide_detail_collapsed_state()
         self._apply_guide_zoom()
