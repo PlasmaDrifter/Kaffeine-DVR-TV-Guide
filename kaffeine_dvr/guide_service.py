@@ -1017,6 +1017,25 @@ class GuideService:
         conn.close()
         return count
 
+    def delete_channel_programs(self, channel_names: List[str]) -> int:
+        """
+        Explicitly removes all cached guide programs for the specified channel names.
+        Matches against both kaffeine_channel and network.
+        """
+        if not channel_names:
+            return 0
+        conn = self._get_connection()
+        cur = conn.cursor()
+        placeholders = ",".join("?" for _ in channel_names)
+        cur.execute(
+            f"DELETE FROM guide_programs WHERE kaffeine_channel IN ({placeholders}) OR network IN ({placeholders})",
+            list(channel_names) + list(channel_names)
+        )
+        count = cur.rowcount
+        conn.commit()
+        conn.close()
+        return count
+
     def get_live_program_for_channel(self, channel: str) -> Optional[Dict[str, Any]]:
         """
         Locates the currently broadcasting program for a channel in the guide database.

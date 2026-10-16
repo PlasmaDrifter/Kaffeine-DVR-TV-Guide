@@ -6316,7 +6316,7 @@ class MainWindow(QMainWindow):
         order_box = QGroupBox("TV Guide Channel Order (Manual Priority)")
         order_layout = QVBoxLayout(order_box)
 
-        desc = QLabel("Reorder rows in your EPG TV Guide using drag-and-drop or the Move Up/Down buttons.")
+        desc = QLabel("Reorder rows using drag-and-drop or Move Up/Down. Remove unwanted channels with Remove or Delete key.")
         desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
         desc.setStyleSheet("color: #8a99ad;")
         order_layout.addWidget(desc)
@@ -6338,6 +6338,9 @@ class MainWindow(QMainWindow):
         self.channel_order_list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
         self.channel_order_list.setDefaultDropAction(Qt.DropAction.MoveAction)
         self.channel_order_list.model().rowsMoved.connect(self._on_channel_rows_dragged)
+        self.channel_order_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.channel_order_list.customContextMenuRequested.connect(self._show_channel_order_context_menu)
+        self.channel_order_list.keyPressEvent = self._channel_order_key_press
         order_layout.addWidget(self.channel_order_list)
 
         order_ctrl_bar = QHBoxLayout()
@@ -6352,6 +6355,30 @@ class MainWindow(QMainWindow):
         self.sort_alpha_btn = QPushButton("Sort A-Z")
         self.sort_alpha_btn.clicked.connect(self._sort_channels_alphabetical)
         order_ctrl_bar.addWidget(self.sort_alpha_btn)
+
+        self.remove_channel_btn = QPushButton("✕ Remove")
+        self.remove_channel_btn.setObjectName("removeChannelBtn")
+        self.remove_channel_btn.setToolTip("Remove selected channel from TV Guide order and lineup (or press Delete)")
+        self.remove_channel_btn.setStyleSheet(
+            "QPushButton#removeChannelBtn {"
+            "  background-color: #4a1515;"
+            "  border: 1px solid #7f1d1d;"
+            "  color: #fca5a5;"
+            "  font-weight: bold;"
+            "  padding: 5px 10px;"
+            "  border-radius: 4px;"
+            "}"
+            "QPushButton#removeChannelBtn:hover {"
+            "  background-color: #7f1d1d;"
+            "  border-color: #991b1b;"
+            "  color: #ffffff;"
+            "}"
+            "QPushButton#removeChannelBtn:pressed {"
+            "  background-color: #350e0e;"
+            "}"
+        )
+        self.remove_channel_btn.clicked.connect(self._remove_selected_channel_order)
+        order_ctrl_bar.addWidget(self.remove_channel_btn)
 
         order_layout.addLayout(order_ctrl_bar)
         lineup_panels.addWidget(order_box, 1)

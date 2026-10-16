@@ -700,19 +700,23 @@ class ConfigManager:
     def get_ordered_channels(self) -> List[str]:
         """
         Returns all unique channels in configured manual order.
+        Strictly reflects the channels configured in channel_map (Channel Importing).
         Any active channels not yet in channel_order are appended to the end.
         """
-        all_unique = list(dict.fromkeys(
-            list(self.channel_map.values()) +
-            list(self.tvpassport_stations.keys())
+        if not self.channel_map:
+            return []
+
+        all_valid = list(dict.fromkeys(
+            list(self.channel_map.keys()) + list(self.channel_map.values())
         ))
         saved_order = self.channel_order
         ordered = []
         for ch in saved_order:
-            if ch in all_unique and ch not in ordered:
+            if ch in all_valid and ch not in ordered:
                 ordered.append(ch)
-        for ch in all_unique:
-            if ch not in ordered:
+        for ch in self.channel_map.keys():
+            kaff_val = self.channel_map[ch]
+            if ch not in ordered and kaff_val not in ordered:
                 ordered.append(ch)
         return ordered
 
