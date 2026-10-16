@@ -249,7 +249,7 @@ class KaffeineDbusClient:
     def launch_kaffeine(self, mode: str = "tray", minimized: Optional[bool] = None) -> bool:
         """
         Start Kaffeine with the specified launch mode:
-        - 'tray': start in minimal mode (-m) and dock/minimize to the system tray
+        - 'tray': start offscreen and dock/minimize to the system tray
         - 'taskbar': start normal window and minimize to taskbar via window manager (kdotool/xdotool)
         - 'normal': start normal visible application window
         """
@@ -265,9 +265,7 @@ class KaffeineDbusClient:
         try:
             env = self._get_display_env()
             k_bin = self.get_kaffeine_bin()
-            if mode == "tray":
-                cmd = [k_bin, "-m", "--qwindowgeometry", "1x1+-3000+-3000"]
-            elif mode == "taskbar":
+            if mode in ("taskbar", "tray"):
                 cmd = [k_bin, "--qwindowgeometry", "1x1+-3000+-3000"]
             else:
                 cmd = [k_bin]

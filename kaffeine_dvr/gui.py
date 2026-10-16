@@ -4144,7 +4144,7 @@ class FirstRunWelcomeDialog(BaseFramelessDialog):
         launch_mode_lbl = QLabel("Kaffeine Launch Mode:")
         launch_mode_lbl.setStyleSheet("color: #dce1e8; font-size: 13px; background: transparent;")
         self.launch_mode_combo = ThemedComboBox()
-        self.launch_mode_combo.addItem("Minimize to System Tray (-m minimal)", "tray")
+        self.launch_mode_combo.addItem("Minimize to System Tray", "tray")
         self.launch_mode_combo.addItem("Minimized to Taskbar (Panel)", "taskbar")
         self.launch_mode_combo.addItem("Normal Window (Visible desktop)", "normal")
         cur_mode = self.config_mgr.launch_mode
@@ -6654,7 +6654,7 @@ class MainWindow(QMainWindow):
         )
 
         self.launch_mode_combo = ThemedComboBox()
-        self.launch_mode_combo.addItem("Minimize to System Tray (-m minimal)", "tray")
+        self.launch_mode_combo.addItem("Minimize to System Tray", "tray")
         self.launch_mode_combo.addItem("Minimized to Taskbar (Panel)", "taskbar")
         self.launch_mode_combo.addItem("Normal Window (Visible desktop)", "normal")
         self.launch_mode_combo.setFixedWidth(290)
@@ -6683,7 +6683,7 @@ class MainWindow(QMainWindow):
             make_setting_label(
                 "Kaffeine Launch Mode:",
                 "Controls how Kaffeine starts when armed for recording:\n"
-                "• Minimize to System Tray: Starts with -m minimal mode and docks into tray.\n"
+                "• Minimize to System Tray: Starts offscreen and docks into the system tray.\n"
                 "• Minimized to Taskbar: Quietly minimizes to your panel taskbar without touching tray.\n"
                 "• Normal Window: Opens as an active visible window on your desktop."
             ),
