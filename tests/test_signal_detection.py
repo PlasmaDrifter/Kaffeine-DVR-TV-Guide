@@ -5,9 +5,11 @@ Tests for weak/no signal detection, automatic tuner release, and warning popup.
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
+from PyQt6.QtCore import QEvent, QPoint
+from PyQt6.QtGui import QHelpEvent
 from PyQt6.QtWidgets import QMessageBox
 
-from kaffeine_dvr.gui import ChannelSignalHealthDialog, MainWindow
+from kaffeine_dvr.gui import ChannelSignalHealthDialog, GuideGridVerticalHeader, MainWindow
 from kaffeine_dvr.watcher import Watcher
 
 
@@ -84,6 +86,14 @@ def test_handle_timeshift_signal_failure_releases_tuner(qtbot, isolated_config, 
         assert "Weak or No Signal" in args[1]
         assert "7.1 KGO" in args[2]
         assert "tuner has been released" in args[2]
+
+        # 5. Verify failed channel health recorded for immediate red dot display
+        assert "7.1 KGO" in win.config_mgr.channel_health
+        health_rec = win.config_mgr.channel_health["7.1 KGO"]
+        assert health_rec["locked"] is False
+        assert health_rec["has_signal"] is False
+        assert health_rec["has_carrier"] is False
+        assert health_rec["quality_label"] == "No Signal"
 
 
 def test_handle_timeshift_signal_failure_scheduled_recording_declines_cancel(qtbot, isolated_config):
@@ -256,3 +266,123 @@ def test_watcher_zero_byte_cleanup_keeps_healthy_recording(isolated_config, tmp_
     # Should NOT cancel healthy recording
     mock_dbus.cancel_recording.assert_not_called()
     mock_queue.remove_recording.assert_not_called()
+
+
+def test_guide_grid_vertical_header_health_lookup(isolated_config):
+    """
+    Test GuideGridVerticalHeader._get_health_for_channel resolves channel health:
+    1. By direct channel name match (case-insensitive).
+    2. Via channel_map when key is guide name and value is tuned hardware name.
+    3. Via channel_map when queried by tuned name and stored under guide name.
+    4. Returns None when no health info is recorded.
+    """
+    cfg = isolated_config
+    cfg.channel_map = {
+        "Fox": "010-1 KSAZ-HD",
+        "NBC": "012-1 KPNX-HD",
+    }
+    cfg.channel_health = {
+        "010-1 KSAZ-HD": {"locked": False, "has_carrier": True, "has_signal": True, "strength_pct": 45},
+        "012-1 KPNX-HD": {"locked": False, "has_carrier": False, "has_signal": False, "strength_pct": 0},
+        "CBS": {"locked": True, "has_carrier": True, "has_signal": True, "strength_pct": 90},
+    }
+
+    # 1. Direct match
+    res_cbs = GuideGridVerticalHeader._get_health_for_channel("cbs", cfg)
+    assert res_cbs is not None
+    assert res_cbs["locked"] is True
+
+    # 2. Guide name resolving to tuned hardware name in health dict
+    res_fox = GuideGridVerticalHeader._get_health_for_channel("Fox", cfg)
+    assert res_fox is not None
+    assert res_fox["locked"] is False
+    assert res_fox["has_carrier"] is True
+
+    res_nbc = GuideGridVerticalHeader._get_health_for_channel("NBC", cfg)
+    assert res_nbc is not None
+    assert res_nbc["locked"] is False
+    assert res_nbc["has_carrier"] is False
+
+    # 3. Tuned hardware name resolving when queried directly
+    res_fox_hw = GuideGridVerticalHeader._get_health_for_channel("010-1 KSAZ-HD", cfg)
+    assert res_fox_hw is not None
+    assert res_fox_hw["locked"] is False
+
+    # 4. Unknown channel
+    assert GuideGridVerticalHeader._get_health_for_channel("UnknownChannel", cfg) is None
+
+
+def test_guide_grid_vertical_header_dot_colors(qtbot, isolated_config):
+    """
+    Test GuideGridVerticalHeader dot color logic:
+    - Locked channels have no dot.
+    - Carrier/unlocked channels display a yellow dot (#facc15).
+    - No carrier / no signal channels display a red dot (#f87171).
+    """
+    cfg = isolated_config
+    cfg.channel_health = {
+        "LockedChan": {"locked": True, "has_signal": True, "has_carrier": True},
+        "WeakChan": {"locked": False, "has_signal": True, "has_carrier": True},
+        "DeadChan": {"locked": False, "has_signal": False, "has_carrier": False},
+    }
+
+    header = GuideGridVerticalHeader()
+    qtbot.addWidget(header)
+
+    # Test dot color determination logic used in paintSection
+    for ch_name, expected_dot in [
+        ("LockedChan", None),
+        ("WeakChan", "#facc15"),
+        ("DeadChan", "#f87171"),
+        ("UntestedChan", None),
+    ]:
+        h = header._get_health_for_channel(ch_name, cfg)
+        dot_color = None
+        if h:
+            if not h.get("locked"):
+                if h.get("has_signal") or h.get("has_carrier"):
+                    dot_color = "#facc15"
+                else:
+                    dot_color = "#f87171"
+        assert dot_color == expected_dot
+
+
+def test_guide_grid_vertical_header_tooltip(qtbot, isolated_config):
+    """
+    Test that GuideGridVerticalHeader shows tooltip with signal status on hover.
+    """
+    cfg = isolated_config
+    cfg.channel_health = {
+        "DeadChan": {"locked": False, "has_signal": False, "has_carrier": False, "strength_pct": 0},
+        "WeakChan": {"locked": False, "has_signal": True, "has_carrier": True, "strength_pct": 35},
+    }
+
+    win = MainWindow(config_mgr=cfg)
+    qtbot.addWidget(win)
+    win.grid_channels = ["DeadChan", "WeakChan"]
+
+    header = GuideGridVerticalHeader(main_window=win)
+    qtbot.addWidget(header)
+
+    with patch("kaffeine_dvr.gui.QToolTip.showText") as mock_tooltip:
+        help_evt = QHelpEvent(QEvent.Type.ToolTip, QPoint(10, 10), QPoint(10, 10))
+        # Mock logicalIndexAt to point to row 0 ("DeadChan")
+        with patch.object(header, "logicalIndexAt", return_value=0):
+            handled = header.event(help_evt)
+            assert handled is True
+            mock_tooltip.assert_called_once()
+            tip_text = mock_tooltip.call_args[0][1]
+            assert "DeadChan" in tip_text
+            assert "No Signal Detected" in tip_text
+
+        mock_tooltip.reset_mock()
+        # Mock logicalIndexAt to point to row 1 ("WeakChan")
+        with patch.object(header, "logicalIndexAt", return_value=1):
+            handled = header.event(help_evt)
+            assert handled is True
+            mock_tooltip.assert_called_once()
+            tip_text = mock_tooltip.call_args[0][1]
+            assert "WeakChan" in tip_text
+            assert "Weak Signal / Carrier (No Lock)" in tip_text
+            assert "35%" in tip_text
+

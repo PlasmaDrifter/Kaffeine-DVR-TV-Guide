@@ -94,6 +94,7 @@ from PyQt6.QtWidgets import (
     QTabWidget,
     QTextEdit,
     QToolButton,
+    QToolTip,
     QVBoxLayout,
     QWidget,
     QWidgetAction,
@@ -3733,6 +3734,68 @@ class GuideGridVerticalHeader(QHeaderView):
         sz.setWidth(70)
         return sz
 
+    @staticmethod
+    def _get_health_for_channel(name: str, cfg) -> Optional[Dict[str, Any]]:
+        if not cfg or not hasattr(cfg, "channel_health"):
+            return None
+        health_data = cfg.channel_health
+        if not health_data:
+            return None
+        target = (name or "").strip().lower()
+        if not target:
+            return None
+        # 1. Exact match on channel name
+        for k, v in health_data.items():
+            if str(k).strip().lower() == target:
+                return v
+        # 2. Match via channel_map
+        if hasattr(cfg, "channel_map") and cfg.channel_map:
+            tuned = cfg.channel_map.get(name)
+            if tuned:
+                tuned_lower = tuned.strip().lower()
+                for k, v in health_data.items():
+                    if str(k).strip().lower() == tuned_lower:
+                        return v
+            for g_name, t_name in cfg.channel_map.items():
+                if t_name.strip().lower() == target or g_name.strip().lower() == target:
+                    for k, v in health_data.items():
+                        k_lower = str(k).strip().lower()
+                        if k_lower == g_name.strip().lower() or k_lower == t_name.strip().lower():
+                            return v
+        return None
+
+    def event(self, e: QEvent) -> bool:
+        if e.type() == QEvent.Type.ToolTip:
+            pos = e.position().toPoint() if hasattr(e, "position") else e.pos()
+            sec = self.logicalIndexAt(pos)
+            if sec >= 0:
+                mw = getattr(self, "main_window", None)
+                channel_name = ""
+                model = self.model()
+                if model:
+                    val = model.headerData(sec, Qt.Orientation.Vertical, Qt.ItemDataRole.DisplayRole)
+                    if val is not None:
+                        channel_name = str(val).strip()
+                if not channel_name and mw and hasattr(mw, "grid_channels") and sec < len(mw.grid_channels):
+                    channel_name = str(mw.grid_channels[sec]).strip()
+                if channel_name and mw and getattr(mw, "config_mgr", None):
+                    h = self._get_health_for_channel(channel_name, mw.config_mgr)
+                    if h:
+                        if not h.get("locked"):
+                            if h.get("has_signal") or h.get("has_carrier"):
+                                status_text = "Weak Signal / Carrier (No Lock)"
+                            else:
+                                status_text = "No Signal Detected"
+                        else:
+                            status_text = "Locked (Good Signal)"
+                        strength = h.get("strength_pct")
+                        tip = f"<b>{channel_name}</b><br>Signal Status: <b>{status_text}</b>"
+                        if strength is not None and strength > 0:
+                            tip += f" ({int(strength)}%)"
+                        QToolTip.showText(e.globalPosition().toPoint() if hasattr(e, "globalPosition") else e.globalPos(), tip, self.viewport())
+                        return True
+        return super().event(e)
+
     def paintSection(self, painter: QPainter, rect: QRect, logical_index: int):
         painter.save()
         mw = getattr(self, "main_window", None)
@@ -3765,6 +3828,16 @@ class GuideGridVerticalHeader(QHeaderView):
         # Card geometry with 2px margin around each channel square for clear separation
         card_rect = rect.adjusted(3, 3, -3, -3)
 
+        # Check signal health status for this channel (Weak = yellow dot, No Signal = red dot)
+        status_dot_color = None
+        health_info = self._get_health_for_channel(channel_name, cfg)
+        if health_info:
+            if not health_info.get("locked"):
+                if health_info.get("has_signal") or health_info.get("has_carrier"):
+                    status_dot_color = QColor("#facc15")  # Yellow dot for weak carrier
+                else:
+                    status_dot_color = QColor("#f87171")  # Red dot for no signal
+
         if is_playing:
             # Active playing channel: uses exact live green #66bb6a for border and channel title
             border_color = live_green
@@ -3789,7 +3862,10 @@ class GuideGridVerticalHeader(QHeaderView):
         painter.drawRoundedRect(card_rect, 4, 4)
 
         # Base font setup allowing up to two rows for channel name with word wrap without changing box geometry
-        text_rect = card_rect.adjusted(3, 2, -3, -2)
+        if status_dot_color:
+            text_rect = card_rect.adjusted(3, 2, -3, -9)
+        else:
+            text_rect = card_rect.adjusted(3, 2, -3, -2)
         flags = Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap
 
         # Fit channel name cleanly across up to two lines, scaling down font if needed
@@ -3814,6 +3890,15 @@ class GuideGridVerticalHeader(QHeaderView):
         painter.setFont(chosen_font)
         painter.setPen(text_color)
         painter.drawText(text_rect, flags, channel_name)
+
+        # Draw yellow or red indicator dot under channel name if weak or no signal
+        if status_dot_color:
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            dot_cx = card_rect.center().x()
+            dot_cy = card_rect.bottom() - 6
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QBrush(status_dot_color))
+            painter.drawEllipse(QRectF(dot_cx - 2.5, dot_cy - 2.5, 5.0, 5.0))
 
         painter.restore()
 
@@ -6336,7 +6421,7 @@ class MainWindow(QMainWindow):
         tip_layout.setSpacing(2)
         tip_lbl = QLabel(
             "<span style='color: #8a99ad;'>"
-            "<b>Format:</b> Guide Name = Tuned Channel (e.g. <code>Fox = KSAZ-HD</code>). "
+            "<b>Format:</b> Guide Display Name = Tuned Channel (e.g. <code>Fox = 010-1 KSAZ-HD</code>). "
             "Colored dots show live reception: "
             "<span style='color: #4ade80; font-weight: bold;'>● Locked</span> &nbsp; "
             "<span style='color: #facc15; font-weight: bold;'>● Weak</span> &nbsp; "
@@ -6359,14 +6444,15 @@ class MainWindow(QMainWindow):
         self.mapping_tip_lbl.setText(
             "<b>Want to rename or remove channels in your guide? Do it here.</b><br>"
             "This connects your guide display names to your scanned Kaffeine channels.<br><br>"
-            "<b>Format:</b> <span style='color: #52b788;'>Guide Name = Tuned Channel</span><br>"
-            "<b>Example:</b> <span style='color: #52b788;'>Fox = KSAZ-HD</span> displays 'Fox' while tuning KSAZ-HD.<br>"
-            "If you renamed them already, leave as <span style='color: #52b788;'>Fox = Fox</span>.<br><br>"
+            "<b>Format:</b> <span style='color: #52b788;'>Guide Display Name = Tuned Channel</span><br>"
+            "– <b>Initial Import:</b> <span style='color: #94a3b8;'>010-1 KSAZ-HD = 010-1 KSAZ-HD</span><br>"
+            "– <b>Fixed for GUI:</b> <span style='color: #52b788;'>Fox = 010-1 KSAZ-HD</span> (displays 'Fox' while tuning KSAZ-HD)<br>"
+            "– <b>Already Renamed:</b> <span style='color: #52b788;'>Fox = Fox</span> (if renamed in Kaffeine before import)<br><br>"
             "<b>Delete Channels:</b> Simply delete unwanted lines here and click <span style='color: #52b788;'>Save Channels</span>, "
             "or select a channel in the <b>TV Guide Channel Order</b> list to the right and click <b>✕ Remove</b> (or press Delete).<br><br>"
             "<i>Channels are typically imported automatically during initial setup.<br>"
-            "If you recently scanned new channels in Kaffeine, click<br>"
-            "<span style='color: #52b788;'>Import Channels from Kaffeine</span> above to reload your lineup.</i>"
+            "If you recently scanned new channels in Kaffeine, click "
+            "<span style='color: #52b788;'>Import Channels from Kaffeine</span> above to reload.</i>"
         )
         self.mapping_tip_lbl.setStyleSheet("color: #8a99ad; font-size: 13px; line-height: 1.5; background: transparent;")
         self.mapping_tip_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
@@ -8329,16 +8415,36 @@ class MainWindow(QMainWindow):
         s2_lay = QVBoxLayout(s2_box)
         s2_lay.setContentsMargins(15, 15, 15, 15)
         s2_text = QLabel(
-            "• <b style='color: #4ade80;'>1. Automatic & One-Click Channel Import:</b><br>"
+            "• <b style='color: #4ade80;'>1. Automatic &amp; One-Click Channel Import:</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;– Channels are normally imported automatically during the initial Welcome Wizard.<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;– If you skipped that step or recently scanned new channels in Kaffeine, go to <b>Settings &gt; Channel Source</b> and click <b style='color: #4ade80;'>Import Channels from Kaffeine</b> to refresh your lineup.<br><br>"
-            "• <b style='color: #4ade80;'>2. Channel Importing & Renaming (Left Panel - Format: Guide Name = Tuned Channel):</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;– Want to rename how a channel appears in your guide? Do it here. This connects your guide display names to your tuned Kaffeine channels.<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;– Example: <code style='color: #52b788;'>Fox = KSAZ-HD</code> displays 'Fox' in the guide while tuning KSAZ-HD on your antenna.<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;– If you renamed them already, leave them as <code style='color: #52b788;'>Fox = Fox</code>.<br>"
+            "• <b style='color: #4ade80;'>2. Channel Importing &amp; Renaming (Left Panel - Format: Guide Display Name = Tuned Channel):</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Connects your user-friendly guide display names to your tuned Kaffeine hardware channels.<br><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;<b>A. Initial State Upon Import (Raw Tuner Names):</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;When you click <b>Import Channels from Kaffeine</b>, each scanned channel initially populates as a 1:1 mapping with its raw hardware name on both sides (channel numbers, frequency multiplex prefixes, and FCC call signs):<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<code style='color: #94a3b8;'>010-1 KSAZ-HD = 010-1 KSAZ-HD</code><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<code style='color: #94a3b8;'>012-1 KPNX-HD = 012-1 KPNX-HD</code><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<code style='color: #94a3b8;'>005-1 KPHO-HD = 005-1 KPHO-HD</code><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<code style='color: #94a3b8;'>015-1 KNXV-HD = 015-1 KNXV-HD</code><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<code style='color: #94a3b8;'>061-1 KASW-HD = 061-1 KASW-HD</code><br><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;<b>B. Fixed for the GUI (Clean Guide Display Names):</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;Edit the left side to clean, recognizable network names for your EPG grid and guide data matching, while keeping the right side intact so Kaffeine knows which physical tuner channel to lock:<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<code style='color: #52b788;'>Fox = 010-1 KSAZ-HD</code><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<code style='color: #52b788;'>NBC = 012-1 KPNX-HD</code><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<code style='color: #52b788;'>CBS = 005-1 KPHO-HD</code><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<code style='color: #52b788;'>ABC = 015-1 KNXV-HD</code><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<code style='color: #52b788;'>The CW = 061-1 KASW-HD</code><br><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;<b>C. If Already Renamed Inside Kaffeine:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;If you already renamed or simplified your channels directly inside Kaffeine's channel editor prior to clicking import, both sides will already appear clean:<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<code style='color: #52b788;'>Fox = Fox</code><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<code style='color: #52b788;'>NBC = NBC</code><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<code style='color: #52b788;'>CBS = CBS</code><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<code style='color: #52b788;'>ABC = ABC</code><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<code style='color: #52b788;'>The CW = CW6</code><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;– Click <b>Save Channels</b> when finished.<br><br>"
-            "• <b style='color: #4ade80;'>3. TV Guide Channel Order (Right Panel):</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;– Drag and drop channels or use <b>Move Up</b> / <b>Move Down</b> / <b>Sort A-Z</b> to prioritize how channels are stacked in your EPG TV Guide grid."
+            "• <b style='color: #4ade80;'>3. TV Guide Channel Order &amp; Custom Grid Sequence (Right Panel):</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Custom-sort the vertical order channels appear in your guide grid: select any channel and click <b>Move Up</b> / <b>Move Down</b> / <b>Sort A-Z</b> (e.g. major networks first, followed by subchannels).<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Press <b>Delete</b> or right-click to remove unwanted subchannels from the guide view."
         )
         s2_text.setWordWrap(True)
         s2_text.setStyleSheet(body_style)
@@ -8353,12 +8459,17 @@ class MainWindow(QMainWindow):
         s3_lay.setContentsMargins(15, 15, 15, 15)
         s3_text = QLabel(
             "• <b style='color: #c084fc;'>National Networks (TVMaze - Zero Configuration):</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;– Works out of the box with zero configuration for major national broadcast networks (FOX, CBS, NBC, ABC).<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Works out of the box with zero configuration for major national broadcast networks (<b style='color: #52b788;'>Fox, CBS, NBC, ABC, The CW</b>) using the clean Guide Display Names configured in Step 2.<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;– <i>Note:</i> TVMaze tracks national feeds only and <b>does not provide local programming</b> (local news, regional daytime talk shows, and independent subchannels). To receive local programming, TV Passport will need to be configured.<br><br>"
-            "• <b style='color: #c084fc;'>Full 24/7 Local Affiliates, PBS, CW & Regional Channels (TV Passport):</b><br>"
+            "• <b style='color: #c084fc;'>Full 24/7 Local Affiliates, PBS, CW &amp; Regional Channels (TV Passport):</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;1. Open <a href='https://www.tvpassport.com/index.php/lineups' style='color: #64b5f6; font-weight: bold;'>tvpassport.com</a>, enter your ZIP/postal code, and select your local broadcast lineup.<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;2. Copy the numeric station ID from the URL (e.g. <code>1809</code> for Fox Phoenix).<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;3. Go to <b>Settings &gt; Guide Sources &amp; Health</b>, expand <b>TV Passport Station IDs</b>, and enter: <code>Guide Name = Station ID</code> (e.g. <code>Fox = 1809</code> or <code>PBS = 1184</code>).<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;2. Copy the numeric station ID from the URL (e.g. <code>1809</code> for Fox Phoenix, <code>1812</code> for NBC, <code>1813</code> for CBS, <code>4163</code> for ABC, <code>11611</code> for CW6).<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;3. Go to <b>Settings &gt; Guide Sources &amp; Health</b>, expand <b>TV Passport Station IDs</b>, and enter: <code>Guide Name = Station ID</code>:<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<code style='color: #c084fc;'>Fox = 1809</code><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<code style='color: #c084fc;'>NBC = 1812</code><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<code style='color: #c084fc;'>CBS = 1813</code><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<code style='color: #c084fc;'>ABC = 4163</code><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<code style='color: #c084fc;'>The CW = 11611</code><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;4. Click <b>Save Station IDs</b> to download 24/7 listings with local news, daytime syndication, and sports."
         )
         s3_text.setWordWrap(True)
@@ -13250,6 +13361,33 @@ class MainWindow(QMainWindow):
                                 pass
             except Exception:
                 pass
+
+            # Record failed signal status in channel health so the guide grid and settings badge reflect it immediately
+            if hasattr(self, "config_mgr") and self.config_mgr:
+                try:
+                    health = dict(self.config_mgr.channel_health)
+                    failed_entry = {
+                        "has_carrier": False,
+                        "has_signal": False,
+                        "locked": False,
+                        "quality_label": "No Signal",
+                        "snr": 0.0,
+                        "signal": 0.0,
+                        "ber": 0,
+                        "unc": 0,
+                        "timestamp": time.time(),
+                    }
+                    if ch:
+                        health[ch] = failed_entry
+                    guide_ch = prog.get("channel", "")
+                    if guide_ch:
+                        health[guide_ch] = failed_entry
+                    self.config_mgr.channel_health = health
+                    self.config_mgr.save()
+                    if hasattr(self, "refresh_channel_health_badge"):
+                        self.refresh_channel_health_badge()
+                except Exception as e:
+                    print(f"Error updating channel_health on signal failure: {e}")
 
             self.refresh_recordings()
             self._refresh_guide_view(keep_scroll=True)
