@@ -305,6 +305,7 @@ def test_guide_grid_themes_alphabetical_order(qtbot, isolated_config):
         w = item.widget()
         if isinstance(w, ThemeChip):
             chips.append(w.display_name)
+            assert w.dot_color == THEME_PRESETS[w.key]["colors"]["grid_bg"]
     assert len(chips) == len(THEME_PRESETS)
     assert chips == sorted(chips, key=lambda s: s.lower())
 
