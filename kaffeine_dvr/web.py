@@ -255,7 +255,10 @@ class KaffeineWebRequestHandler(http.server.BaseHTTPRequestHandler):
                     ch_name = p.get("kaffeine_channel") or p.get("channel") or ""
                     ch_key = ch_name.strip().lower()
                     iso_key = (p.get("start_iso") or "")[:16]
-                    is_sched = (ch_key, iso_key) in scheduled_map
+                    rec_info = scheduled_map.get((ch_key, iso_key))
+                    is_sched = rec_info is not None
+                    rec_status = rec_info.get("status", "") if rec_info else ""
+                    is_recording = (rec_status == "RECORDING")
                     dur_iso = p.get("duration_iso") or "00:30:00"
                     rt_mins = p.get("runtime_mins")
                     if not rt_mins:
@@ -274,7 +277,9 @@ class KaffeineWebRequestHandler(http.server.BaseHTTPRequestHandler):
                         "runtime_mins": rt_mins,
                         "summary": p.get("summary") or "",
                         "category": p.get("_category") or "",
-                        "is_scheduled": is_sched
+                        "is_scheduled": is_sched,
+                        "is_recording": is_recording,
+                        "rec_status": rec_status
                     })
                 self._send_json(out)
                 return

@@ -233,7 +233,8 @@ def test_web_companion_ui_anchored_epg_and_channels(web_test_env):
         assert "epgTimelinePane" in html
         assert "epgChannelList" in html
         assert "populateChannelDropdown" in html
-        assert "epg-rec-dot" in html
+        assert "epg-rec-badge" in html
+        assert "epg-sched-badge" in html
         assert 'href="/favicon.png"' in html
         assert 'href="/favicon.ico"' in html
 

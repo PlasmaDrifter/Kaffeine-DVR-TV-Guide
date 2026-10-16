@@ -3172,15 +3172,21 @@ class ProgramTileDelegate(QStyledItemDelegate):
         # Determine background fill based on program timing state
         same_bg = bool(getattr(self.config_mgr, "live_same_bg_as_others", False)) if self.config_mgr else False
         has_rec_border = is_scheduled or (timing_state == "past" and is_past_recorded)
-        if timing_state == "past":
+        if is_recording:
+            bg_color = QColor(48, 20, 22)
+            default_border = self.COLOR_DEFAULT_BORDER_SCHED
+        elif has_rec_border:
+            bg_color = QColor(36, 22, 26)
+            default_border = self.COLOR_PAST_BORDER_SCHED if timing_state == "past" else self.COLOR_DEFAULT_BORDER_SCHED
+        elif timing_state == "past":
             bg_color = self.color_past_bg_alt if is_alt else self.color_past_bg
-            default_border = self.COLOR_PAST_BORDER_SCHED if has_rec_border else self.color_past_border
+            default_border = self.color_past_border
         elif timing_state == "live" and not same_bg:
             bg_color = self.get_category_color("live_bg")
-            default_border = self.COLOR_DEFAULT_BORDER_SCHED if has_rec_border else self.COLOR_DEFAULT_BORDER
+            default_border = self.COLOR_DEFAULT_BORDER
         else:
             bg_color = self._default_bg_alt if is_alt else self._default_bg
-            default_border = self.COLOR_DEFAULT_BORDER_SCHED if has_rec_border else self.COLOR_DEFAULT_BORDER
+            default_border = self.COLOR_DEFAULT_BORDER
 
         if is_selected:
             # If the selected program is scheduled to record (or past recorded), highlight with red recording border
@@ -3192,7 +3198,8 @@ class ProgramTileDelegate(QStyledItemDelegate):
 
         painter.fillRect(rect, bg_color)
         painter.setPen(QPen(border_color, pen_width))
-        painter.drawRect(rect.adjusted(0, 0, -1, -1))
+        box_rect = rect.adjusted(1, 1, -1, -1) if (has_rec_border or is_selected) else rect.adjusted(0, 0, -1, -1)
+        painter.drawRect(box_rect)
 
         # Uniform padding inside box
         pad_left = 10
@@ -3673,7 +3680,7 @@ class GuideGridVerticalHeader(QHeaderView):
         painter.save()
         mw = getattr(self, "main_window", None)
         active_ts = getattr(mw, "_active_timeshift", None) if mw else None
-        active_ch = (active_ts.get("channel") or "").strip().lower() if active_ts else ""
+        active_ch = (active_ts.get("channel") or "").strip().lower() if (active_ts and not active_ts.get("is_past_playback")) else ""
 
         # Retrieve active theme tokens and guide category colors
         cfg = getattr(mw, "config_mgr", None) if mw else None
@@ -5445,7 +5452,7 @@ class MainWindow(QMainWindow):
         ctrl_bar.addStretch()
 
         self.cancel_rec_btn = QPushButton("Cancel Selected Recording")
-        self.cancel_rec_btn.setStyleSheet("color: #ff5252; font-weight: bold;")
+        self.cancel_rec_btn.setStyleSheet("color: #ff5252; font-weight: bold; background-color: #2b181a; border: 1px solid #c62828; border-radius: 4px; padding: 4px 12px;")
         self.cancel_rec_btn.clicked.connect(self.cancel_selected_recording)
         ctrl_bar.addWidget(self.cancel_rec_btn)
 
@@ -5824,7 +5831,7 @@ class MainWindow(QMainWindow):
         action_bar.addWidget(self.record_guide_btn)
 
         self.cancel_guide_btn = QPushButton("Cancel Recording")
-        self.cancel_guide_btn.setStyleSheet("color: #ff5252; font-weight: bold;")
+        self.cancel_guide_btn.setStyleSheet("color: #ff5252; font-weight: bold; background-color: #2b181a; border: 1px solid #c62828; border-radius: 4px; padding: 4px 12px;")
         self.cancel_guide_btn.setVisible(False)
         self.cancel_guide_btn.clicked.connect(self.cancel_selected_guide_recording)
         action_bar.addWidget(self.cancel_guide_btn)
@@ -10548,8 +10555,21 @@ class MainWindow(QMainWindow):
         if rec_file and os.path.exists(rec_file):
             player = self.config_mgr.live_tv_watch_mode if status == "RECORDING" else self.config_mgr.playback_player
             custom_cmd = self.config_mgr.custom_live_tv_player_cmd if status == "RECORDING" else self.config_mgr.custom_playback_player_cmd
-            self.dbus_client.play_file(rec_file, player=player, custom_cmd=custom_cmd)
+            proc = self.dbus_client.play_file(rec_file, player=player, custom_cmd=custom_cmd, standalone=True)
             self.status_bar.showMessage(f"Playing recording: {os.path.basename(rec_file)}", 4000)
+            if proc:
+                self._active_timeshift = {
+                    "title": title,
+                    "channel": ch,
+                    "queue_id": rec.get("id"),
+                    "kaffeine_key": None,
+                    "process": proc,
+                    "file_path": rec_file,
+                    "is_scheduled_recording": True,
+                    "is_past_playback": (status != "RECORDING")
+                }
+                if hasattr(self, "_timeshift_poll_timer"):
+                    self._timeshift_poll_timer.start()
             return
 
         # If currently recording and file has not appeared on disk yet, fall back to timeshifting live channel
@@ -12058,6 +12078,9 @@ class MainWindow(QMainWindow):
             self.guide_grid_table.setCurrentCell(-1, -1)
             self.guide_grid_table.viewport().update()
 
+        if hasattr(self, "guide_grid_vheader") and self.guide_grid_vheader:
+            self.guide_grid_vheader.viewport().update()
+
         if hasattr(self, "guide_table") and self.guide_table:
             self.guide_table.clearSelection()
             self.guide_table.setCurrentCell(-1, -1)
@@ -12223,7 +12246,7 @@ class MainWindow(QMainWindow):
         if hasattr(self, "stop_timeshift_btn"):
             if single_click:
                 self.stop_timeshift_btn.setVisible(False)
-            elif has_active_ts and (cur_ts_ch == sel_ch or state == "live"):
+            elif has_active_ts and not self._active_timeshift.get("is_past_playback") and (cur_ts_ch == sel_ch or state == "live"):
                 self.stop_timeshift_btn.setVisible(True)
                 self.stop_timeshift_btn.setText(f"Stop Timeshift ({self._active_timeshift.get('channel')})")
             else:
@@ -12294,6 +12317,47 @@ class MainWindow(QMainWindow):
                 if 0 <= self.guide_table.currentRow() < len(getattr(self, "current_guide_items", []))
                 else None
             )
+
+    def _is_program_actively_recording(self, prog: Optional[Dict[str, Any]]) -> bool:
+        """
+        Determines whether the given program is actively being recorded by Kaffeine DVR right now.
+        Returns True only if the program corresponds to an active queue entry with status == 'RECORDING'.
+        """
+        if not prog or not hasattr(self, "queue_mgr") or not self.queue_mgr:
+            return False
+
+        try:
+            active_map = self.queue_mgr.get_active_scheduled_map()
+        except Exception:
+            return False
+
+        if not active_map:
+            return False
+
+        ch_k = (prog.get("kaffeine_channel") or prog.get("channel") or "").strip().lower()
+        st_k = (prog.get("start_iso") or "")[:16]
+
+        if ch_k and st_k:
+            rec = active_map.get((ch_k, st_k))
+            if rec and rec.get("status") == "RECORDING":
+                return True
+
+        prog_qid = prog.get("_queue_id") or prog.get("queue_id")
+        if prog_qid:
+            for item in active_map.values():
+                if item.get("id") == prog_qid and item.get("status") == "RECORDING":
+                    return True
+
+        title_k = (prog.get("show_title") or prog.get("title") or "").strip().lower()
+        if ch_k and title_k:
+            for item in active_map.values():
+                if item.get("status") == "RECORDING":
+                    item_ch = (item.get("channel") or "").strip().lower()
+                    item_title = (item.get("title") or "").strip().lower()
+                    if item_ch == ch_k and (title_k in item_title or item_title in title_k):
+                        return True
+
+        return False
 
     def _get_program_timing_state(self, prog: Dict[str, Any], check_files: bool = True) -> Dict[str, Any]:
         """
@@ -12473,18 +12537,9 @@ class MainWindow(QMainWindow):
         state = timing_info.get("state")
         ch = prog.get("kaffeine_channel") or prog.get("channel", "")
         rec_file = timing_info.get("recorded_file")
-        is_live_rec = timing_info.get("is_active_recording") or bool(rec_file)
 
         if state == "live":
-            if is_live_rec and rec_file:
-                self.dbus_client.play_file(
-                    rec_file,
-                    player=self.config_mgr.live_tv_watch_mode,
-                    custom_cmd=self.config_mgr.custom_live_tv_player_cmd
-                )
-                self.status_bar.showMessage(f"Playing live recording: {os.path.basename(rec_file)}", 4000)
-            else:
-                self.start_timeshift_playback(prog)
+            self.start_timeshift_playback(prog)
         elif state == "upcoming":
             live_prog = self._find_live_program_for_channel(ch)
             if not live_prog:
@@ -12500,12 +12555,26 @@ class MainWindow(QMainWindow):
             self.start_timeshift_playback(live_prog)
         elif state == "past":
             if rec_file:
-                self.dbus_client.play_file(
+                proc = self.dbus_client.play_file(
                     rec_file,
                     player=self.config_mgr.playback_player,
-                    custom_cmd=self.config_mgr.custom_playback_player_cmd
+                    custom_cmd=self.config_mgr.custom_playback_player_cmd,
+                    standalone=True
                 )
                 self.status_bar.showMessage(f"Playing recording: {os.path.basename(rec_file)}", 4000)
+                if proc:
+                    self._active_timeshift = {
+                        "title": prog.get("show_title") or prog.get("title") or "Recording",
+                        "channel": ch,
+                        "queue_id": None,
+                        "kaffeine_key": None,
+                        "process": proc,
+                        "file_path": rec_file,
+                        "is_scheduled_recording": True,
+                        "is_past_playback": True
+                    }
+                    if hasattr(self, "_timeshift_poll_timer"):
+                        self._timeshift_poll_timer.start()
 
     def alt_watch_or_tune_selected_guide_item(self):
         self.watch_or_tune_selected_guide_item()
@@ -12519,18 +12588,9 @@ class MainWindow(QMainWindow):
         ch = prog.get("kaffeine_channel") or prog.get("channel", "")
         title = prog.get("show_title") or prog.get("title") or "Program"
         rec_file = timing_info.get("recorded_file")
-        is_live_rec = timing_info.get("is_active_recording") or bool(rec_file)
 
         if state == "live":
-            if is_live_rec and rec_file:
-                self.dbus_client.play_file(
-                    rec_file,
-                    player=self.config_mgr.live_tv_watch_mode,
-                    custom_cmd=self.config_mgr.custom_live_tv_player_cmd
-                )
-                self.status_bar.showMessage(f"Playing live recording: {os.path.basename(rec_file)}", 4000)
-            else:
-                self.start_timeshift_playback(prog)
+            self.start_timeshift_playback(prog)
         elif state == "upcoming":
             # Check if this program has an active scheduled recording
             active_map = self.queue_mgr.get_active_scheduled_map() if hasattr(self, "queue_mgr") and self.queue_mgr else {}
@@ -12549,12 +12609,26 @@ class MainWindow(QMainWindow):
                 self.watch_or_tune_selected_guide_item()
         elif state == "past":
             if rec_file:
-                self.dbus_client.play_file(
+                proc = self.dbus_client.play_file(
                     rec_file,
                     player=self.config_mgr.playback_player,
-                    custom_cmd=self.config_mgr.custom_playback_player_cmd
+                    custom_cmd=self.config_mgr.custom_playback_player_cmd,
+                    standalone=True
                 )
                 self.status_bar.showMessage(f"Playing recording: {os.path.basename(rec_file)}", 4000)
+                if proc:
+                    self._active_timeshift = {
+                        "title": title,
+                        "channel": ch,
+                        "queue_id": None,
+                        "kaffeine_key": None,
+                        "process": proc,
+                        "file_path": rec_file,
+                        "is_scheduled_recording": True,
+                        "is_past_playback": True
+                    }
+                    if hasattr(self, "_timeshift_poll_timer"):
+                        self._timeshift_poll_timer.start()
             else:
                 QMessageBox.information(
                     self, "Broadcast Ended",
@@ -12878,6 +12952,8 @@ class MainWindow(QMainWindow):
                     print(f"Error removing temporary timeshift file {fpath}: {e}")
 
             msg = f"Timeshift ended on {ch} ('{title}'). Tuner released."
+        elif session.get("is_past_playback"):
+            msg = f"Closed playback for '{title}'."
         else:
             msg = f"Closed playback for '{title}'. Scheduled recording continues in background."
 
@@ -12886,11 +12962,14 @@ class MainWindow(QMainWindow):
         self._refresh_guide_view(keep_scroll=True)
         if hasattr(self, "guide_grid_vheader") and self.guide_grid_vheader:
             self.guide_grid_vheader.viewport().update()
-        prog = self._get_active_selected_program()
-        if prog:
-            self._display_program_details(prog)
-        else:
+        if not user_initiated:
             self.clear_guide_selection()
+        else:
+            prog = self._get_active_selected_program()
+            if prog:
+                self._display_program_details(prog)
+            else:
+                self.clear_guide_selection()
 
     def on_grid_cell_double_clicked(self, row: int, col: int):
         item = self.guide_grid_table.item(row, col)

@@ -213,21 +213,45 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
       z-index: 10;
     }
     .epg-program-tile.scheduled {
-      border-left: 3px solid #ef4444;
-      background: #2b1f2e;
+      border: 1.5px solid #ef4444 !important;
+      background: #2b1619 !important;
+      box-shadow: inset 0 0 4px rgba(239, 68, 68, 0.25);
     }
-    .epg-program-tile.airing-now {
+    .epg-program-tile.recording {
+      border: 2px solid #ef4444 !important;
+      background: #381216 !important;
+      box-shadow: 0 0 8px rgba(239, 68, 68, 0.5), inset 0 0 6px rgba(239, 68, 68, 0.3) !important;
+      z-index: 5;
+    }
+    .epg-program-tile.airing-now:not(.scheduled):not(.recording) {
       border: 1.5px solid #38bdf8;
       box-shadow: 0 0 6px rgba(56, 189, 248, 0.4);
     }
-    .epg-rec-dot {
+    .epg-rec-badge {
       display: inline-block;
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
       background: #ef4444;
+      color: #ffffff;
+      font-size: 0.6rem;
+      font-weight: 700;
+      padding: 1px 4px;
+      border-radius: 3px;
       margin-right: 4px;
       vertical-align: middle;
+      line-height: 1;
+      letter-spacing: 0.2px;
+    }
+    .epg-sched-badge {
+      display: inline-block;
+      background: #b91c1c;
+      color: #ffffff;
+      font-size: 0.6rem;
+      font-weight: 700;
+      padding: 1px 4px;
+      border-radius: 3px;
+      margin-right: 4px;
+      vertical-align: middle;
+      line-height: 1;
+      letter-spacing: 0.2px;
     }
     .epg-tile-title {
       font-size: 0.76rem;
@@ -770,9 +794,15 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
         const timeCell = `<span style="font-weight: 600; color: var(--accent); font-size: 0.82rem;">${escapeHtml(startStr)}</span>`;
 
         const isScheduled = !!p.is_scheduled;
-        const btnHtml = isScheduled
-          ? `<span class="badge badge-armed" style="padding: 2px 6px; font-size: 0.7rem;">Scheduled</span>`
-          : `<button class="btn btn-sm" style="padding: 2px 8px; font-size: 0.75rem;" onclick="scheduleShowByIndex(${idx})">Record</button>`;
+        const isRecording = !!p.is_recording;
+        let btnHtml = '';
+        if (isRecording) {
+          btnHtml = `<span class="badge" style="padding: 3px 8px; font-size: 0.72rem; border-radius: 4px; border: 1px solid #ef4444; background: rgba(239, 68, 68, 0.25); color: #fca5a5; font-weight: 600;">● Recording</span>`;
+        } else if (isScheduled) {
+          btnHtml = `<span class="badge" style="padding: 3px 8px; font-size: 0.72rem; border-radius: 4px; border: 1px solid #f59e0b; background: rgba(245, 158, 11, 0.25); color: #fcd34d; font-weight: 600;">Scheduled</span>`;
+        } else {
+          btnHtml = `<button class="btn btn-sm" style="padding: 2px 8px; font-size: 0.75rem;" onclick="scheduleShowByIndex(${idx})">Record</button>`;
+        }
 
         let titleHtml = `<span style="font-weight: 600;">${escapeHtml(p.title || "Untitled")}</span>`;
         if (p.episode_title) {
@@ -869,14 +899,30 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
           const widthPx = Math.max(40, Math.round((clampedDurMins / 30) * SLOT_WIDTH) - 2);
 
           const isSched = !!p.is_scheduled;
+          const isRec = !!p.is_recording;
           const endDt = new Date(startDt.getTime() + durMins * 60000);
           const isAiringNow = isToday && (startDt <= now && now < endDt);
 
           const timeRange = `${p.start_iso.substring(11, 16)} - ${endDt.toTimeString().substring(0, 5)}`;
-          const tileClass = `epg-program-tile ${isSched ? 'scheduled' : ''} ${isAiringNow ? 'airing-now' : ''}`;
+          let tileClass = 'epg-program-tile';
+          if (isRec) {
+            tileClass += ' recording';
+          } else if (isSched) {
+            tileClass += ' scheduled';
+          }
+          if (isAiringNow) {
+            tileClass += ' airing-now';
+          }
+
+          let badgeHtml = '';
+          if (isRec) {
+            badgeHtml = '<span class="epg-rec-badge">● REC</span>';
+          } else if (isSched) {
+            badgeHtml = '<span class="epg-sched-badge">SCHED</span>';
+          }
 
           tilesHtml += `<div class="${tileClass}" style="left: ${leftPx}px; width: ${widthPx}px;" onclick="openProgramModal(${pIdx})" title="${escapeHtml(p.title)}: ${escapeHtml(p.summary || '')}">
-            <div class="epg-tile-title">${isSched ? '<span class="epg-rec-dot"></span>' : ''}${escapeHtml(p.title || 'Untitled')}</div>
+            <div class="epg-tile-title">${badgeHtml}${escapeHtml(p.title || 'Untitled')}</div>
             <div class="epg-tile-time">${escapeHtml(timeRange)}</div>
           </div>`;
         }
@@ -919,7 +965,11 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
       document.getElementById("progModalSummary").textContent = p.summary || "No description provided in TV Guide listing.";
 
       const actBtn = document.getElementById("progModalActionBtn");
-      if (p.is_scheduled) {
+      if (p.is_recording) {
+        actBtn.textContent = "Currently Recording";
+        actBtn.className = "btn btn-secondary";
+        actBtn.disabled = true;
+      } else if (p.is_scheduled) {
         actBtn.textContent = "Already Scheduled";
         actBtn.className = "btn btn-secondary";
         actBtn.disabled = true;
