@@ -26,6 +26,7 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
       --warning: #f59e0b;
       --header-bg: #141a24;
     }
+    html { font-size: 19.2px; }
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; }
     body { background-color: var(--bg-dark); color: var(--text-main); min-height: 100vh; display: flex; flex-direction: column; }
 
@@ -87,9 +88,9 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
       box-sizing: border-box;
     }
     .epg-channels-col {
-      width: 110px;
-      min-width: 110px;
-      max-width: 110px;
+      width: 120px;
+      min-width: 120px;
+      max-width: 120px;
       flex-shrink: 0;
       display: flex;
       flex-direction: column;
@@ -119,9 +120,9 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
       flex-direction: column;
     }
     .epg-channel-cell {
-      height: 42px;
-      min-height: 42px;
-      max-height: 42px;
+      height: 46px;
+      min-height: 46px;
+      max-height: 46px;
       box-sizing: border-box;
       padding: 4px 8px;
       border-bottom: 1px solid #232b38;
@@ -180,9 +181,9 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
       position: relative;
     }
     .epg-row {
-      height: 42px;
-      min-height: 42px;
-      max-height: 42px;
+      height: 46px;
+      min-height: 46px;
+      max-height: 46px;
       box-sizing: border-box;
       position: relative;
       border-bottom: 1px solid #232b38;
