@@ -1,7 +1,13 @@
 from datetime import datetime, timedelta
-
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QLabel, QMenu, QPushButton, QTableWidgetItem, QWidgetAction
+from PyQt6.QtWidgets import (
+    QLabel,
+    QMenu,
+    QMessageBox,
+    QPushButton,
+    QTableWidgetItem,
+    QWidgetAction,
+)
 
 from kaffeine_dvr.gui import MainWindow, NumberStepper
 
@@ -670,13 +676,18 @@ def test_guide_grid_context_menu_record_without_play_and_description(qtbot, isol
     table.setRowCount(1)
     table.setColumnCount(4)
 
+    future_dt = datetime.now() + timedelta(days=1, hours=2)
+    start_iso = future_dt.strftime("%Y-%m-%dT%H:%M:00")
+    start_time_local = future_dt.strftime("%Y-%m-%d %H:%M:00")
+    start_iso_min = start_iso[:16]
+
     prog = {
         "id": 9901,
         "show_title": "Right Click Mystery",
         "episode_title": "The Hidden Clue",
         "kaffeine_channel": "Channel 5.1",
-        "start_iso": "2026-10-15T21:00:00",
-        "start_time_local": "2026-10-15 21:00:00",
+        "start_iso": start_iso,
+        "start_time_local": start_time_local,
         "duration_iso": "01:00:00",
         "summary": "A captivating mystery show where detectives uncover hidden clues.",
         "_start_col": 0,
@@ -742,7 +753,7 @@ def test_guide_grid_context_menu_record_without_play_and_description(qtbot, isol
 
     assert len(activated_progs) == 0
     active_map = win.queue_mgr.get_active_scheduled_map()
-    assert ("channel 5.1", "2026-10-15T21:00") in active_map
+    assert ("channel 5.1", start_iso_min) in active_map
     assert win.guide_detail_text.isVisible() is False
 
 
@@ -1196,6 +1207,60 @@ def test_send_desktop_notification_persistence(monkeypatch):
     t_idx = calls[0].index("-t")
     assert calls[0][t_idx + 1] == "0"
     assert "Recording Starting Soon: Evening News" in calls[0]
+
+
+def test_channel_order_remove_channel_and_sync(qtbot, isolated_config, monkeypatch):
+    isolated_config.channel_map = {"ABC": "ABC", "NBC": "NBC", "CBS": "CBS", "Fox": "Fox"}
+    isolated_config.channel_order = ["ABC", "NBC", "CBS", "Fox"]
+    win = MainWindow(config_mgr=isolated_config)
+    qtbot.addWidget(win)
+
+    # Initial state
+    assert win.channel_order_list.count() == 4
+    assert "CBS" in win.mapping_text.toPlainText()
+
+    # Mock user confirming deletion
+    monkeypatch.setattr(
+        "PyQt6.QtWidgets.QMessageBox.question",
+        lambda *args, **kwargs: QMessageBox.StandardButton.Yes
+    )
+
+    # Select CBS (row 2) and remove via remove_channel_btn
+    win.channel_order_list.setCurrentRow(2)
+    win.remove_channel_btn.click()
+
+    # Verify channel order list and config updated
+    assert win.channel_order_list.count() == 3
+    remaining = [win.channel_order_list.item(i).data(Qt.ItemDataRole.UserRole) for i in range(win.channel_order_list.count())]
+    assert "CBS" not in remaining
+    assert isolated_config.channel_order == ["ABC", "NBC", "Fox"]
+
+    # Verify channel_map and mapping_text in Channel Importing section updated
+    assert "CBS" not in isolated_config.channel_map
+    assert "CBS" not in win.mapping_text.toPlainText()
+
+    # Test removing via Delete key press
+    win.channel_order_list.setCurrentRow(0)  # ABC
+    from PyQt6.QtGui import QKeyEvent
+    del_event = QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_Delete, Qt.KeyboardModifier.NoModifier)
+    win._channel_order_key_press(del_event)
+
+    assert win.channel_order_list.count() == 2
+    assert "ABC" not in isolated_config.channel_order
+    assert "ABC" not in isolated_config.channel_map
+    assert "ABC" not in win.mapping_text.toPlainText()
+
+    # Test that saving Channel Importing text syncs back to channel order
+    win.mapping_text.setPlainText("● NBC = NBC")
+    with monkeypatch.context() as m:
+        m.setattr("PyQt6.QtWidgets.QMessageBox.information", lambda *args, **kwargs: None)
+        win.save_channel_mapping()
+
+    assert isolated_config.channel_map == {"NBC": "NBC"}
+    assert isolated_config.channel_order == ["NBC"]
+    assert win.channel_order_list.count() == 1
+    assert win.channel_order_list.item(0).data(Qt.ItemDataRole.UserRole) == "NBC"
+
 
 
 

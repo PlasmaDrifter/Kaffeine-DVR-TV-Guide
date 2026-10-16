@@ -943,8 +943,16 @@ class GuideService:
             params.extend([q_like, q_like, q_like])
 
         if channel and channel != "All":
-            sql += " AND kaffeine_channel = ?"
-            params.append(channel)
+            ch_targets = {channel}
+            if getattr(self, "channel_map", None):
+                if channel in self.channel_map:
+                    ch_targets.add(self.channel_map[channel])
+                for k, v in self.channel_map.items():
+                    if v == channel:
+                        ch_targets.add(k)
+            placeholders = ",".join("?" for _ in ch_targets)
+            sql += f" AND (kaffeine_channel IN ({placeholders}) OR network IN ({placeholders}))"
+            params.extend(list(ch_targets) + list(ch_targets))
 
         if airdate:
             if include_overhang:

@@ -6309,6 +6309,32 @@ class MainWindow(QMainWindow):
 
         self.mapping_text = QTextEdit()
         self.mapping_text.setMinimumHeight(200)
+
+        # In-box explainer label on the right side of the text area
+        self.mapping_tip_lbl = QLabel(self.mapping_text)
+        self.mapping_tip_lbl.setTextFormat(Qt.TextFormat.RichText)
+        self.mapping_tip_lbl.setWordWrap(True)
+        self.mapping_tip_lbl.setText(
+            "<b>Want to rename or remove channels in your guide? Do it here.</b><br>"
+            "This connects your guide display names to your scanned Kaffeine channels.<br><br>"
+            "<b>Format:</b> <span style='color: #52b788;'>Guide Name = Tuned Channel</span><br>"
+            "<b>Example:</b> <span style='color: #52b788;'>Fox = KSAZ-HD</span> displays 'Fox' while tuning KSAZ-HD.<br>"
+            "If you renamed them already, leave as <span style='color: #52b788;'>Fox = Fox</span>.<br><br>"
+            "<b>Delete Channels:</b> Simply delete unwanted lines here and click <span style='color: #52b788;'>Save Channels</span>, "
+            "or select a channel in the <b>TV Guide Channel Order</b> list to the right and click <b>✕ Remove</b> (or press Delete).<br><br>"
+            "<i>Channels are typically imported automatically during initial setup.<br>"
+            "If you recently scanned new channels in Kaffeine, click<br>"
+            "<span style='color: #52b788;'>Import Channels from Kaffeine</span> above to reload your lineup.</i>"
+        )
+        self.mapping_tip_lbl.setStyleSheet("color: #8a99ad; font-size: 13px; line-height: 1.5; background: transparent;")
+        self.mapping_tip_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+        mapping_tip_layout = QHBoxLayout(self.mapping_text)
+        mapping_tip_layout.addStretch(1)
+        mapping_tip_layout.addWidget(self.mapping_tip_lbl, 1)
+        mapping_tip_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        mapping_tip_layout.setContentsMargins(20, 15, 20, 20)
+
         map_layout.addWidget(self.mapping_text)
         lineup_panels.addWidget(map_box, 1)
 
@@ -6559,6 +6585,92 @@ class MainWindow(QMainWindow):
     def _apply_channel_order_to_views(self):
         self.refresh_channel_dropdowns()
         self._refresh_guide_view(keep_scroll=True)
+
+    def _show_channel_order_context_menu(self, pos):
+        item = self.channel_order_list.itemAt(pos)
+        if not item:
+            return
+        row = self.channel_order_list.row(item)
+        menu = QMenu(self)
+        remove_act = menu.addAction("✕ Remove Channel")
+        menu.addSeparator()
+        move_up_act = menu.addAction("▲ Move Up")
+        move_down_act = menu.addAction("▼ Move Down")
+
+        if row == 0:
+            move_up_act.setEnabled(False)
+        if row == self.channel_order_list.count() - 1:
+            move_down_act.setEnabled(False)
+
+        action = menu.exec(self.channel_order_list.mapToGlobal(pos))
+        if action == remove_act:
+            self.channel_order_list.setCurrentRow(row)
+            self._remove_selected_channel_order()
+        elif action == move_up_act:
+            self.channel_order_list.setCurrentRow(row)
+            self._move_channel_up()
+        elif action == move_down_act:
+            self.channel_order_list.setCurrentRow(row)
+            self._move_channel_down()
+
+    def _channel_order_key_press(self, event):
+        if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+            self._remove_selected_channel_order()
+            event.accept()
+            return
+        QListWidget.keyPressEvent(self.channel_order_list, event)
+
+    def _remove_selected_channel_order(self):
+        row = self.channel_order_list.currentRow()
+        if row < 0 or row >= self.channel_order_list.count():
+            return
+        item = self.channel_order_list.item(row)
+        if not item:
+            return
+        ch_name = item.data(Qt.ItemDataRole.UserRole) or item.text().split(".", 1)[-1].strip()
+
+        reply = QMessageBox.question(
+            self,
+            "Remove Channel",
+            f"Are you sure you want to remove channel '{ch_name}' from your TV Guide lineup?\n\n"
+            f"This will remove it from TV Guide Order, Channel Importing, and delete any cached guide listings for this channel.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        self.channel_order_list.takeItem(row)
+        self._renumber_channel_order_list()
+
+        # Update channel_order in config
+        remaining_channels = self._get_current_list_channels()
+        self.config_mgr.channel_order = remaining_channels
+
+        # Update channel_map in config and guide_service
+        cur_map = dict(self.config_mgr.channel_map)
+        new_map = {k: v for k, v in cur_map.items() if k != ch_name and v != ch_name}
+        self.config_mgr.channel_map = new_map
+        self.guide_service.set_channel_map(new_map)
+
+        # Remove from tvpassport_stations if present
+        cur_passport = dict(self.config_mgr.tvpassport_stations)
+        if ch_name in cur_passport:
+            del cur_passport[ch_name]
+            self.config_mgr.tvpassport_stations = cur_passport
+            self.update_tvpassport_notice()
+
+        # Prune cached database programs for this channel
+        self.guide_service.delete_channel_programs([ch_name])
+
+        # Reflect in Channel Importing section text
+        self.populate_channel_mapping_text()
+
+        # Update views, dropdowns, and health badge
+        self.refresh_channel_dropdowns()
+        self.refresh_channel_health_badge()
+        self._apply_channel_order_to_views()
+        self.flash_save_indicator(f"Removed '{ch_name}'")
 
     # Subcategory 3: Automation & DVR
     def create_settings_automation_tab(self) -> QWidget:
@@ -8696,12 +8808,41 @@ class MainWindow(QMainWindow):
                 k, v = line.split("=", 1)
                 if k.strip() and v.strip():
                     new_map[k.strip()] = v.strip()
+
+        old_map = self.config_mgr.channel_map or {}
+        old_channels = set(old_map.keys()) | set(old_map.values())
+        new_channels = set(new_map.keys()) | set(new_map.values())
+        removed_channels = old_channels - new_channels
+
+        # Prune removed channels from channel_order
+        cur_order = self.config_mgr.channel_order
+        updated_order = [ch for ch in cur_order if ch in new_channels]
+        # Append any newly added channels to channel_order if not already present
+        for k in new_map.keys():
+            v = new_map[k]
+            if k not in updated_order and v not in updated_order:
+                updated_order.append(k)
+
+        self.config_mgr.channel_order = updated_order
         self.config_mgr.channel_map = new_map
         self.guide_service.set_channel_map(new_map)
+
+        if removed_channels:
+            # Clean up tvpassport stations for removed channels
+            cur_passport = dict(self.config_mgr.tvpassport_stations)
+            for r_ch in removed_channels:
+                if r_ch in cur_passport:
+                    del cur_passport[r_ch]
+            self.config_mgr.tvpassport_stations = cur_passport
+            # Delete cached database records for removed channels
+            self.guide_service.delete_channel_programs(list(removed_channels))
+
         self.populate_channel_mapping_text()
         self.update_tvpassport_notice()
         self.refresh_channel_order_list()
         self.refresh_channel_dropdowns()
+        self.refresh_channel_health_badge()
+        self._apply_channel_order_to_views()
         self.flash_save_indicator("Lineup Saved")
         QMessageBox.information(self, "Saved", "Channel mapping saved successfully.")
         self.filter_guide()
@@ -8723,12 +8864,21 @@ class MainWindow(QMainWindow):
             ch_name = ch["name"].strip()
             current_map[ch_name] = ch_name
 
+        new_valid = set(current_map.keys()) | set(current_map.values())
+        updated_order = [ch for ch in self.config_mgr.channel_order if ch in new_valid]
+        for ch_name in current_map.keys():
+            if ch_name not in updated_order:
+                updated_order.append(ch_name)
+
+        self.config_mgr.channel_order = updated_order
         self.config_mgr.channel_map = current_map
         self.guide_service.set_channel_map(current_map)
         self.populate_channel_mapping_text()
         self.update_tvpassport_notice()
         self.refresh_channel_order_list()
         self.refresh_channel_dropdowns()
+        self.refresh_channel_health_badge()
+        self._apply_channel_order_to_views()
         self.filter_guide()
 
         if not silent:
@@ -11950,11 +12100,8 @@ class MainWindow(QMainWindow):
             channels = [filter_ch]
         else:
             channels = list(self.config_mgr.get_ordered_channels())
-            # Also include any channel present in programs that wasn't in config
-            for p in programs:
-                ch_name = p.get("kaffeine_channel")
-                if ch_name and ch_name not in channels:
-                    channels.append(ch_name)
+            if not channels:
+                channels = list(self.config_mgr.channel_map.keys())
 
         self.grid_channels = channels
         self.guide_grid_table.setRowCount(len(channels))
@@ -11991,10 +12138,16 @@ class MainWindow(QMainWindow):
         tile_text_color = QColor("#ffffff")
 
         for row_idx, ch in enumerate(channels):
+            # Resolve aliases for channel ch (both guide display name and tuned hardware channel)
+            kaff_val = self.config_mgr.channel_map.get(ch, ch)
+            match_channels = {ch.strip().lower(), kaff_val.strip().lower()}
+
             # Filter specifically to selected airdate and next-day late-night overhang
             ch_progs = []
             for p in programs:
-                if p.get("kaffeine_channel") != ch:
+                p_ch = (p.get("kaffeine_channel") or "").strip().lower()
+                p_net = (p.get("network") or "").strip().lower()
+                if p_ch not in match_channels and p_net not in match_channels:
                     continue
                 start_iso = p.get("start_iso")
                 if not start_iso:

@@ -694,30 +694,41 @@ class ConfigManager:
 
     @channel_order.setter
     def channel_order(self, val: List[str]):
-        self.data["channel_order"] = val
+        if self.channel_map:
+            val_to_key = {v: k for k, v in self.channel_map.items()}
+            normalized = []
+            for ch in val:
+                resolved = ch if ch in self.channel_map else val_to_key.get(ch, ch)
+                if resolved not in normalized:
+                    normalized.append(resolved)
+            self.data["channel_order"] = normalized
+        else:
+            self.data["channel_order"] = val
         self.save()
 
     def get_ordered_channels(self) -> List[str]:
         """
         Returns all unique channels in configured manual order.
-        Strictly reflects the channels configured in channel_map (Channel Importing).
+        Strictly reflects the guide display names configured in channel_map (Channel Importing).
         Any active channels not yet in channel_order are appended to the end.
         """
         if not self.channel_map:
             return []
 
-        all_valid = list(dict.fromkeys(
-            list(self.channel_map.keys()) + list(self.channel_map.values())
-        ))
+        val_to_key = {v: k for k, v in self.channel_map.items()}
+        guide_keys = list(self.channel_map.keys())
+
         saved_order = self.channel_order
         ordered = []
         for ch in saved_order:
-            if ch in all_valid and ch not in ordered:
+            display_name = ch if ch in self.channel_map else val_to_key.get(ch)
+            if display_name and display_name in guide_keys and display_name not in ordered:
+                ordered.append(display_name)
+
+        for ch in guide_keys:
+            if ch not in ordered:
                 ordered.append(ch)
-        for ch in self.channel_map.keys():
-            kaff_val = self.channel_map[ch]
-            if ch not in ordered and kaff_val not in ordered:
-                ordered.append(ch)
+
         return ordered
 
     @property
