@@ -2,6 +2,9 @@
 
 Modern TV Guide browser, auto-record series scheduler, and Just-In-Time (JIT) DVR recording daemon for Kaffeine on Linux.
 
+> [!NOTE]
+> This is an independent, non-commercial open-source companion tool. It is not affiliated with, maintained by, or endorsed by the KDE Project or the official Kaffeine developers.
+
 ---
 
 ## Overview
@@ -181,6 +184,12 @@ kaffeine-dvr --list
 # Run the background watcher daemon in terminal
 kaffeine-dvr --watch
 ```
+
+---
+
+## Disclaimer
+
+This is an independent, non-commercial open-source companion tool. It is not affiliated with, maintained by, or endorsed by the KDE Project or the official Kaffeine developers.
 
 ---
 
