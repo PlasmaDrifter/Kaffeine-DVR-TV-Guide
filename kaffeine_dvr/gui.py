@@ -110,9 +110,10 @@ try:
     from .guide_service import GuideService
     from .queue_manager import QueueManager
     from .rules_engine import RulesEngine
-    from .signal_scanner import ChannelSignalScanWorker
+    from .signal_scanner import ChannelSignalScanWorker, DvbSignalReader
     from .storage_manager import StorageManager
     from .watcher import Watcher
+    from .web import KaffeineWebServer
 except (ImportError, ValueError):
     from kaffeine_dvr.config import (
         APP_THEMES,
@@ -124,9 +125,10 @@ except (ImportError, ValueError):
     from kaffeine_dvr.guide_service import GuideService
     from kaffeine_dvr.queue_manager import QueueManager
     from kaffeine_dvr.rules_engine import RulesEngine
-    from kaffeine_dvr.signal_scanner import ChannelSignalScanWorker
+    from kaffeine_dvr.signal_scanner import ChannelSignalScanWorker, DvbSignalReader
     from kaffeine_dvr.storage_manager import StorageManager
     from kaffeine_dvr.watcher import Watcher
+    from kaffeine_dvr.web import KaffeineWebServer
 
 
 def _get_checkmark_icon_path() -> str:
@@ -1235,7 +1237,6 @@ class ChannelSignalHealthDialog(BaseFramelessDialog):
         self.status_lbl.setText(f"Aiming antenna for {ch_name}. Watch live video in Kaffeine and adjust antenna for peak signal.")
 
         # 2. Instruct Kaffeine to tune to channel and unminimize/raise window for live zero-latency feedback
-        from .dbus_client import KaffeineDbusClient
         client = KaffeineDbusClient()
         if not client.is_running():
             client.launch_kaffeine(mode="normal")
@@ -1249,7 +1250,6 @@ class ChannelSignalHealthDialog(BaseFramelessDialog):
 
     def _on_aim_timer_tick(self):
         """Read instantaneous hardware metrics and update live aiming meter."""
-        from .signal_scanner import DvbSignalReader
         metrics = DvbSignalReader.read_metrics()
         locked = metrics.get("locked", False)
         has_sig = metrics.get("has_signal", False) or metrics.get("has_carrier", False)
@@ -1317,8 +1317,6 @@ class ChannelSignalHealthDialog(BaseFramelessDialog):
 
         # Minimize Kaffeine if configured launch mode is taskbar or tray
         try:
-            from .config import ConfigManager
-            from .dbus_client import KaffeineDbusClient
             cfg = ConfigManager()
             if cfg.launch_mode in ("taskbar", "tray"):
                 KaffeineDbusClient().minimize_kaffeine(mode=cfg.launch_mode)
@@ -5260,7 +5258,6 @@ class MainWindow(QMainWindow):
         self._save_indicator_timer = None
         self._grid_scroll_anim = None
 
-        from .web import KaffeineWebServer
         self.web_server = KaffeineWebServer(self.config_mgr, self.queue_mgr, self.guide_service, self.storage_mgr)
         if self.config_mgr.web_server_enabled and not os.environ.get("PYTEST_CURRENT_TEST"):
             self.web_server.start()

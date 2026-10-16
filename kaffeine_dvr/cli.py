@@ -131,8 +131,12 @@ def main():
             print(f"- {r.get('name')} | {r.get('channel')} | {r.get('begin')} | Duration: {r.get('duration')} | {state}")
 
     if args.web:
-        from .storage_manager import StorageManager
-        from .web import KaffeineWebServer
+        try:
+            from .storage_manager import StorageManager
+            from .web import KaffeineWebServer
+        except (ImportError, ValueError):
+            from kaffeine_dvr.storage_manager import StorageManager
+            from kaffeine_dvr.web import KaffeineWebServer
         if args.port:
             cfg.web_server_port = args.port
         storage_mgr = StorageManager(cfg, queue_mgr)
