@@ -551,6 +551,8 @@ class ConfigManager:
                         data["show_clock"] = True
                     if "clock_font_size" not in data:
                         data["clock_font_size"] = 11
+                    if "settings_ui_scale" not in data:
+                        data["settings_ui_scale"] = 100
                     if "app_theme" not in data:
                         data["app_theme"] = "midnight"
                     if "theme_preset" not in data:
@@ -625,6 +627,7 @@ class ConfigManager:
             "time_line_opacity": 100,
             "show_clock": True,
             "clock_font_size": 11,
+            "settings_ui_scale": 100,
             "guide_single_click_play": True,
             "use_custom_title_bar": True,
             "app_theme": "midnight",
@@ -1314,6 +1317,15 @@ class ConfigManager:
     @clock_font_size.setter
     def clock_font_size(self, val: int):
         self.data["clock_font_size"] = max(8, min(24, int(val)))
+        self.save()
+
+    @property
+    def settings_ui_scale(self) -> int:
+        return int(self.data.get("settings_ui_scale", 100))
+
+    @settings_ui_scale.setter
+    def settings_ui_scale(self, val: int):
+        self.data["settings_ui_scale"] = max(90, min(180, int(val)))
         self.save()
 
     @property

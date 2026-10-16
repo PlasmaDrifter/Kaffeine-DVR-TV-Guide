@@ -1731,7 +1731,8 @@ def make_setting_label(title: str, tooltip_text: str) -> QWidget:
     lay.setSpacing(6)
     badge = HelpBadge(tooltip_text)
     lbl = QLabel(title)
-    lbl.setStyleSheet("font-size: 13px; color: #e2e8f0;")
+    lbl.setObjectName("settingTitleLabel")
+    lbl.setStyleSheet("color: #e2e8f0;")
     lay.addWidget(badge)
     lay.addWidget(lbl)
     lay.addStretch()
@@ -4895,6 +4896,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.create_settings_tab(), "Settings")
         self.tabs.addTab(self.create_help_tab(), "Help and Information")
         self.tabs.currentChanged.connect(self._on_main_tab_changed)
+        self._apply_settings_ui_scale()
 
         # Corner Clock Widget for Tabs (used when native OS title bar is active)
         self.clock_widget = self._create_clock_widget()
@@ -6350,20 +6352,27 @@ class MainWindow(QMainWindow):
 
         left_col.addWidget(dvr_group)
 
-        # Application Window Dimensions (Moved under DVR Scheduling)
-        win_group = QGroupBox("Application Window Dimensions")
+        # Application Window Dimensions & UI Scaling (Moved under DVR Scheduling)
+        win_group = QGroupBox("Application Window Dimensions && UI Scaling")
         win_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
         win_layout = QVBoxLayout(win_group)
         win_layout.setContentsMargins(15, 15, 15, 15)
         win_layout.setSpacing(10)
 
+        win_cols_row = QHBoxLayout()
+        win_cols_row.setSpacing(18)
+
+        # Left Column: Window Dimensions
+        dim_col = QVBoxLayout()
+        dim_col.setSpacing(8)
+
         self.win_size_lbl = QLabel(self._get_window_size_label_text())
         self.win_size_lbl.setStyleSheet("color: #a0b2c6; font-size: 13px; font-weight: 500;")
-        win_layout.addWidget(self.win_size_lbl)
+        dim_col.addWidget(self.win_size_lbl)
 
         win_size_btn_row = QHBoxLayout()
         win_size_btn_row.setContentsMargins(0, 0, 0, 0)
-        win_size_btn_row.setSpacing(10)
+        win_size_btn_row.setSpacing(8)
 
         self.save_win_size_btn = QPushButton("Save Size")
         self.save_win_size_btn.setObjectName("primaryActionBtn")
@@ -6378,13 +6387,53 @@ class MainWindow(QMainWindow):
         self.reset_win_size_btn.clicked.connect(self.reset_window_size_to_default)
         win_size_btn_row.addWidget(self.reset_win_size_btn)
         win_size_btn_row.addStretch()
-        win_layout.addLayout(win_size_btn_row)
+        dim_col.addLayout(win_size_btn_row)
 
-        self.custom_title_bar_check = QCheckBox("Use Modern Frameless Title Bar (Custom drag, minimize && close)")
+        self.custom_title_bar_check = QCheckBox("Use Modern Frameless Title Bar")
         self.custom_title_bar_check.setStyleSheet("color: #e2e8f0; font-size: 13px; font-weight: 500; margin-top: 4px;")
         self.custom_title_bar_check.setChecked(getattr(self.config_mgr, "use_custom_title_bar", True))
         self.custom_title_bar_check.toggled.connect(self._on_custom_title_bar_toggled)
-        win_layout.addWidget(self.custom_title_bar_check)
+        dim_col.addWidget(self.custom_title_bar_check)
+
+        win_cols_row.addLayout(dim_col, 1)
+
+        # Right Column: Settings & Help UI Scale (to the right of saving dimensions)
+        scale_col = QVBoxLayout()
+        scale_col.setSpacing(6)
+
+        lbl_scale_title = QLabel("<b>Settings &amp; Help UI Scale</b>")
+        lbl_scale_title.setStyleSheet("color: #e2e8f0; font-size: 13px;")
+        scale_col.addWidget(lbl_scale_title)
+
+        scale_ctrl_row = QHBoxLayout()
+        scale_ctrl_row.setContentsMargins(0, 0, 0, 0)
+        scale_ctrl_row.setSpacing(8)
+
+        self.settings_ui_scale_spin = NumberStepper()
+        self.settings_ui_scale_spin.setRange(90, 180)
+        self.settings_ui_scale_spin.setSingleStep(5)
+        self.settings_ui_scale_spin.setValue(getattr(self.config_mgr, "settings_ui_scale", 100))
+        self.settings_ui_scale_spin.setSuffix("%")
+        self.settings_ui_scale_spin.setFixedWidth(130)
+        self.settings_ui_scale_spin.valueChanged.connect(self._on_settings_ui_scale_changed)
+        scale_ctrl_row.addWidget(self.settings_ui_scale_spin)
+
+        self.reset_ui_scale_btn = QPushButton("Reset 100%")
+        self.reset_ui_scale_btn.setObjectName("secondaryActionBtn")
+        self.reset_ui_scale_btn.setToolTip("Reset Settings & Help UI scale to default 100%")
+        self.reset_ui_scale_btn.clicked.connect(lambda: self.settings_ui_scale_spin.setValue(100))
+        scale_ctrl_row.addWidget(self.reset_ui_scale_btn)
+        scale_ctrl_row.addStretch()
+        scale_col.addLayout(scale_ctrl_row)
+
+        lbl_scale_hint = QLabel("(Enlarges text, inputs &amp; documentation)")
+        lbl_scale_hint.setStyleSheet("font-size: 11px; color: #94a3b8;")
+        scale_col.addWidget(lbl_scale_hint)
+        scale_col.addStretch()
+
+        win_cols_row.addLayout(scale_col, 1)
+
+        win_layout.addLayout(win_cols_row)
 
         left_col.addWidget(win_group)
         left_col.addStretch(1)
@@ -6993,6 +7042,8 @@ class MainWindow(QMainWindow):
             self.notify_persistent_check.stateChanged.connect(self._auto_save_automation_settings)
         if hasattr(self, "notify_lead_spin"):
             self.notify_lead_spin.valueChanged.connect(self._auto_save_automation_settings)
+        if hasattr(self, "settings_ui_scale_spin"):
+            self.settings_ui_scale_spin.valueChanged.connect(self._auto_save_automation_settings)
 
         scroll.setWidget(container)
         return scroll
@@ -7600,18 +7651,19 @@ class MainWindow(QMainWindow):
         title_layout = QVBoxLayout(title_box)
         title_layout.setContentsMargins(0, 0, 0, 0)
         h1 = QLabel("<b>Channel &amp; Guide Setup Walkthrough</b>")
+        h1.setObjectName("helpHeaderTitle")
         h1.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        h1.setStyleSheet("font-size: 20px; font-weight: bold; color: #ffffff;")
+        h1.setStyleSheet("font-weight: bold; color: #ffffff;")
         title_layout.addWidget(h1)
         layout.addWidget(title_box)
 
         # Base style helper
         def make_card_style(color: str) -> str:
             return (
-                "QGroupBox { font-size: 15px; font-weight: bold; margin-top: 14px; padding-top: 18px; } "
+                "QGroupBox { font-weight: bold; margin-top: 14px; padding-top: 18px; } "
                 f"QGroupBox::title {{ subcontrol-origin: margin; subcontrol-position: top center; padding: 0 6px; color: {color}; }}"
             )
-        body_style = "color: #d8e2ee; font-size: 14px; line-height: 1.6;"
+        body_style = "color: #d8e2ee; line-height: 1.6;"
 
         # Step 1: Physical Channels & Antenna Scan (Kaffeine)
         s1_box = QGroupBox("Step 1: Antenna Scan in Kaffeine")
@@ -7716,18 +7768,19 @@ class MainWindow(QMainWindow):
         title_layout = QVBoxLayout(title_box)
         title_layout.setContentsMargins(0, 0, 0, 0)
         h1 = QLabel("<b>Kaffeine DVR &amp; TV Info</b>")
+        h1.setObjectName("helpHeaderTitle")
         h1.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        h1.setStyleSheet("font-size: 20px; font-weight: bold; color: #ffffff;")
+        h1.setStyleSheet("font-weight: bold; color: #ffffff;")
         title_layout.addWidget(h1)
         layout.addWidget(title_box)
 
         # Base styles
         def make_group_style(color: str) -> str:
             return (
-                "QGroupBox { font-size: 15px; font-weight: bold; margin-top: 14px; padding-top: 18px; } "
+                "QGroupBox { font-weight: bold; margin-top: 14px; padding-top: 18px; } "
                 f"QGroupBox::title {{ subcontrol-origin: margin; subcontrol-position: top center; padding: 0 6px; color: {color}; }}"
             )
-        body_style = "color: #d8e2ee; font-size: 14px; line-height: 1.6;"
+        body_style = "color: #d8e2ee; line-height: 1.6;"
 
         # Section 1: Guide Sources & Coverage
         sources_box = QGroupBox("1. TV Guide Coverage and Providers")
@@ -7828,22 +7881,23 @@ class MainWindow(QMainWindow):
         title_layout = QVBoxLayout(title_box)
         title_layout.setContentsMargins(0, 0, 0, 0)
         h1 = QLabel("<b>TV Guide Grid Usage &amp; Capabilities</b>")
+        h1.setObjectName("helpHeaderTitle")
         h1.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        h1.setStyleSheet("font-size: 20px; font-weight: bold; color: #ffffff;")
+        h1.setStyleSheet("font-weight: bold; color: #ffffff;")
         title_layout.addWidget(h1)
         sub1 = QLabel("Master navigation, continuous live channel playback, recording scheduling, and visual customization.")
         sub1.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        sub1.setStyleSheet("font-size: 13px; color: #94a3b8;")
+        sub1.setStyleSheet("color: #94a3b8;")
         title_layout.addWidget(sub1)
         layout.addWidget(title_box)
 
         # Base style helpers
         def make_group_style(color: str) -> str:
             return (
-                "QGroupBox { font-size: 15px; font-weight: bold; margin-top: 14px; padding-top: 18px; } "
+                "QGroupBox { font-weight: bold; margin-top: 14px; padding-top: 18px; } "
                 f"QGroupBox::title {{ subcontrol-origin: margin; subcontrol-position: top center; padding: 0 6px; color: {color}; }}"
             )
-        body_style = "color: #d8e2ee; font-size: 14px; line-height: 1.6;"
+        body_style = "color: #d8e2ee; line-height: 1.6;"
 
         # Section 1: Navigation & Interactive Controls
         nav_box = QGroupBox("1. Fluid Navigation && Grid Controls")
@@ -8447,6 +8501,8 @@ class MainWindow(QMainWindow):
             self.config_mgr.show_clock = not self.hide_clock_check.isChecked()
         if hasattr(self, "clock_size_spin"):
             self.config_mgr.clock_font_size = self.clock_size_spin.value()
+        if hasattr(self, "settings_ui_scale_spin"):
+            self.config_mgr.settings_ui_scale = self.settings_ui_scale_spin.value()
 
         # Storage & Retention settings
         self.config_mgr.auto_cleanup_enabled = self.cleanup_enable_check.isChecked()
@@ -8641,6 +8697,74 @@ class MainWindow(QMainWindow):
         self.config_mgr.clock_font_size = val
         self._update_clock_display()
 
+    def _on_settings_ui_scale_changed(self, val: int):
+        self.config_mgr.settings_ui_scale = int(val)
+        self._apply_settings_ui_scale(int(val))
+        self.flash_save_indicator(f"UI Scale: {val}%")
+
+    def _apply_settings_ui_scale(self, scale_percent: Optional[int] = None):
+        """Scales the user interface of Settings and Help and Information tabs."""
+        if scale_percent is None:
+            scale_percent = getattr(self.config_mgr, "settings_ui_scale", 100) if self.config_mgr else 100
+        f = max(90, min(180, int(scale_percent))) / 100.0
+
+        lbl_sz = max(11, int(round(13 * f)))
+        grp_sz = max(12, int(round(15 * f)))
+        tab_sz = max(10, int(round(12 * f)))
+        btn_sz = max(10, int(round(12 * f)))
+        h1_sz = max(16, int(round(20 * f)))
+        body_sz = max(12, int(round(14 * f)))
+        input_sz = max(11, int(round(13 * f)))
+        tab_pad_v = max(4, int(round(6 * f)))
+        tab_pad_h = max(12, int(round(18 * f)))
+
+        settings_css = f"""
+            QTabWidget#settingsSubTabs > QTabBar::tab {{
+                font-size: {tab_sz}px;
+                padding: {tab_pad_v}px {tab_pad_h}px;
+            }}
+            QTabWidget#settingsSubTabs QLabel {{
+                font-size: {lbl_sz}px;
+            }}
+            QTabWidget#settingsSubTabs QGroupBox {{
+                font-size: {grp_sz}px;
+                font-weight: bold;
+            }}
+            QTabWidget#settingsSubTabs QPushButton {{
+                font-size: {btn_sz}px;
+            }}
+            QTabWidget#settingsSubTabs QCheckBox {{
+                font-size: {lbl_sz}px;
+            }}
+            QTabWidget#settingsSubTabs QLineEdit,
+            QTabWidget#settingsSubTabs QSpinBox,
+            QTabWidget#settingsSubTabs QComboBox {{
+                font-size: {input_sz}px;
+            }}
+        """
+
+        help_css = f"""
+            QTabWidget#helpSubTabs > QTabBar::tab {{
+                font-size: {tab_sz}px;
+                padding: {tab_pad_v}px {tab_pad_h}px;
+            }}
+            QTabWidget#helpSubTabs QLabel {{
+                font-size: {body_sz}px;
+            }}
+            QTabWidget#helpSubTabs QLabel#helpHeaderTitle {{
+                font-size: {h1_sz}px;
+            }}
+            QTabWidget#helpSubTabs QGroupBox {{
+                font-size: {grp_sz}px;
+                font-weight: bold;
+            }}
+        """
+
+        if hasattr(self, "settings_subtabs") and self.settings_subtabs:
+            self.settings_subtabs.setStyleSheet(settings_css)
+        if hasattr(self, "help_subtabs") and self.help_subtabs:
+            self.help_subtabs.setStyleSheet(help_css)
+
     def apply_app_theme(self, theme_key: str):
         """Applies a full application shell theme dynamically to the running Qt application."""
         if theme_key not in APP_THEMES:
@@ -8677,6 +8801,7 @@ class MainWindow(QMainWindow):
         if hasattr(self, "reset_cat_colors_btn") and self.reset_cat_colors_btn:
             self.reset_cat_colors_btn.setIcon(self._create_defaults_theme_icon(tokens.get("accent_primary")))
 
+        self._apply_settings_ui_scale()
         self.flash_save_indicator(f"App Theme: {tokens['name']}")
 
     def _build_app_theme_chips(self):

@@ -74,3 +74,18 @@ def test_reset_category_colors(isolated_config: ConfigManager):
 
     cfg.reset_category_colors()
     assert cfg.category_colors["movies"] == DEFAULT_CATEGORY_COLORS["movies"]
+
+
+def test_settings_ui_scale_clamping(isolated_config: ConfigManager):
+    cfg = isolated_config
+    assert cfg.settings_ui_scale == 100
+
+    cfg.settings_ui_scale = 50
+    assert cfg.settings_ui_scale == 90
+
+    cfg.settings_ui_scale = 250
+    assert cfg.settings_ui_scale == 180
+
+    cfg.settings_ui_scale = 125
+    assert cfg.settings_ui_scale == 125
+
