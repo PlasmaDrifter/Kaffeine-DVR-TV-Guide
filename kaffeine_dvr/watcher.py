@@ -142,12 +142,94 @@ class Watcher:
                 except Exception as e:
                     print(f"Error checking D-Bus running streams: {e}", flush=True)
 
+    def enforce_stale_recording_cleanup(self):
+        """
+        Watchdog that prevents runaway recordings from holding the tuner.
+        1. If Kaffeine is running, queries active D-Bus schedule entries (is_running == True).
+        2. If a running stream has exceeded its scheduled end time by more than 15s (or is already
+           archived in history / cancelled from the queue), actively halts it via D-Bus to free the tuner.
+        """
+        if not self.dbus_client.is_running():
+            return
+
+        try:
+            active_dbus = self.dbus_client._list_via_dbus()
+        except Exception as e:
+            print(f"Notice: Failed to query D-Bus schedule for stale cleanup: {e}", flush=True)
+            return
+
+        running_streams = [e for e in active_dbus if e.get("is_running")]
+        if not running_streams:
+            return
+
+        now = datetime.now()
+        active_queue = self.queue_mgr.list_queue(include_completed=False)
+
+        for stream in running_streams:
+            s_name = (stream.get("name") or "").strip().lower()
+            s_ch = (stream.get("channel") or "").strip().lower()
+            s_id = stream.get("id")
+
+            # Check if this stream corresponds to an active recording in the queue
+            matching_rec = None
+            for rec in active_queue:
+                r_ch = (rec.get("channel") or "").strip().lower()
+                r_title = (rec.get("title") or "").strip().lower()
+                r_key = rec.get("kaffeine_key")
+                if (r_key and int(r_key) == int(s_id)) or (r_ch == s_ch and (r_title in s_name or s_name in r_title)):
+                    matching_rec = rec
+                    break
+
+            if matching_rec:
+                try:
+                    end_dt = datetime.fromisoformat(matching_rec["end_iso"])
+                    # If overdue by more than 15 seconds, actively halt it
+                    if now > end_dt + timedelta(seconds=15):
+                        now_str = now.strftime('%Y-%m-%d %H:%M:%S')
+                        print(
+                            f"[{now_str}] Stale Recording Watchdog: Halting overdue recording '{matching_rec['title']}' "
+                            f"({matching_rec['channel']}) (ended at {matching_rec['end_iso']}) to free tuner.",
+                            flush=True
+                        )
+                        self.dbus_client.cancel_recording(
+                            key=s_id,
+                            channel=matching_rec["channel"],
+                            title=matching_rec["title"]
+                        )
+                        self.queue_mgr.archive_to_history(matching_rec["id"])
+                except Exception as e:
+                    print(f"Error evaluating stale queue recording: {e}", flush=True)
+            else:
+                # Not in active queue! Check if it was recently completed/archived to history in the last 2 hours
+                try:
+                    history = self.queue_mgr.list_history(limit=20)
+                    for hist in history:
+                        h_ch = (hist.get("channel") or "").strip().lower()
+                        h_title = (hist.get("title") or "").strip().lower()
+                        if h_ch == s_ch and (h_title in s_name or s_name in h_title):
+                            now_str = now.strftime('%Y-%m-%d %H:%M:%S')
+                            print(
+                                f"[{now_str}] Stale Recording Watchdog: Halting completed history recording "
+                                f"'{hist['title']}' ({hist['channel']}) still lingering on tuner.",
+                                flush=True
+                            )
+                            self.dbus_client.cancel_recording(
+                                key=s_id,
+                                channel=hist["channel"],
+                                title=hist["title"]
+                            )
+                            break
+                except Exception as e:
+                    print(f"Error evaluating stale history recording: {e}", flush=True)
+
     def check_and_dispatch(self, notify: bool = True) -> int:
         self.reap_children()
         # Resolve any back-to-back buffer conflicts across different channels before arming
         self.queue_mgr.resolve_consecutive_buffer_conflicts(dbus_client=self.dbus_client)
         # Release tuner if any active recording has reached base end time and is lingering in buffer
         self.stop_lingering_buffers_for_upcoming_shows()
+        # Enforce watchdog to clean up any stale running streams holding the tuner past end time
+        self.enforce_stale_recording_cleanup()
         due = self.queue_mgr.get_due_to_arm()
         armed_count = 0
         cfg = ConfigManager()
@@ -207,8 +289,8 @@ class Watcher:
                 now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 print(f"[{now_str}] Desktop notification sent for '{n_title}' on {n_channel} (lead: {lead_mins}m, persistent: {persistent}).", flush=True)
 
-        # Update in-progress and completed statuses (archive finished to history)
-        status_res = self.queue_mgr.update_statuses([], max_history=cfg.max_history_entries)
+        # Update in-progress and completed statuses (archive finished to history and actively halt in Kaffeine)
+        status_res = self.queue_mgr.update_statuses([], max_history=cfg.max_history_entries, dbus_client=self.dbus_client)
 
         # Enforce internal background minimization if configured (tray or taskbar)
         if cfg.launch_mode in ("taskbar", "tray") or getattr(cfg, "launch_minimized", False):

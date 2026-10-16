@@ -644,10 +644,16 @@ class QueueManager:
             conn.commit()
         conn.close()
 
-    def update_statuses(self, active_kaffeine_keys: Optional[List[int]] = None, max_history: int = 50) -> Dict[str, int]:
+    def update_statuses(
+        self,
+        active_kaffeine_keys: Optional[List[int]] = None,
+        max_history: int = 50,
+        dbus_client: Optional[Any] = None
+    ) -> Dict[str, int]:
         """
         Transitions ARMED -> RECORDING when start_iso is reached.
         When finished (now >= end_dt):
+        - Actively terminates in Kaffeine via D-Bus to immediately release hardware tuner.
         - Archives to recording_history upon completion (if not already archived).
         - Keeps recording in recording_queue as 'COMPLETED' for 6 hours.
         - Deletes from recording_queue after 6 hours from end_dt.
@@ -675,6 +681,17 @@ class QueueManager:
 
                 if now >= end_dt:
                     if current_status != "COMPLETED":
+                        # Actively halt in Kaffeine via D-Bus if armed or recording to free tuner
+                        if dbus_client and current_status in ("ARMED", "RECORDING"):
+                            try:
+                                dbus_client.cancel_recording(
+                                    key=rec.get("kaffeine_key"),
+                                    channel=rec.get("channel"),
+                                    title=rec.get("title")
+                                )
+                            except Exception as e:
+                                print(f"Notice: Failed to actively halt completed recording in Kaffeine: {e}", flush=True)
+
                         # Archive to history once
                         cur.execute("""
                             INSERT INTO recording_history (title, channel, start_iso, duration_iso, start_time_local, completed_at, file_path)

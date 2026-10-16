@@ -9783,7 +9783,7 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            res = self.queue_mgr.update_statuses([], max_history=self.config_mgr.max_history_entries)
+            res = self.queue_mgr.update_statuses([], max_history=self.config_mgr.max_history_entries, dbus_client=self.dbus_client)
             transitions = bool(res.get("started") or res.get("archived") or res.get("purged") or force)
 
             from PyQt6 import sip
@@ -10167,8 +10167,8 @@ class MainWindow(QMainWindow):
             gc.collect()
 
     def refresh_recordings(self, force: bool = False):
-        # Update queue statuses (archives finished recordings to history)
-        self.queue_mgr.update_statuses([], max_history=self.config_mgr.max_history_entries)
+        # Update queue statuses (archives finished recordings to history and actively halts in Kaffeine)
+        self.queue_mgr.update_statuses([], max_history=self.config_mgr.max_history_entries, dbus_client=self.dbus_client)
 
         # Active Schedule shows QUEUED, ARMED, RECORDING, and recently COMPLETED (kept 6h)
         queue = self.queue_mgr.list_queue(include_completed=True)
