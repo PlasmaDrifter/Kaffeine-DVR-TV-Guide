@@ -6906,7 +6906,6 @@ class MainWindow(QMainWindow):
 
         # Web Companion & Remote Tailscale Access Card
         web_box = QGroupBox("Remote Web Access (Tailscale / LAN)")
-        web_box.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
         web_layout = QVBoxLayout(web_box)
         web_layout.setContentsMargins(15, 15, 15, 15)
         web_layout.setSpacing(10)
@@ -6956,6 +6955,7 @@ class MainWindow(QMainWindow):
         self.web_status_lbl = QLabel()
         self._update_web_status_label()
         web_layout.addWidget(self.web_status_lbl)
+        web_layout.addStretch()
 
         self.web_enable_check.toggled.connect(self._on_web_enable_toggled)
         self.web_port_spin.valueChanged.connect(self._auto_save_automation_settings)
