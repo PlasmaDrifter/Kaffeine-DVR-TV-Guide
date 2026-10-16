@@ -20,6 +20,7 @@ from PyQt6.QtCore import (
     QByteArray,
     QEasingCurve,
     QEvent,
+    QEventLoop,
     QObject,
     QPoint,
     QPointF,
@@ -2492,14 +2493,19 @@ ROMCAT_PRESET_COLORS = [
 ]
 
 
-class CompactColorPickerDialog(QDialog):
+class CompactColorPickerDialog(QWidget):
     """
-    Compact popup color picker modeled after the Romcat design.
+    Compact in-window popover color picker modeled after the Romcat design.
+    Rendered directly inside the parent window surface so it is 100% immune to
+    Wayland / KWin window-manager placement and centering policies.
+
     Features:
     - Header with uppercase label, Cancel, and Done buttons.
     - 10 curated preset color chips.
     - Live preview square, interactive lightness/shade slider with dynamic gradient track,
       and #HEX input field with real-time sync.
+    - Automatically anchored directly below the target button and centered horizontally on it.
+    - Closes cleanly when clicking outside or pressing Escape.
     """
 
     def __init__(
@@ -2509,28 +2515,32 @@ class CompactColorPickerDialog(QDialog):
         title: str = "Color Picker",
         anchor_widget: Optional[QWidget] = None,
     ):
-        super().__init__(parent)
-        self.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint)
+        parent_window = parent.window() if parent else (anchor_widget.window() if anchor_widget else None)
+        super().__init__(parent_window)
+        self.parent_window = parent_window
+        if parent_window:
+            self.setGeometry(parent_window.rect())
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+
         self.anchor_widget = anchor_widget
         self.initial_hex = self._normalize_hex(initial_hex) or "#3B82F6"
         self.base_color = self.initial_hex
         self.current_color = self.initial_hex
+        self.accepted = False
+        self.loop = QEventLoop()
 
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-
-        card = QFrame()
-        card.setObjectName("pickerCard")
-        card.setFixedSize(360, 130)
-        card.setStyleSheet("""
+        self.card = QFrame(self)
+        self.card.setObjectName("pickerCard")
+        self.card.setFixedSize(360, 130)
+        self.card.setStyleSheet("""
             QFrame#pickerCard {
                 background-color: #141a24;
                 border: 1px solid #1e293b;
                 border-radius: 10px;
             }
         """)
-        card_layout = QVBoxLayout(card)
+        card_layout = QVBoxLayout(self.card)
         card_layout.setContentsMargins(14, 12, 14, 12)
         card_layout.setSpacing(10)
 
@@ -2645,9 +2655,6 @@ class CompactColorPickerDialog(QDialog):
         bot_row.addWidget(hex_box)
 
         card_layout.addLayout(bot_row)
-        main_layout.addWidget(card, 0, Qt.AlignmentFlag.AlignCenter)
-
-        self.setFixedSize(360, 130)
         self._update_all(self.initial_hex, update_hex=True, update_slider=True, update_gradient=True)
 
     def _normalize_hex(self, hex_str: str) -> str:
@@ -2731,37 +2738,64 @@ class CompactColorPickerDialog(QDialog):
                 self.base_color = normalized
                 self._update_all(normalized, update_hex=False, update_slider=True, update_gradient=True)
 
-    def _position_at_anchor(self):
-        if not self.anchor_widget:
+    def _position_card(self):
+        if not self.parent_window:
             return
-        pt = self.anchor_widget.mapToGlobal(QPoint(0, 0))
-        btn_w = self.anchor_widget.width()
-        btn_h = self.anchor_widget.height()
-        dlg_w = self.width()
-        dlg_h = self.height()
+        self.setGeometry(self.parent_window.rect())
+        dlg_w = self.card.width()
+        dlg_h = self.card.height()
 
-        # Center horizontally on the anchor button
-        target_x = pt.x() + (btn_w // 2) - (dlg_w // 2)
-        # Place directly below the button with a 4px gap
-        target_y = pt.y() + btn_h + 4
+        if self.anchor_widget:
+            pt = self.anchor_widget.mapTo(self.parent_window, QPoint(0, 0))
+            btn_w = self.anchor_widget.width()
+            btn_h = self.anchor_widget.height()
 
-        screen = QApplication.screenAt(pt) or QApplication.primaryScreen()
-        if screen:
-            screen_geo = screen.availableGeometry()
-            # If overflowing the bottom of the screen, place directly above the button
-            if target_y + dlg_h > screen_geo.bottom() - 8:
-                target_y = max(screen_geo.top() + 8, pt.y() - dlg_h - 4)
-            # Constrain horizontally within screen bounds
-            if target_x + dlg_w > screen_geo.right() - 8:
-                target_x = screen_geo.right() - dlg_w - 8
-            if target_x < screen_geo.left() + 8:
-                target_x = screen_geo.left() + 8
+            # Center horizontally on the target button
+            target_x = pt.x() + (btn_w // 2) - (dlg_w // 2)
+            # Position directly below the button
+            target_y = pt.y() + btn_h + 4
 
-        self.move(target_x, target_y)
+            # If overflowing the bottom of the window, place directly above the button
+            if target_y + dlg_h > self.parent_window.height() - 10:
+                target_y = max(10, pt.y() - dlg_h - 4)
 
-    def showEvent(self, event):
-        super().showEvent(event)
-        self._position_at_anchor()
+            # Keep within horizontal window bounds
+            if target_x + dlg_w > self.parent_window.width() - 10:
+                target_x = self.parent_window.width() - dlg_w - 10
+            if target_x < 10:
+                target_x = 10
+        else:
+            target_x = (self.parent_window.width() - dlg_w) // 2
+            target_y = (self.parent_window.height() - dlg_h) // 2
+
+        self.card.move(target_x, target_y)
+
+    def mousePressEvent(self, event):
+        if not self.card.geometry().contains(event.position().toPoint()):
+            self.reject()
+        super().mousePressEvent(event)
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Escape:
+            self.reject()
+        super().keyPressEvent(event)
+
+    def accept(self):
+        self.accepted = True
+        self.loop.quit()
+
+    def reject(self):
+        self.accepted = False
+        self.loop.quit()
+
+    def exec(self) -> int:
+        self._position_card()
+        self.show()
+        self.raise_()
+        self.setFocus()
+        self.loop.exec()
+        self.hide()
+        return 1 if self.accepted else 0
 
     def get_selected_hex(self) -> str:
         return self.current_color
@@ -2775,15 +2809,15 @@ class CompactColorPickerDialog(QDialog):
         anchor_widget: Optional[QWidget] = None,
     ) -> Tuple[str, bool]:
         """
-        Open the compact color picker dialog.
+        Open the compact color picker popover.
         Returns (chosen_hex_str, ok_bool).
         """
         dialog = cls(parent, initial_hex=initial_hex, title=title, anchor_widget=anchor_widget)
-        dialog._position_at_anchor()
         result = dialog.exec()
-        if result == QDialog.DialogCode.Accepted:
-            return dialog.get_selected_hex(), True
-        return initial_hex, False
+        chosen = dialog.get_selected_hex() if result == 1 else initial_hex
+        dialog.setParent(None)
+        dialog.deleteLater()
+        return chosen, (result == 1)
 
 
 def format_american_datetime(val: Any) -> str:
