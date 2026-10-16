@@ -2522,6 +2522,7 @@ class CompactColorPickerDialog(QDialog):
 
         card = QFrame()
         card.setObjectName("pickerCard")
+        card.setFixedSize(360, 130)
         card.setStyleSheet("""
             QFrame#pickerCard {
                 background-color: #141a24;
@@ -2644,9 +2645,9 @@ class CompactColorPickerDialog(QDialog):
         bot_row.addWidget(hex_box)
 
         card_layout.addLayout(bot_row)
-        main_layout.addWidget(card)
+        main_layout.addWidget(card, 0, Qt.AlignmentFlag.AlignCenter)
 
-        self.resize(360, 130)
+        self.setFixedSize(360, 130)
         self._update_all(self.initial_hex, update_hex=True, update_slider=True, update_gradient=True)
 
     def _normalize_hex(self, hex_str: str) -> str:
@@ -2730,8 +2731,7 @@ class CompactColorPickerDialog(QDialog):
                 self.base_color = normalized
                 self._update_all(normalized, update_hex=False, update_slider=True, update_gradient=True)
 
-    def showEvent(self, event):
-        super().showEvent(event)
+    def _position_at_anchor(self):
         if self.anchor_widget and self.anchor_widget.isVisible():
             pt = self.anchor_widget.mapToGlobal(QPoint(0, 0))
             target_x = pt.x() + (self.anchor_widget.width() // 2) - (self.width() // 2)
@@ -2746,6 +2746,10 @@ class CompactColorPickerDialog(QDialog):
                 if target_y + self.height() > screen_geo.bottom() - 12:
                     target_y = max(screen_geo.top() + 12, pt.y() - self.height() - 6)
             self.move(target_x, target_y)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._position_at_anchor()
 
     def get_selected_hex(self) -> str:
         return self.current_color
@@ -2763,6 +2767,7 @@ class CompactColorPickerDialog(QDialog):
         Returns (chosen_hex_str, ok_bool).
         """
         dialog = cls(parent, initial_hex=initial_hex, title=title, anchor_widget=anchor_widget)
+        dialog._position_at_anchor()
         result = dialog.exec()
         if result == QDialog.DialogCode.Accepted:
             return dialog.get_selected_hex(), True
