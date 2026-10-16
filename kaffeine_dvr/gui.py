@@ -9333,7 +9333,7 @@ class MainWindow(QMainWindow):
         built_in_sorted = sorted(THEME_PRESETS.items(), key=lambda x: x[1]["name"].lower())
         for slot_idx, (p_key, p_info) in enumerate(built_in_sorted):
             self.theme_preset_combo.addItem(p_info["name"], p_key)
-            dot_color = p_info["colors"].get("grid_bg", "#222838")
+            dot_color = p_info.get("accent_color", p_info["colors"].get("highlight", "#38bdf8"))
             chip = ThemeChip(p_key, p_info["name"], dot_color, parent=self, fixed_width=chip_w)
             chip.chip_clicked.connect(self.select_guide_theme)
             self.guide_theme_grid.addWidget(chip, slot_idx // num_cols, slot_idx % num_cols, Qt.AlignmentFlag.AlignLeft)
@@ -9344,7 +9344,7 @@ class MainWindow(QMainWindow):
         target_custom_grid = self.guide_custom_grid if hasattr(self, "guide_custom_grid") else self.guide_theme_grid
         self.theme_preset_combo.addItem("Custom (save up to 3)", "custom")
         cur_colors = self.config_mgr.category_colors if self.config_mgr else DEFAULT_CATEGORY_COLORS
-        custom_dot = cur_colors.get("grid_bg", "#222838")
+        custom_dot = cur_colors.get("highlight", cur_colors.get("sports", "#ffa028"))
         custom_chip = ThemeChip("custom", "Custom (save up to 3)", custom_dot, parent=self, fixed_width=custom_chip_w)
         custom_chip.chip_clicked.connect(self.select_guide_theme)
         target_custom_grid.addWidget(custom_chip, 0, 0, Qt.AlignmentFlag.AlignLeft)
@@ -9355,7 +9355,7 @@ class MainWindow(QMainWindow):
         custom_sorted = sorted(custom_presets.items(), key=lambda x: x[1]["name"].lower())[:3]
         for row_idx, (p_key, p_info) in enumerate(custom_sorted, start=1):
             self.theme_preset_combo.addItem(p_info["name"], p_key)
-            dot_color = p_info["colors"].get("grid_bg", "#222838")
+            dot_color = p_info.get("accent_color", p_info["colors"].get("highlight", "#38bdf8"))
             chip = ThemeChip(p_key, p_info["name"], dot_color, parent=self, fixed_width=custom_chip_w)
             chip.chip_clicked.connect(self.select_guide_theme)
             target_custom_grid.addWidget(chip, row_idx, 0, Qt.AlignmentFlag.AlignLeft)
@@ -9390,7 +9390,7 @@ class MainWindow(QMainWindow):
 
         if "custom" in self._guide_theme_chips and self.config_mgr:
             cur_colors = self.config_mgr.category_colors
-            self._guide_theme_chips["custom"].set_dot_color(cur_colors.get("grid_bg", "#222838"))
+            self._guide_theme_chips["custom"].set_dot_color(cur_colors.get("highlight", cur_colors.get("sports", "#ffa028")))
 
         # Enable Delete Theme button only if currently selected preset is a user custom preset
         if hasattr(self, "delete_theme_preset_btn") and self.config_mgr:

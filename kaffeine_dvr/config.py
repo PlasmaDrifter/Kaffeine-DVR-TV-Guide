@@ -301,6 +301,7 @@ APP_THEMES: Dict[str, Dict[str, str]] = {
 THEME_PRESETS: Dict[str, Dict[str, Any]] = {
     "cyberpunk": {
         "name": "Cyberpunk / Neon",
+        "accent_color": "#ff007f",
         "colors": {
             "sports": "#ff5500",
             "news": "#00f0ff",
@@ -321,6 +322,7 @@ THEME_PRESETS: Dict[str, Dict[str, Any]] = {
     },
     "emerald_forest": {
         "name": "Emerald Forest",
+        "accent_color": "#10b981",
         "colors": {
             "sports": "#f59e0b",
             "news": "#4ade80",
@@ -341,6 +343,7 @@ THEME_PRESETS: Dict[str, Dict[str, Any]] = {
     },
     "midnight": {
         "name": "Midnight Navy (Default)",
+        "accent_color": "#38bdf8",
         "colors": {
             "sports": "#ffa028",
             "news": "#4fc3f7",
@@ -361,6 +364,7 @@ THEME_PRESETS: Dict[str, Dict[str, Any]] = {
     },
     "nordic_frost": {
         "name": "Nordic Frost",
+        "accent_color": "#67e8f9",
         "colors": {
             "sports": "#38bdf8",
             "news": "#67e8f9",
@@ -381,6 +385,7 @@ THEME_PRESETS: Dict[str, Dict[str, Any]] = {
     },
     "oled_contrast": {
         "name": "OLED High Contrast",
+        "accent_color": "#facc15",
         "colors": {
             "sports": "#facc15",
             "news": "#38bdf8",
@@ -401,6 +406,7 @@ THEME_PRESETS: Dict[str, Dict[str, Any]] = {
     },
     "synthwave": {
         "name": "Retro Synthwave",
+        "accent_color": "#a855f7",
         "colors": {
             "sports": "#fb923c",
             "news": "#06b6d4",
@@ -421,6 +427,7 @@ THEME_PRESETS: Dict[str, Dict[str, Any]] = {
     },
     "warm_sunset": {
         "name": "Warm Amber / Sunset",
+        "accent_color": "#f97316",
         "colors": {
             "sports": "#f97316",
             "news": "#f59e0b",
