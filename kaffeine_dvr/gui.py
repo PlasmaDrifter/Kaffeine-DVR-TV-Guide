@@ -7767,54 +7767,20 @@ class MainWindow(QMainWindow):
         self.reset_web_pass_btn.setVisible(self.config_mgr.has_web_password)
         web_pass_row.addWidget(self.reset_web_pass_btn)
 
-        web_pass_col = QVBoxLayout()
-        web_pass_col.setContentsMargins(0, 0, 0, 0)
-        web_pass_col.setSpacing(3)
-        web_pass_col.addLayout(web_pass_row)
-
-        self.web_pass_note_lbl = QLabel(
-            "<span style='color: #94a3b8; font-size: 11px;'>Password is strongly required for Tailscale & remote access. Leave blank and click Reset to allow open access.</span>"
-        )
-        self.web_pass_note_lbl.setWordWrap(True)
-        web_pass_col.addWidget(self.web_pass_note_lbl)
-
+        web_pass_row.addStretch()
         web_form.addRow(
             make_setting_label("Access Password:", "Password required to access the web companion. Strongly recommended for Tailscale and network access."),
-            web_pass_col
+            web_pass_row
         )
 
         web_layout.addLayout(web_form)
 
+        # Single compact status & quick access label (replaces extra frames/margins to keep exact original box height)
         self.web_status_lbl = QLabel()
+        self.web_status_lbl.setWordWrap(True)
+        self.web_status_lbl.setOpenExternalLinks(True)
+        self.web_status_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
         web_layout.addWidget(self.web_status_lbl)
-
-        # Quick Access Guide Card
-        self.web_guide_box = QFrame()
-        self.web_guide_box.setObjectName("web_guide_box")
-        self.web_guide_box.setStyleSheet("""
-            #web_guide_box {
-                background-color: rgba(15, 23, 42, 0.65);
-                border: 1px solid rgba(56, 189, 248, 0.25);
-                border-radius: 8px;
-                padding: 10px;
-                margin-top: 4px;
-            }
-        """)
-        web_guide_layout = QVBoxLayout(self.web_guide_box)
-        web_guide_layout.setContentsMargins(12, 10, 12, 10)
-        web_guide_layout.setSpacing(6)
-
-        guide_header = QLabel("<b>Quick Access Guide:</b>")
-        guide_header.setStyleSheet("color: #38bdf8; font-size: 12px; font-weight: bold;")
-        web_guide_layout.addWidget(guide_header)
-
-        self.web_urls_lbl = QLabel()
-        self.web_urls_lbl.setWordWrap(True)
-        self.web_urls_lbl.setOpenExternalLinks(True)
-        self.web_urls_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
-        web_guide_layout.addWidget(self.web_urls_lbl)
-
-        web_layout.addWidget(self.web_guide_box)
         self._update_web_status_label()
         web_layout.addStretch()
 
@@ -9535,39 +9501,30 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
-        if hasattr(self, "web_urls_lbl"):
-            guide_lines = []
-            guide_lines.append(
-                f"<span style='color: #94a3b8;'>• <b>This Computer:</b></span> "
-                f"<a href='http://localhost:{port}' style='color: #38bdf8; text-decoration: underline;'>http://localhost:{port}/</a>"
-            )
-            if lan_ip:
-                guide_lines.append(
-                    f"<span style='color: #94a3b8;'>• <b>Home Network (LAN):</b></span> "
-                    f"<a href='http://{lan_ip}:{port}' style='color: #38bdf8; text-decoration: underline;'>http://{lan_ip}:{port}/</a> "
-                    f"<span style='color: #64748b;'>(or http://{hostname}:{port}/)</span>"
-                )
-            else:
-                guide_lines.append(
-                    f"<span style='color: #94a3b8;'>• <b>Home Network (LAN):</b></span> "
-                    f"<a href='http://{hostname}:{port}' style='color: #38bdf8; text-decoration: underline;'>http://{hostname}:{port}/</a>"
-                )
+        links = []
+        links.append(f"<a href='http://localhost:{port}' style='color: #38bdf8; text-decoration: underline;'>localhost:{port}</a>")
+        if lan_ip:
+            links.append(f"<a href='http://{lan_ip}:{port}' style='color: #38bdf8; text-decoration: underline;'>{lan_ip}:{port}</a>")
+        elif hostname != "localhost":
+            links.append(f"<a href='http://{hostname}:{port}' style='color: #38bdf8; text-decoration: underline;'>{hostname}:{port}</a>")
 
-            if tailscale_ip:
-                guide_lines.append(
-                    f"<span style='color: #94a3b8;'>• <b>Tailscale (Anywhere):</b></span> "
-                    f"<a href='http://{tailscale_ip}:{port}' style='color: #38bdf8; text-decoration: underline;'>http://{tailscale_ip}:{port}/</a>"
-                )
-            else:
-                guide_lines.append(
-                    f"<span style='color: #94a3b8;'>• <b>Tailscale:</b></span> "
-                    f"<span style='color: #94a3b8;'>Install &amp; connect </span>"
-                    f"<a href='https://tailscale.com' style='color: #38bdf8; text-decoration: underline;'>Tailscale</a> "
-                    f"<span style='color: #94a3b8;'>to access securely away from home.</span>"
-                )
+        if tailscale_ip:
+            links.append(f"Tailscale: <a href='http://{tailscale_ip}:{port}' style='color: #38bdf8; text-decoration: underline;'>{tailscale_ip}:{port}</a>")
+        else:
+            links.append(f"<a href='https://tailscale.com' style='color: #94a3b8; text-decoration: underline;'>Tailscale</a>")
 
-            self.web_urls_lbl.setText("<br>".join(guide_lines))
-            self.web_urls_lbl.setStyleSheet("color: #cbd5e1; font-size: 12px; line-height: 140%;")
+        links_str = " &nbsp;|&nbsp; ".join(links)
+
+        if is_enabled:
+            status_line = f"<b>Status:</b> <span style='color: #4ade80;'>Active (Port {port})</span> • <span style='color: {auth_color}; font-weight: bold;'>{auth_str}</span>"
+        else:
+            status_line = f"<b>Status:</b> <span style='color: #94a3b8;'>Disabled</span> • <span style='color: #64748b;'>Check box above to enable</span>"
+
+        self.web_status_lbl.setText(
+            f"{status_line}<br>"
+            f"<span style='color: #94a3b8;'>Quick Access:</span> {links_str}"
+        )
+        self.web_status_lbl.setStyleSheet("color: #cbd5e1; font-size: 12px; margin-top: 4px; line-height: 135%;")
 
     def _update_guide_detail_box_height(self):
         """Size description box to fit 2 or 3 lines of text based on user setting."""
