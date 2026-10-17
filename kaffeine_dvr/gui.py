@@ -9448,20 +9448,24 @@ class MainWindow(QMainWindow):
     def _update_web_status_label(self):
         if not hasattr(self, "web_status_lbl"):
             return
-        if not getattr(self.config_mgr, "web_server_enabled", False):
-            self.web_status_lbl.setText("<b>Status:</b> Web companion is disabled.")
-            self.web_status_lbl.setStyleSheet("color: #94a3b8; font-size: 12px;")
-            if hasattr(self, "web_guide_box"):
-                self.web_guide_box.setVisible(False)
-            return
-
-        if hasattr(self, "web_guide_box"):
-            self.web_guide_box.setVisible(True)
-
+        is_enabled = bool(getattr(self.config_mgr, "web_server_enabled", False))
         port = self.config_mgr.web_server_port
         has_pw = self.config_mgr.has_web_password
         auth_str = "Password Protected" if has_pw else "Warning: No password set"
         auth_color = "#38bdf8" if has_pw else "#f59e0b"
+
+        if is_enabled:
+            self.web_status_lbl.setText(
+                f"<b>Status:</b> <span style='color: #4ade80;'>Active</span> • Listening on port <b>{port}</b> • <span style='color: {auth_color}; font-weight: bold;'>{auth_str}</span>"
+            )
+        else:
+            self.web_status_lbl.setText(
+                f"<b>Status:</b> <span style='color: #94a3b8;'>Disabled</span> (check 'Enable Local / Tailscale Web Companion' above to turn on)"
+            )
+        self.web_status_lbl.setStyleSheet("color: #e2e8f0; font-size: 12px; margin-top: 4px;")
+
+        if hasattr(self, "web_guide_box"):
+            self.web_guide_box.setVisible(True)
 
         # Determine best display IP addresses (localhost, local LAN IP, Tailscale IP)
         import socket
@@ -9489,11 +9493,6 @@ class MainWindow(QMainWindow):
                     tailscale_ip = ts_candidate[0].strip()
             except Exception:
                 pass
-
-        self.web_status_lbl.setText(
-            f"<b>Status:</b> Running on port <b>{port}</b> • <span style='color: {auth_color}; font-weight: bold;'>{auth_str}</span>"
-        )
-        self.web_status_lbl.setStyleSheet("color: #e2e8f0; font-size: 12px; margin-top: 4px;")
 
         if hasattr(self, "web_urls_lbl"):
             guide_lines = []
