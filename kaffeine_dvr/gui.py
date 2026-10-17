@@ -5466,7 +5466,7 @@ class MainWindow(QMainWindow):
         # Main Tabs
         self.tabs = QTabWidget()
         self.tabs.setObjectName("mainTabs")
-        self.tabs.addTab(self.create_guide_tab(), "Web TV Guide Browser")
+        self.tabs.addTab(self.create_guide_tab(), "TV Guide")
         self.tabs.addTab(self.create_recordings_tab(), "Recordings Schedule")
         self.tabs.addTab(self.create_settings_tab(), "Settings")
         self.tabs.addTab(self.create_help_tab(), "Help and Information")
@@ -8558,7 +8558,7 @@ class MainWindow(QMainWindow):
             "&nbsp;&nbsp;&nbsp;&nbsp;– <b>Grid Zoom (+ / -):</b> Use the <b>+</b> and <b>−</b> zoom buttons to increase or decrease the font and tile size of the guide grid to your preference.<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;– <b>Maximize Grid:</b> Click the <b>⛶ Maximize</b> button (or press <b>Escape</b> to exit) to expand the guide grid to fill the entire application window.<br><br>"
             "• <b style='color: #60a5fa;'>Watching Live TV:</b><br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;– Switch to <b>Web TV Guide Browser</b>. Double-click any live show tile or click <b>Watch Live</b> to tune Kaffeine.<br><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Switch to <b>TV Guide</b>. Double-click any live show tile or click <b>Watch Live</b> to tune Kaffeine.<br><br>"
             "• <b style='color: #60a5fa;'>Scheduling DVR Recordings:</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;– Double-click upcoming shows or click <b>Record This Program</b> to queue a one-off recording.<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;– Click <b>Auto-Record This Series</b> to create keyword auto-record rules that automatically capture all future airings.<br>"
