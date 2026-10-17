@@ -9410,6 +9410,22 @@ class MainWindow(QMainWindow):
         self.flash_save_indicator("Settings Saved")
 
     def _on_web_enable_toggled(self, checked: bool):
+        if checked and not self.config_mgr.has_web_password:
+            from PyQt6.QtWidgets import QMessageBox
+            self.web_enable_check.blockSignals(True)
+            self.web_enable_check.setChecked(False)
+            self.web_enable_check.blockSignals(False)
+            self.config_mgr.web_server_enabled = False
+            QMessageBox.warning(
+                self,
+                "Password Required",
+                "A password is required before enabling the Remote Web Companion.\n\nPlease enter an access password and click 'Save' first."
+            )
+            if hasattr(self, "web_pass_edit"):
+                self.web_pass_edit.setFocus()
+            self._update_web_status_label()
+            return
+
         self.config_mgr.web_server_enabled = checked
         if hasattr(self, "web_server") and self.web_server:
             if checked:
@@ -9442,13 +9458,20 @@ class MainWindow(QMainWindow):
         )
         if reply == QMessageBox.StandardButton.Yes:
             self.config_mgr.set_web_password("")
+            self.config_mgr.web_server_enabled = False
+            if hasattr(self, "web_server") and self.web_server:
+                self.web_server.stop()
+            if hasattr(self, "web_enable_check"):
+                self.web_enable_check.blockSignals(True)
+                self.web_enable_check.setChecked(False)
+                self.web_enable_check.blockSignals(False)
             if hasattr(self, "web_pass_edit"):
                 self.web_pass_edit.clear()
                 self.web_pass_edit.setPlaceholderText("Set access password")
             if hasattr(self, "reset_web_pass_btn"):
                 self.reset_web_pass_btn.setVisible(False)
             self._update_web_status_label()
-            self.flash_save_indicator("Password Removed")
+            self.flash_save_indicator("Password Reset (Server Disabled)")
 
     def _update_web_status_label(self):
         if not hasattr(self, "web_status_lbl"):
@@ -9501,30 +9524,23 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
-        links = []
-        links.append(f"<a href='http://localhost:{port}' style='color: #38bdf8; text-decoration: underline;'>localhost:{port}</a>")
-        if lan_ip:
-            links.append(f"<a href='http://{lan_ip}:{port}' style='color: #38bdf8; text-decoration: underline;'>{lan_ip}:{port}</a>")
-        elif hostname != "localhost":
-            links.append(f"<a href='http://{hostname}:{port}' style='color: #38bdf8; text-decoration: underline;'>{hostname}:{port}</a>")
-
-        if tailscale_ip:
-            links.append(f"Tailscale: <a href='http://{tailscale_ip}:{port}' style='color: #38bdf8; text-decoration: underline;'>{tailscale_ip}:{port}</a>")
-        else:
-            links.append(f"<a href='https://tailscale.com' style='color: #94a3b8; text-decoration: underline;'>Tailscale</a>")
-
-        links_str = " &nbsp;|&nbsp; ".join(links)
-
         if is_enabled:
             status_line = f"<b>Status:</b> <span style='color: #4ade80;'>Active (Port {port})</span> • <span style='color: {auth_color}; font-weight: bold;'>{auth_str}</span>"
         else:
-            status_line = f"<b>Status:</b> <span style='color: #94a3b8;'>Disabled</span> • <span style='color: #64748b;'>Check box above to enable</span>"
+            status_line = f"<b>Status:</b> <span style='color: #94a3b8;'>Disabled</span> • <span style='color: #64748b;'>Password required to enable</span>"
+
+        lan_part = f"<a href='http://{lan_ip}:{port}' style='color: #38bdf8; text-decoration: underline;'>http://{lan_ip}:{port}/</a>" if lan_ip else f"<a href='http://{hostname}:{port}' style='color: #38bdf8; text-decoration: underline;'>http://{hostname}:{port}/</a>"
+        ts_part = f"<a href='http://{tailscale_ip}:{port}' style='color: #38bdf8; text-decoration: underline;'>http://{tailscale_ip}:{port}/</a>" if tailscale_ip else f"<a href='https://tailscale.com' style='color: #94a3b8; text-decoration: underline;'>Tailscale</a> (install to access away from home)"
 
         self.web_status_lbl.setText(
             f"{status_line}<br>"
-            f"<span style='color: #94a3b8;'>Quick Access:</span> {links_str}"
+            f"<div style='margin-top: 4px; line-height: 135%;'>"
+            f"• <b>This Computer:</b> <a href='http://localhost:{port}' style='color: #38bdf8; text-decoration: underline;'>http://localhost:{port}/</a><br>"
+            f"• <b>Local LAN:</b> {lan_part}<br>"
+            f"• <b>Tailscale:</b> {ts_part}"
+            f"</div>"
         )
-        self.web_status_lbl.setStyleSheet("color: #cbd5e1; font-size: 12px; margin-top: 4px; line-height: 135%;")
+        self.web_status_lbl.setStyleSheet("color: #cbd5e1; font-size: 12px; margin-top: 2px;")
 
     def _update_guide_detail_box_height(self):
         """Size description box to fit 2 or 3 lines of text based on user setting."""
