@@ -9522,7 +9522,9 @@ class MainWindow(QMainWindow):
             else:
                 guide_lines.append(
                     f"<span style='color: #94a3b8;'>• <b>Tailscale:</b></span> "
-                    f"<span style='color: #64748b;'>Install & connect Tailscale on both devices to access away from home.</span>"
+                    f"<span style='color: #94a3b8;'>Install &amp; connect </span>"
+                    f"<a href='https://tailscale.com' style='color: #38bdf8; text-decoration: underline;'>Tailscale</a> "
+                    f"<span style='color: #94a3b8;'>to access securely away from home.</span>"
                 )
 
             self.web_urls_lbl.setText("<br>".join(guide_lines))
