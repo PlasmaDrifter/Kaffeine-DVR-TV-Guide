@@ -618,9 +618,15 @@ WEB_HTML_TEMPLATE = """<!DOCTYPE html>
           input.value = "";
           initApp();
         } else {
+          err.textContent = data.error || "Incorrect password. Please try again.";
           err.style.display = "block";
+          if (data.locked) {
+            input.disabled = true;
+            setTimeout(() => { input.disabled = false; }, (data.retry_after || 60) * 1000);
+          }
         }
       } catch (e) {
+        err.textContent = "Network error. Please try again.";
         err.style.display = "block";
       }
     }

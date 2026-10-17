@@ -117,15 +117,41 @@ class KaffeineWebRequestHandler(http.server.BaseHTTPRequestHandler):
 
         # Login endpoint: POST /api/login
         if path == "/api/login":
+            client_ip = self.client_address[0] if self.client_address else "127.0.0.1"
+            # Check lockout
+            is_locked, remaining_sec = self.server_obj.check_rate_limit(client_ip)
+            if is_locked:
+                self._send_json({
+                    "error": f"Too many incorrect attempts. Please wait {remaining_sec} seconds before trying again.",
+                    "locked": True,
+                    "retry_after": remaining_sec
+                }, status=429)
+                return
+
             try:
                 data = json.loads(body) if body else {}
                 pw = data.get("password", "")
                 if self.server_obj.config_mgr.verify_web_password(pw):
+                    self.server_obj.record_successful_login(client_ip)
                     token = self.server_obj.create_session_token()
                     self._send_json({"token": token, "status": "ok"})
                     return
-                time.sleep(0.5)  # Anti-brute-force delay
-                self._send_json({"error": "Invalid password"}, status=401)
+
+                # Incorrect password: record attempt and apply anti-brute delay
+                remaining_attempts, lockout_sec = self.server_obj.record_failed_login(client_ip, max_attempts=5, lockout_duration=300)
+                time.sleep(0.5)
+
+                if lockout_sec > 0:
+                    self._send_json({
+                        "error": f"Too many incorrect attempts. Access locked for {lockout_sec // 60} minutes.",
+                        "locked": True,
+                        "retry_after": lockout_sec
+                    }, status=429)
+                else:
+                    self._send_json({
+                        "error": f"Invalid password. {remaining_attempts} attempts remaining.",
+                        "remaining_attempts": remaining_attempts
+                    }, status=401)
                 return
             except Exception as e:
                 self._send_json({"error": str(e)}, status=400)
@@ -531,9 +557,54 @@ class KaffeineWebServer:
         self.port = self.config_mgr.web_server_port
         self.bind_addr = self.config_mgr.web_server_bind
         self.server: Optional[ThreadedHTTPServer] = None
-        self.thread: Optional[threading.Thread] = None
         self.active_tokens: Dict[str, float] = {}
+        self.failed_attempts: Dict[str, list] = {}  # ip -> list of timestamps
+        self.lockouts: Dict[str, float] = {}        # ip -> lockout until timestamp
         self._lock = threading.Lock()
+
+    def check_rate_limit(self, client_ip: str) -> tuple[bool, int]:
+        """
+        Check if client_ip is currently locked out from login attempts.
+        Returns (is_locked, remaining_seconds).
+        """
+        now = time.time()
+        with self._lock:
+            # Check active lockout
+            lockout_until = self.lockouts.get(client_ip, 0)
+            if now < lockout_until:
+                return True, int(lockout_until - now) + 1
+            elif lockout_until > 0:
+                del self.lockouts[client_ip]
+
+            # Prune attempts older than 15 minutes (900s)
+            attempts = [t for t in self.failed_attempts.get(client_ip, []) if now - t < 900]
+            self.failed_attempts[client_ip] = attempts
+            return False, 0
+
+    def record_failed_login(self, client_ip: str, max_attempts: int = 5, lockout_duration: int = 300) -> tuple[int, int]:
+        """
+        Record a failed login attempt for client_ip.
+        If failed attempts exceed max_attempts, locks out the IP for lockout_duration (default 5 mins).
+        Returns (remaining_attempts_allowed, lockout_seconds_if_locked).
+        """
+        now = time.time()
+        with self._lock:
+            attempts = [t for t in self.failed_attempts.get(client_ip, []) if now - t < 900]
+            attempts.append(now)
+            self.failed_attempts[client_ip] = attempts
+
+            if len(attempts) >= max_attempts:
+                lockout_until = now + lockout_duration
+                self.lockouts[client_ip] = lockout_until
+                self.failed_attempts[client_ip] = []
+                return 0, lockout_duration
+            return max(0, max_attempts - len(attempts)), 0
+
+    def record_successful_login(self, client_ip: str):
+        """Reset failed attempt counters upon successful authentication."""
+        with self._lock:
+            self.failed_attempts.pop(client_ip, None)
+            self.lockouts.pop(client_ip, None)
 
     def create_session_token(self) -> str:
         with self._lock:

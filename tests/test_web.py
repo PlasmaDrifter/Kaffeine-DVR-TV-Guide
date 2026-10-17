@@ -93,6 +93,47 @@ def test_web_password_hashing_and_auth(web_test_env):
         assert data.get("status") == "online"
 
 
+def test_web_login_rate_limiting(web_test_env):
+    base_url = web_test_env["base_url"]
+    cfg = web_test_env["cfg"]
+    cfg.set_web_password("secret_tailscale_123")
+    server = web_test_env["server"]
+    server.failed_attempts.clear()
+    server.lockouts.clear()
+
+    # Fail 5 times to trigger lockout
+    for i in range(5):
+        bad_req = urllib.request.Request(
+            f"{base_url}/api/login",
+            data=json.dumps({"password": f"wrong_{i}"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"}
+        )
+        try:
+            urllib.request.urlopen(bad_req)
+            assert False, "Should have failed"
+        except urllib.error.HTTPError as e:
+            if i < 4:
+                assert e.code == 401
+                body = json.loads(e.read().decode("utf-8"))
+                assert "remaining_attempts" in body
+            else:
+                assert e.code == 429
+                body = json.loads(e.read().decode("utf-8"))
+                assert body.get("locked") is True
+
+    # 6th attempt should immediately return 429 Too Many Requests
+    locked_req = urllib.request.Request(
+        f"{base_url}/api/login",
+        data=json.dumps({"password": "secret_tailscale_123"}).encode("utf-8"),
+        headers={"Content-Type": "application/json"}
+    )
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(locked_req)
+    assert exc_info.value.code == 429
+    data = json.loads(exc_info.value.read().decode("utf-8"))
+    assert data.get("locked") is True
+
+
 def test_web_schedule_and_recordings_api(web_test_env):
     base_url = web_test_env["base_url"]
     q_mgr = web_test_env["q_mgr"]
