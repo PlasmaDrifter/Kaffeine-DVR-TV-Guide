@@ -1266,7 +1266,10 @@ class ChannelSignalHealthDialog(BaseFramelessDialog):
             kaffeine_h = 400
 
         client.restore_kaffeine(width=kaffeine_w, height=kaffeine_h, x=kaffeine_x, y=kaffeine_y)
-        client.tune_channel(ch_name, raise_window=True, view_mode="normal")
+        # Settle briefly to let window manager finalize geometry and allow Qt to repaint before LibVLC starts playback
+        import time
+        time.sleep(0.15)
+        client.tune_channel(ch_name, raise_window=False, view_mode="normal")
 
         # 3. Start high-frequency signal meter polling (every 150ms)
         if self._aim_timer is None:

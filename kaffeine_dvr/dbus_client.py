@@ -394,7 +394,25 @@ class KaffeineDbusClient:
                 for wid in kaffeine_wids:
                     subprocess.run([xdotool_bin, "windowmap", wid], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
                     
-                    if width is not None and height is not None:
+                    needs_size = width is not None and height is not None
+                    needs_pos = x is not None and y is not None
+
+                    # Check current window geometry to avoid redundant X11 resize/move operations
+                    cur_x, cur_y, cur_w, cur_h = None, None, None, None
+                    try:
+                        g_out = subprocess.run([xdotool_bin, "getwindowgeometry", wid], env=env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=1.0).stdout
+                        for line in g_out.splitlines():
+                            line_s = line.strip()
+                            if line_s.startswith("Position:"):
+                                pos_str = line_s.split(":", 1)[1].split()[0]
+                                cur_x, cur_y = [int(p) for p in pos_str.split(",")]
+                            elif line_s.startswith("Geometry:"):
+                                geom_str = line_s.split(":", 1)[1].strip()
+                                cur_w, cur_h = [int(p) for p in geom_str.split("x")]
+                    except Exception:
+                        pass
+
+                    if needs_size and (cur_w != width or cur_h != height):
                         # Unmaximize Kaffeine window via X11 _NET_WM_STATE_REMOVE so windowsize takes effect
                         try:
                             import ctypes
@@ -439,8 +457,10 @@ class KaffeineDbusClient:
                         except Exception:
                             pass
                         subprocess.run([xdotool_bin, "windowsize", wid, str(width), str(height)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
-                    if x is not None and y is not None:
+
+                    if needs_pos and (cur_x != x or cur_y != y):
                         subprocess.run([xdotool_bin, "windowmove", wid, str(x), str(y)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
+
                     subprocess.run([xdotool_bin, "windowraise", wid], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
                     subprocess.run([xdotool_bin, "windowactivate", wid], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
                 return bool(kaffeine_wids)
