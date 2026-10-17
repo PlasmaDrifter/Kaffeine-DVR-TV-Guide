@@ -31,6 +31,33 @@ DEFAULT_CATEGORY_COLORS = {
     "past_subtext": "#5a6474",
 }
 
+DEFAULT_SHORTCUTS: Dict[str, str] = {
+    "tab_guide": "Ctrl+1",
+    "tab_recordings": "Ctrl+2",
+    "tab_settings": "Ctrl+3",
+    "tab_help": "Ctrl+4",
+    "view_grid": "Ctrl+G",
+    "view_list": "Ctrl+L",
+    "focus_search": "Ctrl+F",
+    "sync_refresh": "F5",
+    "jump_now": "Home",
+    "jump_primetime": "Alt+P",
+    "zoom_in": "Ctrl++",
+    "zoom_out": "Ctrl+-",
+    "zoom_reset": "Ctrl+0",
+    "maximize_grid": "F11",
+    "show_shortcuts": "F1",
+    "quit_app": "Ctrl+Q",
+    "nav_up": "Up",
+    "nav_down": "Down",
+    "nav_left": "Left",
+    "nav_right": "Right",
+    "prog_watch": "W",
+    "prog_record": "R",
+    "prog_auto_record": "A",
+    "prog_details": "Return",
+}
+
 
 def compute_past_theme_colors(grid_bg_hex: str, text_primary_hex: Optional[str] = None) -> Dict[str, str]:
     """
@@ -576,6 +603,12 @@ class ConfigManager:
                         for cat, def_col in DEFAULT_CATEGORY_COLORS.items():
                             if cat not in data["category_colors"]:
                                 data["category_colors"][cat] = def_col
+                    if "keyboard_shortcuts" not in data or not isinstance(data.get("keyboard_shortcuts"), dict):
+                        data["keyboard_shortcuts"] = dict(DEFAULT_SHORTCUTS)
+                    else:
+                        for sc_k, sc_v in DEFAULT_SHORTCUTS.items():
+                            if sc_k not in data["keyboard_shortcuts"]:
+                                data["keyboard_shortcuts"][sc_k] = sc_v
                     return data
             except Exception:
                 pass
@@ -651,7 +684,8 @@ class ConfigManager:
             "web_server_port": 8088,
             "web_server_bind": "0.0.0.0",
             "web_server_password_hash": "",
-            "web_server_salt": ""
+            "web_server_salt": "",
+            "keyboard_shortcuts": dict(DEFAULT_SHORTCUTS)
         }
 
     def reset_to_defaults(self, keep_channels_and_rules: bool = True):
@@ -1522,5 +1556,35 @@ class ConfigManager:
         if configured > 0:
             return configured
         return max(1, self.get_detected_tuner_count())
+
+    @property
+    def keyboard_shortcuts(self) -> Dict[str, str]:
+        sc = self.data.get("keyboard_shortcuts")
+        if not isinstance(sc, dict):
+            sc = dict(DEFAULT_SHORTCUTS)
+            self.data["keyboard_shortcuts"] = sc
+        return sc
+
+    @keyboard_shortcuts.setter
+    def keyboard_shortcuts(self, val: Dict[str, str]):
+        if isinstance(val, dict):
+            self.data["keyboard_shortcuts"] = dict(val)
+            self.save()
+
+    def get_shortcut(self, key_id: str, default: Optional[str] = None) -> str:
+        sc = self.keyboard_shortcuts
+        if key_id in sc:
+            return sc[key_id]
+        if default is not None:
+            return default
+        return DEFAULT_SHORTCUTS.get(key_id, "")
+
+    def set_shortcut(self, key_id: str, key_seq: str):
+        sc = dict(self.keyboard_shortcuts)
+        sc[key_id] = key_seq.strip()
+        self.keyboard_shortcuts = sc
+
+    def reset_shortcuts_to_defaults(self):
+        self.keyboard_shortcuts = dict(DEFAULT_SHORTCUTS)
 
 

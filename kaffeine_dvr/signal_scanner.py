@@ -332,16 +332,21 @@ class ChannelSignalScanWorker(QThread):
                 self.channel_started.emit(ch_name, idx, total)
                 self.scan_progress.emit(idx, total)
 
-                # 1. Instruct Kaffeine to tune to this channel
+                # 1. Instruct Kaffeine to tune to this channel silently in the background
+                # Note: We use television_iface.PlayChannel directly instead of client.tune_channel()
+                # because client.tune_channel() uses KDBusService CommandLine, which unminimizes/activates
+                # Kaffeine's window on KDE/KWin and causes window flickering during the scan.
                 tuned = False
-                try:
-                    tuned = client.tune_channel(ch_name, raise_window=False)
-                except Exception:
-                    pass
-
-                if not tuned and television_iface:
+                if television_iface:
                     try:
                         television_iface.PlayChannel(ch_name, timeout=3.0)
+                        tuned = True
+                    except Exception:
+                        pass
+
+                if not tuned:
+                    try:
+                        client.tune_channel(ch_name, raise_window=False)
                     except Exception:
                         pass
 

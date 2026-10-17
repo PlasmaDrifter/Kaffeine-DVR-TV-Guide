@@ -2,12 +2,16 @@
 
 ## v0.8.15
 
+- **Customizable Keyboard Shortcuts & Navigation**: Added full keyboard shortcut customization under Settings > Keyboard Shortcuts with individual editable fields for Guide Navigation Keys (Up, Down, Left, Right), program action hotkeys, view toggles, and global shortcuts.
+- **Dedicated Guide Grid & List Keyboard Navigation**: Arrow keys strictly navigate guide grid tiles and list rows, updating tile highlight, program details, and scrolling without triggering accidental playback or popups. Pressing Down initializes keyboard access to the guide when nothing is selected.
+- **Remote Web Access Security & Subnet Firewall Rules**: Updated firewall guidance in Remote Web Access settings and the Help guide with explicit instructions for trusted local subnets (e.g. `192.168.1.0/24`) without exposing public ports, highlighting zero-configuration remote access via Tailscale.
 - **Antenna Aiming Window Stability & Restoration**: Resolved issue where clicking "Done Aiming" halted playback by unmapping the Kaffeine window. Playback now terminates via D-Bus while keeping Kaffeine open and visible. Swapping channels to aim unminimizes, maps, positions, and raises Kaffeine without audio-only hidden states.
 - **X11 Geometry & Repaint Settling**: Added geometry change caching before issuing resize/move operations, bypassing redundant configure requests when Kaffeine is already correctly sized and positioned. Added settling delays and C++ window/menubar repaints to eliminate layout jitter and black unpainted artifacts.
 - **Remote Web Access Quick Access URLs**: Added convenient, clickable Quick Access URLs under Settings > Remote Web Access displaying localhost, local LAN IPv4 address, and Tailscale mesh IP for remote devices.
 - **Web Companion Security & Password Enforcement**: Made passwords mandatory before enabling the Web Companion server. Added an inline Reset button to clear password protection and disable the server in one click.
 - **Rate Limiting & 15-Minute Lockout**: Implemented anti-brute-force protection tracking failed login attempts per client IP. Limits incorrect passwords to 5 attempts before enforcing a 15-minute temporary lockout.
 - **Minimized Playback & Clean Audio Termination**: Prevented Kaffeine from playing audio when launched minimized and ensured playback is immediately terminated on session end.
+- **Silent Channel Signal Scanning**: Switched background channel scanning to silent D-Bus tuning, eliminating window unminimizing and screen flickering during signal scans.
 - **Interface Streamlining**: Simplified main navigation tab title from "Web TV Guide Browser" to "TV Guide".
 
 ## v0.8.14

@@ -41,12 +41,14 @@ from PyQt6.QtGui import (
     QFont,
     QFontMetrics,
     QIcon,
+    QKeySequence,
     QPainter,
     QPalette,
     QPen,
     QPixmap,
     QPolygon,
     QPolygonF,
+    QShortcut,
     QWheelEvent,
 )
 from PyQt6.QtWidgets import (
@@ -65,6 +67,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QInputDialog,
+    QKeySequenceEdit,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -104,6 +107,7 @@ try:
     from .config import (
         APP_THEMES,
         DEFAULT_CATEGORY_COLORS,
+        DEFAULT_SHORTCUTS,
         THEME_PRESETS,
         ConfigManager,
     )
@@ -119,6 +123,7 @@ except (ImportError, ValueError):
     from kaffeine_dvr.config import (
         APP_THEMES,
         DEFAULT_CATEGORY_COLORS,
+        DEFAULT_SHORTCUTS,
         THEME_PRESETS,
         ConfigManager,
     )
@@ -238,6 +243,27 @@ def make_status_dot_icon(color_hex: str, size: int = 12) -> QIcon:
     p.drawEllipse(1, 1, size - 2, size - 2)
     p.end()
     return QIcon(pix)
+
+
+def _shortcut_matches(seq_str: str, event_key: int, modifiers: Qt.KeyboardModifier) -> bool:
+    """Helper to check if a key event matches a configured shortcut string."""
+    if not seq_str:
+        return False
+    try:
+        ks = QKeySequence(seq_str)
+        if ks.isEmpty():
+            return False
+        for i in range(ks.count()):
+            comb = ks[i]
+            ckey = comb.key() if hasattr(comb, "key") else comb
+            cmods = comb.keyboardModifiers() if hasattr(comb, "keyboardModifiers") else Qt.KeyboardModifier.NoModifier
+            if ckey == event_key and cmods == modifiers:
+                return True
+            if ckey in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and event_key in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and cmods == modifiers:
+                return True
+    except Exception:
+        pass
+    return False
 
 
 class SyncWorker(QThread):
@@ -758,6 +784,210 @@ class ReleaseNotesDialog(BaseFramelessDialog):
         if callable(self.on_install_callback):
             self.on_install_callback()
 
+
+
+class ShortcutsHelpDialog(BaseFramelessDialog):
+    """
+    Modal dialog displaying the full keyboard shortcut reference cheatsheet,
+    organized into logical categories with styled badge keys.
+    """
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Keyboard Shortcuts - Kaffeine DVR")
+        self.resize(1220, 750)
+        self.setObjectName("shortcutsHelpDialog")
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(22, 18, 22, 20)
+        layout.setSpacing(14)
+
+        # Header bar
+        header_row = QHBoxLayout()
+        header_row.setSpacing(12)
+
+        icon_lbl = QLabel()
+        app_icon = get_app_icon()
+        if not app_icon.isNull():
+            icon_lbl.setPixmap(app_icon.pixmap(32, 32))
+        header_row.addWidget(icon_lbl)
+
+        title_col = QVBoxLayout()
+        title_col.setSpacing(2)
+        dlg_title = QLabel("<b style='font-size: 16px; color: #ffffff;'>Keyboard Shortcuts</b>")
+        title_col.addWidget(dlg_title)
+        dlg_sub = QLabel("<span style='color: #8c98aa; font-size: 12px;'>Quick Reference &amp; Hotkey Cheatsheet</span>")
+        title_col.addWidget(dlg_sub)
+        header_row.addLayout(title_col, 1)
+
+        close_x = QToolButton(self)
+        close_x.setText("✕")
+        close_x.setToolTip("Close (Escape)")
+        close_x.setCursor(Qt.CursorShape.PointingHandCursor)
+        close_x.setStyleSheet(
+            "QToolButton { background: transparent; color: #8c98aa; font-size: 13px; font-weight: bold; border: none; padding: 2px 6px; border-radius: 4px; }"
+            "QToolButton:hover { color: #ffffff; background-color: rgba(255, 255, 255, 0.1); }"
+        )
+        close_x.clicked.connect(self.accept)
+        header_row.addWidget(close_x, 0, Qt.AlignmentFlag.AlignTop)
+
+        layout.addLayout(header_row)
+
+        # Scrollable container for shortcut cards
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("QScrollArea { border: 1px solid #2d3548; border-radius: 8px; background-color: #12141d; }")
+
+        container = QWidget()
+        container.setStyleSheet("background: transparent;")
+        c_lay = QVBoxLayout(container)
+        c_lay.setContentsMargins(16, 16, 16, 16)
+        c_lay.setSpacing(14)
+
+        kbd_style = (
+            "background-color: #1e293b; color: #38bdf8; border: 1px solid #334155; "
+            "border-radius: 4px; padding: 2px 7px; font-family: monospace; font-size: 12px; font-weight: bold;"
+        )
+
+        left_categories = [
+            (
+                "Global && Navigation",
+                "#38bdf8",
+                [
+                    (["Ctrl+1", "Alt+1"], "Switch to TV Guide tab"),
+                    (["Ctrl+2", "Alt+2"], "Switch to Recordings Schedule tab"),
+                    (["Ctrl+3", "Alt+3"], "Switch to Settings tab"),
+                    (["Ctrl+4", "Alt+4"], "Switch to Help and Information tab"),
+                    (["F11"], "Toggle Maximize Guide Grid (fill window)"),
+                    (["Esc"], "Clear selection / Exit maximized guide / Close dialogs"),
+                    (["Ctrl+Q"], "Quit application"),
+                ],
+            ),
+            (
+                "TV Guide Controls",
+                "#4ade80",
+                [
+                    (["Ctrl+F", "/"], "Focus the Search / Filter input"),
+                    (["F5", "Ctrl+R"], "Sync guide feeds (or refresh recordings list)"),
+                    (["Home", "Alt+N"], "Jump guide to current time (Now)"),
+                    (["Alt+P"], "Jump guide to Prime Time (7:00 PM)"),
+                    (["Ctrl+G"], "Switch guide to Grid View"),
+                    (["Ctrl+L"], "Switch guide to List View"),
+                    (["Ctrl++", "Ctrl+="], "Zoom In guide font and tile size"),
+                    (["Ctrl+-"], "Zoom Out guide font and tile size"),
+                    (["Ctrl+0"], "Reset guide zoom to default size"),
+                ],
+            ),
+        ]
+
+        cfg = getattr(self.parent(), "config_mgr", None)
+        sc_up = cfg.get_shortcut("nav_up") if cfg else "Up"
+        sc_down = cfg.get_shortcut("nav_down") if cfg else "Down"
+        sc_left = cfg.get_shortcut("nav_left") if cfg else "Left"
+        sc_right = cfg.get_shortcut("nav_right") if cfg else "Right"
+
+        right_categories = [
+            (
+                "Guide Navigation Keys",
+                "#38bdf8",
+                [
+                    ([sc_up or "Up"], "Navigate Guide Up"),
+                    ([sc_down or "Down"], "Navigate Guide Down (Initializes access to guide)"),
+                    ([sc_left or "Left"], "Navigate Guide Left"),
+                    ([sc_right or "Right"], "Navigate Guide Right"),
+                ],
+            ),
+            (
+                "Guide Program Hotkeys",
+                "#f59e0b",
+                [
+                    (["Enter", "Space"], "Show program details / open action card"),
+                    (["W"], "Watch Live / Tune selected channel in Kaffeine"),
+                    (["R"], "Record selected program (or adjust buffer)"),
+                    (["A"], "Create auto-record series rule for selected show"),
+                ],
+            ),
+            (
+                "Cheatsheet && Help",
+                "#a855f7",
+                [
+                    (["F1", "Ctrl+/", "?"], "Open this Keyboard Shortcuts cheatsheet"),
+                ],
+            ),
+        ]
+
+        def _make_category_group(cat_title: str, cat_color: str, items: list) -> QGroupBox:
+            grp = QGroupBox(cat_title)
+            grp.setStyleSheet(
+                f"QGroupBox {{ font-weight: bold; font-size: 13px; color: {cat_color}; "
+                f"border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; margin-top: 10px; padding: 12px 10px 10px 10px; }} "
+                f"QGroupBox::title {{ subcontrol-origin: margin; subcontrol-position: top left; left: 10px; padding: 0 4px; }}"
+            )
+            g_lay = QGridLayout(grp)
+            g_lay.setContentsMargins(12, 10, 12, 10)
+            g_lay.setHorizontalSpacing(14)
+            g_lay.setVerticalSpacing(8)
+
+            for row_idx, (keys, desc) in enumerate(items):
+                keys_html = " &nbsp;<span style='color: #64748b;'>or</span>&nbsp; ".join(
+                    [f"<span style='{kbd_style}'>{k}</span>" for k in keys]
+                )
+                k_lbl = QLabel(keys_html)
+                k_lbl.setTextFormat(Qt.TextFormat.RichText)
+                k_lbl.setFixedWidth(160)
+                k_lbl.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+
+                d_lbl = QLabel(f"<span style='color: #e2e8f0; font-size: 13px;'>{desc}</span>")
+                d_lbl.setTextFormat(Qt.TextFormat.RichText)
+                d_lbl.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+
+                g_lay.addWidget(k_lbl, row_idx, 0)
+                g_lay.addWidget(d_lbl, row_idx, 1)
+
+            return grp
+
+        cols_row = QHBoxLayout()
+        cols_row.setContentsMargins(0, 0, 0, 0)
+        cols_row.setSpacing(14)
+
+        left_col = QVBoxLayout()
+        left_col.setContentsMargins(0, 0, 0, 0)
+        left_col.setSpacing(14)
+        for cat_title, cat_color, items in left_categories:
+            left_col.addWidget(_make_category_group(cat_title, cat_color, items))
+        left_col.addStretch()
+
+        right_col = QVBoxLayout()
+        right_col.setContentsMargins(0, 0, 0, 0)
+        right_col.setSpacing(14)
+        for cat_title, cat_color, items in right_categories:
+            right_col.addWidget(_make_category_group(cat_title, cat_color, items))
+        right_col.addStretch()
+
+        cols_row.addLayout(left_col, 1)
+        cols_row.addLayout(right_col, 1)
+
+        c_lay.addLayout(cols_row)
+        c_lay.addStretch()
+        scroll.setWidget(container)
+        layout.addWidget(scroll, 1)
+
+        # Footer
+        footer = QHBoxLayout()
+        note = QLabel("<span style='color: #64748b; font-size: 11px;'>Single-key shortcuts (W, R, A, /, ?) only trigger when not typing in text boxes.</span>")
+        footer.addWidget(note)
+        footer.addStretch(1)
+
+        close_btn = QPushButton("Close")
+        close_btn.setFixedWidth(100)
+        close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        close_btn.setStyleSheet(
+            "QPushButton { background-color: #2563eb; color: #ffffff; font-weight: bold; border-radius: 6px; padding: 6px 14px; border: none; } "
+            "QPushButton:hover { background-color: #1d4ed8; }"
+        )
+        close_btn.clicked.connect(self.accept)
+        footer.addWidget(close_btn)
+
+        layout.addLayout(footer)
 
 
 class ManualRecordDialog(BaseFramelessDialog):
@@ -2030,6 +2260,57 @@ class CollapsibleSection(QWidget):
             parent = parent.parentWidget()
         if scroll_area:
             scroll_area.ensureWidgetVisible(self.content_area, 0, 15)
+
+
+class GlobalArrowNavigationFilter(QObject):
+    """
+    Application-level event filter ensuring arrow key navigation seamlessly
+    selects the first visible TV Guide program when nothing is selected yet,
+    regardless of which window child or container currently holds keyboard focus.
+    """
+    def __init__(self, main_window):
+        super().__init__(main_window)
+        self.main_window = main_window
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.KeyPress:
+            key = event.key()
+            modifiers = event.modifiers()
+            mw = self.main_window
+            if mw and hasattr(mw, "tabs") and mw.tabs.currentIndex() == 0:
+                focused = QApplication.focusWidget() or obj
+                from PyQt6.QtWidgets import QLineEdit, QTextEdit, QPlainTextEdit, QAbstractSpinBox, QComboBox
+                if not isinstance(focused, (QLineEdit, QTextEdit, QPlainTextEdit, QAbstractSpinBox, QComboBox)):
+                    cfg = getattr(mw, "config_mgr", None)
+                    sc_up = cfg.get_shortcut("nav_up") if cfg else "Up"
+                    sc_down = cfg.get_shortcut("nav_down") if cfg else "Down"
+                    sc_left = cfg.get_shortcut("nav_left") if cfg else "Left"
+                    sc_right = cfg.get_shortcut("nav_right") if cfg else "Right"
+
+                    if not mw._get_active_selected_program():
+                        # Initialize access to guide grid or list on configured Down shortcut
+                        if _shortcut_matches(sc_down, key, modifiers):
+                            if mw.select_first_visible_guide_program():
+                                return True
+                    else:
+                        matched_dir = None
+                        if _shortcut_matches(sc_up, key, modifiers):
+                            matched_dir = Qt.Key.Key_Up
+                        elif _shortcut_matches(sc_down, key, modifiers):
+                            matched_dir = Qt.Key.Key_Down
+                        elif _shortcut_matches(sc_left, key, modifiers):
+                            matched_dir = Qt.Key.Key_Left
+                        elif _shortcut_matches(sc_right, key, modifiers):
+                            matched_dir = Qt.Key.Key_Right
+
+                        if matched_dir:
+                            active_table = getattr(mw, "guide_grid_table", None) if mw._is_grid_view_active() else getattr(mw, "guide_table", None)
+                            if active_table and focused != active_table and focused != active_table.viewport():
+                                active_table.setFocus()
+                                synth = QKeyEvent(event.type(), matched_dir, Qt.KeyboardModifier.NoModifier)
+                                QApplication.sendEvent(active_table, synth)
+                                return True
+        return super().eventFilter(obj, event)
 
 
 class NoWheelEventFilter(QObject):
@@ -3558,9 +3839,6 @@ class GridPanFilter(QObject):
                             if self._overscroll_x != 0:
                                 self._overscroll_x = 0
                                 self._hide_overscroll_badge()
-
-                    if delta.y() != 0 and v_bar and watched is vp:
-                        v_bar.setValue(v_bar.value() - delta.y())
                 return True
 
         elif evt_type == QEvent.Type.MouseButtonRelease:
@@ -3655,11 +3933,34 @@ class GuideListClickFilter(QObject):
                 mw = self.main_window or getattr(self.table, "main_window", None)
                 if mw and hasattr(mw, "clear_guide_selection"):
                     mw.clear_guide_selection()
-        elif evt_type == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_Escape:
+        elif evt_type == QEvent.Type.KeyPress:
+            key = event.key()
+            modifiers = event.modifiers()
             mw = self.main_window or getattr(self.table, "main_window", None)
-            if mw and hasattr(mw, "clear_guide_selection"):
-                mw.clear_guide_selection()
-                return True
+            cfg = getattr(mw, "config_mgr", None) if mw else None
+            sc_up = cfg.get_shortcut("nav_up") if cfg else "Up"
+            sc_down = cfg.get_shortcut("nav_down") if cfg else "Down"
+
+            if key == Qt.Key.Key_Escape:
+                if mw and hasattr(mw, "clear_guide_selection"):
+                    mw.clear_guide_selection()
+                    return True
+
+            matched_dir = None
+            if _shortcut_matches(sc_up, key, modifiers):
+                matched_dir = Qt.Key.Key_Up
+            elif _shortcut_matches(sc_down, key, modifiers):
+                matched_dir = Qt.Key.Key_Down
+
+            if matched_dir:
+                if mw and not mw._get_active_selected_program():
+                    if matched_dir == Qt.Key.Key_Down:
+                        mw.select_first_visible_guide_program()
+                    return True
+                if key != matched_dir:
+                    synth = QKeyEvent(event.type(), matched_dir, Qt.KeyboardModifier.NoModifier)
+                    QApplication.sendEvent(self.table, synth)
+                    return True
         return super().eventFilter(watched, event)
 
 
@@ -3976,6 +4277,89 @@ class GuideGridTable(QTableWidget):
             painter.setPen(QPen(color, 2))
             painter.drawLine(line_x, 0, line_x, self.viewport().height())
             painter.end()
+
+    def keyPressEvent(self, event):
+        mw = getattr(self, "main_window", None)
+        key = event.key()
+        modifiers = event.modifiers()
+
+        if mw:
+            cfg = getattr(mw, "config_mgr", None)
+            sc_details = cfg.get_shortcut("prog_details") if cfg else "Return"
+            sc_watch = cfg.get_shortcut("prog_watch") if cfg else "W"
+            sc_record = cfg.get_shortcut("prog_record") if cfg else "R"
+            sc_auto = cfg.get_shortcut("prog_auto_record") if cfg else "A"
+            sc_now = cfg.get_shortcut("jump_now") if cfg else "Home"
+
+            if _shortcut_matches(sc_details, key, modifiers) or key in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Space):
+                prog = mw._get_active_selected_program()
+                if prog:
+                    mw.handle_program_activation(prog)
+                    event.accept()
+                    return
+            elif _shortcut_matches(sc_watch, key, modifiers):
+                prog = mw._get_active_selected_program()
+                if prog:
+                    mw.watch_or_tune_selected_guide_item(prog)
+                    event.accept()
+                    return
+            elif _shortcut_matches(sc_record, key, modifiers):
+                prog = mw._get_active_selected_program()
+                if prog:
+                    mw.record_selected_guide_item(prog)
+                    event.accept()
+                    return
+            elif _shortcut_matches(sc_auto, key, modifiers):
+                prog = mw._get_active_selected_program()
+                if prog:
+                    mw.add_rule_from_selected_guide_item(prog)
+                    event.accept()
+                    return
+            elif _shortcut_matches(sc_now, key, modifiers):
+                mw.jump_guide_to_now()
+                event.accept()
+                return
+            elif key == Qt.Key.Key_Escape:
+                mw.clear_guide_selection()
+                if getattr(mw, "_guide_maximized", False):
+                    mw.toggle_guide_maximized()
+                event.accept()
+        # Synchronize program details and tile highlight when navigating via configured navigation keys
+        if mw:
+            sc_up = cfg.get_shortcut("nav_up") if cfg else "Up"
+            sc_down = cfg.get_shortcut("nav_down") if cfg else "Down"
+            sc_left = cfg.get_shortcut("nav_left") if cfg else "Left"
+            sc_right = cfg.get_shortcut("nav_right") if cfg else "Right"
+
+            matched_dir = None
+            if _shortcut_matches(sc_up, key, modifiers):
+                matched_dir = Qt.Key.Key_Up
+            elif _shortcut_matches(sc_down, key, modifiers):
+                matched_dir = Qt.Key.Key_Down
+            elif _shortcut_matches(sc_left, key, modifiers):
+                matched_dir = Qt.Key.Key_Left
+            elif _shortcut_matches(sc_right, key, modifiers):
+                matched_dir = Qt.Key.Key_Right
+
+            if matched_dir:
+                if not mw._get_active_selected_program():
+                    if matched_dir == Qt.Key.Key_Down:
+                        mw.select_first_visible_guide_program()
+                    event.accept()
+                    return
+                if key == matched_dir:
+                    super().keyPressEvent(event)
+                else:
+                    synth = QKeyEvent(event.type(), matched_dir, Qt.KeyboardModifier.NoModifier)
+                    super().keyPressEvent(synth)
+                r = self.currentRow()
+                c = self.currentColumn()
+                if r >= 0 and c >= 0:
+                    mw.on_grid_cell_clicked(r, c, activate=False)
+                event.accept()
+                return
+
+        super().keyPressEvent(event)
 
 
 class UpcomingShowDialog(BaseFramelessDialog):
@@ -5438,6 +5822,11 @@ class MainWindow(QMainWindow):
             app.installEventFilter(self._wheel_filter)
             app._wheel_filter_installed = True
 
+        if app and not getattr(self, "_arrow_filter_installed", False):
+            self._arrow_filter = GlobalArrowNavigationFilter(self)
+            app.installEventFilter(self._arrow_filter)
+            self._arrow_filter_installed = True
+
         # Check for first-run setup wizard for new users
         if not os.environ.get("PYTEST_CURRENT_TEST"):
             QTimer.singleShot(600, self.check_first_run)
@@ -5495,6 +5884,8 @@ class MainWindow(QMainWindow):
 
         if getattr(self.config_mgr, "guide_maximized", False):
             self.toggle_guide_maximized()
+
+        self._setup_keyboard_shortcuts()
 
     def _create_clock_widget(self) -> QWidget:
         clock_frame = QFrame()
@@ -6078,6 +6469,7 @@ class MainWindow(QMainWindow):
         self.settings_subtabs.addTab(self.create_settings_channels_tab(), "Channel Source")
         self.settings_subtabs.addTab(self.create_settings_guide_tab(), "Guide Sources and Health")
         self.settings_subtabs.addTab(self.create_settings_updates_tab(), "Updates and Maintenance")
+        self.settings_subtabs.addTab(self.create_settings_shortcuts_tab(), "Keyboard Shortcuts")
         layout.addWidget(self.settings_subtabs)
 
         return widget
@@ -7732,7 +8124,7 @@ class MainWindow(QMainWindow):
         self.web_enable_check = QCheckBox("Enable Local / Tailscale Web Companion")
         self.web_enable_check.setChecked(self.config_mgr.web_server_enabled)
         web_form.addRow(
-            make_setting_label("Web Access:", "Run a secure web companion server to browse the TV guide, schedule shows, and stream videos from your phone, tablet, or remote PC over Tailscale/LAN."),
+            make_setting_label("Web Access:", "Run a secure web companion server to browse the TV guide, schedule shows, and stream videos from your phone, tablet, or remote PC over Tailscale/LAN. Tip: If you use Tailscale, you don't need to open or touch any firewall ports at all—devices on your Tailnet can connect both at home and away. If connecting directly over your local Wi-Fi/LAN without Tailscale, allow the port for your home subnet: sudo firewall-cmd --add-rich-rule='rule family=\"ipv4\" source address=\"192.168.1.0/24\" port port=\"8086\" protocol=\"tcp\" accept' --permanent && sudo firewall-cmd --reload."),
             self.web_enable_check
         )
 
@@ -7745,7 +8137,7 @@ class MainWindow(QMainWindow):
         web_port_row.addWidget(self.web_port_spin)
         web_port_row.addStretch()
         web_form.addRow(
-            make_setting_label("Port Number:", "TCP port for the web interface (default: 8088)."),
+            make_setting_label("Port Number:", "TCP port for the web interface (default: 8088). No firewall rules needed when connecting via Tailscale. Only needed in your firewall if connecting over direct local LAN without Tailscale."),
             web_port_row
         )
 
@@ -7805,6 +8197,8 @@ class MainWindow(QMainWindow):
         self.auto_buffer_sports_check.stateChanged.connect(self._auto_save_automation_settings)
         self.sports_buffer_spin.valueChanged.connect(self._auto_save_automation_settings)
         self.interval_spin.valueChanged.connect(self._auto_save_automation_settings)
+        if hasattr(self, "launch_mode_combo"):
+            self.launch_mode_combo.currentIndexChanged.connect(self._auto_save_automation_settings)
         if hasattr(self, "guide_watch_combo"):
             self.guide_watch_combo.currentIndexChanged.connect(self._auto_save_automation_settings)
         if hasattr(self, "live_tv_mode_combo"):
@@ -8417,6 +8811,240 @@ class MainWindow(QMainWindow):
         QProcess.startDetached(sys.executable, sys.argv)
         QApplication.quit()
 
+    # Subcategory 5: Keyboard Shortcuts Editor
+    def create_settings_shortcuts_tab(self) -> QWidget:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(14)
+
+        # Header description box
+        desc_box = QGroupBox("Keyboard Shortcuts Configuration")
+        desc_box.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        desc_layout = QVBoxLayout(desc_box)
+        desc_layout.setContentsMargins(15, 12, 15, 12)
+        desc_layout.setSpacing(6)
+
+        hdr_lbl = QLabel(
+            "Customize hotkeys and keyboard shortcuts. Click any shortcut field to press a new key combination, "
+            "or use the <b>Clear</b> button to disable that specific hotkey. "
+            "Changes take effect immediately and are saved automatically.<br>"
+            "<span style='color: #94a3b8;'><b>Tip:</b> Navigation keys navigate the Guide Grid and List views only. Press the configured <b style='color: #38bdf8;'>Navigate Guide Down</b> key (default: <b style='color: #38bdf8;'>Down</b>) to initialize keyboard access to the guide.</span>"
+        )
+        hdr_lbl.setWordWrap(True)
+        hdr_lbl.setStyleSheet("color: #cbd5e1; font-size: 13px; line-height: 1.4;")
+        desc_layout.addWidget(hdr_lbl)
+
+        btn_row = QHBoxLayout()
+        btn_row.setContentsMargins(0, 4, 0, 0)
+        btn_row.setSpacing(10)
+
+        reset_defaults_btn = QPushButton("Reset All Shortcuts to Defaults")
+        reset_defaults_btn.setObjectName("secondaryActionBtn")
+        reset_defaults_btn.setToolTip("Restore all keyboard shortcuts to their factory default bindings")
+        reset_defaults_btn.clicked.connect(self._reset_all_shortcuts_to_defaults)
+        btn_row.addWidget(reset_defaults_btn)
+
+        open_cheatsheet_btn = QPushButton("Open Cheatsheet Window")
+        open_cheatsheet_btn.setObjectName("secondaryActionBtn")
+        open_cheatsheet_btn.setToolTip("View full keyboard shortcuts quick reference cheatsheet (F1)")
+        open_cheatsheet_btn.clicked.connect(self.show_shortcuts_dialog)
+        self.open_shortcuts_dialog_btn = open_cheatsheet_btn
+        btn_row.addWidget(open_cheatsheet_btn)
+        btn_row.addStretch()
+
+        desc_layout.addLayout(btn_row)
+        layout.addWidget(desc_box)
+
+        # Grouped shortcuts categories
+        # Left Column: Global & Navigation, TV Guide Controls
+        # Right Column: Guide Navigation Keys, Guide Program Hotkeys, Cheatsheet & Help
+        left_categories = [
+            (
+                "Global && Navigation",
+                "#38bdf8",
+                [
+                    ("tab_guide", "Switch to TV Guide tab"),
+                    ("tab_recordings", "Switch to Recordings Schedule tab"),
+                    ("tab_settings", "Switch to Settings tab"),
+                    ("tab_help", "Switch to Help and Information tab"),
+                    ("maximize_grid", "Toggle Maximize Guide Grid"),
+                    ("quit_app", "Quit Application"),
+                ],
+            ),
+            (
+                "TV Guide Controls",
+                "#4ade80",
+                [
+                    ("focus_search", "Focus Guide Search Input"),
+                    ("sync_refresh", "Sync Guide Feeds / Refresh Recordings"),
+                    ("jump_now", "Jump Guide to Current Time (Now)"),
+                    ("jump_primetime", "Jump Guide to Prime Time (7 PM)"),
+                    ("view_grid", "Switch to Grid View Mode"),
+                    ("view_list", "Switch to List View Mode"),
+                    ("zoom_in", "Zoom In Guide Font & Tiles"),
+                    ("zoom_out", "Zoom Out Guide Font & Tiles"),
+                    ("zoom_reset", "Reset Guide Zoom Level"),
+                ],
+            ),
+        ]
+
+        right_categories = [
+            (
+                "Guide Navigation Keys",
+                "#38bdf8",
+                [
+                    ("nav_up", "Navigate Guide Up"),
+                    ("nav_down", "Navigate Guide Down / Initialize Access"),
+                    ("nav_left", "Navigate Guide Left"),
+                    ("nav_right", "Navigate Guide Right"),
+                ],
+            ),
+            (
+                "Guide Program Hotkeys",
+                "#f59e0b",
+                [
+                    ("prog_details", "Show Program Details / Open Action Card"),
+                    ("prog_watch", "Watch Live / Tune Selected Channel"),
+                    ("prog_record", "Record Selected Program"),
+                    ("prog_auto_record", "Auto-Record Series (Create Rule)"),
+                ],
+            ),
+            (
+                "Cheatsheet && Help",
+                "#a855f7",
+                [
+                    ("show_shortcuts", "Open Keyboard Shortcuts Dialog"),
+                ],
+            ),
+        ]
+
+        self._shortcut_edits: Dict[str, QKeySequenceEdit] = {}
+
+        cols_row = QHBoxLayout()
+        cols_row.setContentsMargins(0, 0, 0, 0)
+        cols_row.setSpacing(14)
+
+        left_col_lay = QVBoxLayout()
+        left_col_lay.setContentsMargins(0, 0, 0, 0)
+        left_col_lay.setSpacing(14)
+
+        right_col_lay = QVBoxLayout()
+        right_col_lay.setContentsMargins(0, 0, 0, 0)
+        right_col_lay.setSpacing(14)
+
+        def _build_shortcut_group(cat_title: str, cat_color: str, items: list) -> QGroupBox:
+            grp = QGroupBox(cat_title)
+            grp.setStyleSheet(
+                f"QGroupBox {{ font-weight: bold; font-size: 13px; color: {cat_color}; "
+                f"border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; margin-top: 10px; padding: 12px 10px 10px 10px; }} "
+                f"QGroupBox::title {{ subcontrol-origin: margin; subcontrol-position: top left; left: 10px; padding: 0 4px; }}"
+            )
+            g_lay = QGridLayout(grp)
+            g_lay.setContentsMargins(12, 10, 12, 10)
+            g_lay.setHorizontalSpacing(14)
+            g_lay.setVerticalSpacing(8)
+
+            for row_idx, (sc_id, desc) in enumerate(items):
+                d_lbl = QLabel(desc)
+                d_lbl.setStyleSheet("color: #e2e8f0; font-size: 13px; font-weight: normal;")
+
+                edit_row = QHBoxLayout()
+                edit_row.setContentsMargins(0, 0, 0, 0)
+                edit_row.setSpacing(6)
+
+                cur_val = self.config_mgr.get_shortcut(sc_id)
+                kse = QKeySequenceEdit(QKeySequence(cur_val))
+                kse.setFixedWidth(140)
+                kse.setStyleSheet(
+                    "QKeySequenceEdit { background-color: #1e293b; color: #38bdf8; "
+                    "border: 1px solid #334155; border-radius: 4px; padding: 3px 6px; "
+                    "font-family: monospace; font-size: 12px; font-weight: bold; }"
+                )
+                kse.keySequenceChanged.connect(lambda seq, sid=sc_id: self._on_shortcut_key_changed(sid, seq))
+                self._shortcut_edits[sc_id] = kse
+                edit_row.addWidget(kse)
+
+                clr_btn = QPushButton("Clear")
+                clr_btn.setToolTip("Disable this shortcut")
+                clr_btn.setStyleSheet(
+                    "QPushButton { padding: 3px 8px; font-size: 11px; min-width: 50px; } "
+                    "QPushButton:hover { background-color: #334155; }"
+                )
+                clr_btn.clicked.connect(lambda checked, ed=kse, sid=sc_id: self._clear_shortcut_key(sid, ed))
+                edit_row.addWidget(clr_btn)
+
+                def_btn = QPushButton("Default")
+                def_val = DEFAULT_SHORTCUTS.get(sc_id, "")
+                def_btn.setToolTip(f"Reset to default: {def_val}")
+                def_btn.setStyleSheet(
+                    "QPushButton { padding: 3px 8px; font-size: 11px; min-width: 56px; } "
+                    "QPushButton:hover { background-color: #334155; }"
+                )
+                def_btn.clicked.connect(lambda checked, ed=kse, sid=sc_id, dv=def_val: self._reset_single_shortcut(sid, ed, dv))
+                edit_row.addWidget(def_btn)
+
+                edit_row.addStretch()
+
+                g_lay.addWidget(d_lbl, row_idx, 0, Qt.AlignmentFlag.AlignVCenter)
+                g_lay.addLayout(edit_row, row_idx, 1, Qt.AlignmentFlag.AlignVCenter)
+
+            return grp
+
+        for cat_title, cat_color, items in left_categories:
+            left_col_lay.addWidget(_build_shortcut_group(cat_title, cat_color, items))
+        left_col_lay.addStretch()
+
+        for cat_title, cat_color, items in right_categories:
+            right_col_lay.addWidget(_build_shortcut_group(cat_title, cat_color, items))
+        right_col_lay.addStretch()
+
+        cols_row.addLayout(left_col_lay, 1)
+        cols_row.addLayout(right_col_lay, 1)
+
+        layout.addLayout(cols_row)
+        layout.addStretch()
+        scroll.setWidget(container)
+        return scroll
+
+    def _on_shortcut_key_changed(self, shortcut_id: str, key_seq: QKeySequence):
+        seq_str = key_seq.toString(QKeySequence.SequenceFormat.PortableText)
+        self.config_mgr.set_shortcut(shortcut_id, seq_str)
+        self._setup_keyboard_shortcuts()
+        self.flash_save_indicator(f"Shortcut updated: {seq_str or 'Disabled'}")
+
+    def _clear_shortcut_key(self, shortcut_id: str, edit_widget: QKeySequenceEdit):
+        edit_widget.clear()
+        self.config_mgr.set_shortcut(shortcut_id, "")
+        self._setup_keyboard_shortcuts()
+        self.flash_save_indicator("Shortcut disabled")
+
+    def _reset_single_shortcut(self, shortcut_id: str, edit_widget: QKeySequenceEdit, default_val: str):
+        edit_widget.setKeySequence(QKeySequence(default_val))
+        self.config_mgr.set_shortcut(shortcut_id, default_val)
+        self._setup_keyboard_shortcuts()
+        self.flash_save_indicator(f"Shortcut reset to default: {default_val}")
+
+    def _reset_all_shortcuts_to_defaults(self):
+        reply = QMessageBox.question(
+            self,
+            "Reset Shortcuts",
+            "Are you sure you want to restore all keyboard shortcuts to their default settings?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self.config_mgr.reset_shortcuts_to_defaults()
+            for sc_id, edit_widget in getattr(self, "_shortcut_edits", {}).items():
+                def_val = DEFAULT_SHORTCUTS.get(sc_id, "")
+                edit_widget.blockSignals(True)
+                edit_widget.setKeySequence(QKeySequence(def_val))
+                edit_widget.blockSignals(False)
+            self._setup_keyboard_shortcuts()
+            self.flash_save_indicator("All shortcuts reset to defaults")
+
     # ------------------ TAB 5: HELP AND INFORMATION ------------------
     def create_help_tab(self) -> QWidget:
         widget = QWidget()
@@ -8427,6 +9055,7 @@ class MainWindow(QMainWindow):
         self.help_subtabs.addTab(self.create_help_setup_guide_tab(), "Quick Setup Guide")
         self.help_subtabs.addTab(self.create_help_grid_guide_tab(), "Grid Guide Usage && Capabilities")
         self.help_subtabs.addTab(self.create_help_reference_tab(), "System Architecture && Reference")
+        self.help_subtabs.addTab(self.create_help_shortcuts_tab(), "Keyboard Shortcuts")
         layout.addWidget(self.help_subtabs)
 
         return widget
@@ -8698,7 +9327,12 @@ class MainWindow(QMainWindow):
             "• <b style='color: #a855f7;'>Enabling Web Companion (Settings &gt; Web Companion):</b><br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;– Check <b>Enable Local / Tailscale Web Companion</b> to start the lightweight internal HTTP server.<br>"
             "&nbsp;&nbsp;&nbsp;&nbsp;– Configure a custom port (default: <code>8088</code>) and optional password protection.<br>"
-            "&nbsp;&nbsp;&nbsp;&nbsp;– Headless CLI launch: <code>kaffeine-dvr --web</code> or <code>kaffeine-dvr --web --port 8080</code>."
+            "&nbsp;&nbsp;&nbsp;&nbsp;– Headless CLI launch: <code>kaffeine-dvr --web</code> or <code>kaffeine-dvr --web --port 8080</code>.<br><br>"
+            "• <b style='color: #a855f7;'>Network &amp; Firewall Configuration:</b><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– <b>Tailscale (Recommended):</b> You do <u>not</u> need to open or touch any firewall ports! Tailscale is in Linux's trusted zone by default, allowing secure access from your phones, tablets, and HTPCs both on your home network and away from home.<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;– <b>Direct Local LAN (Without Tailscale):</b> If accessing directly over local Ethernet/Wi-Fi using your LAN IP and your firewall blocks incoming traffic, restrict access strictly to your home subnet rather than opening the port to the public:<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<code>sudo firewall-cmd --add-rich-rule='rule family=\"ipv4\" source address=\"192.168.1.0/24\" port port=\"8088\" protocol=\"tcp\" accept' --permanent &amp;&amp; sudo firewall-cmd --reload</code><br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<i>(Adjust <code>192.168.1.0/24</code> to your home subnet and <code>8088</code> to your configured port).</i>"
         )
         web_text.setWordWrap(True)
         web_text.setStyleSheet(body_style)
@@ -8708,6 +9342,13 @@ class MainWindow(QMainWindow):
         layout.addStretch()
         scroll.setWidget(container)
         return scroll
+
+    def create_help_shortcuts_tab(self) -> QWidget:
+        """
+        Embeds the full 2-column editable keyboard shortcuts configuration directly
+        into the Help and Information -> Keyboard Shortcuts tab.
+        """
+        return self.create_settings_shortcuts_tab()
 
     def create_help_grid_guide_tab(self) -> QWidget:
         scroll = QScrollArea()
@@ -12649,7 +13290,90 @@ class MainWindow(QMainWindow):
         if hasattr(self, "cancel_guide_btn"):
             self.cancel_guide_btn.setVisible(False)
 
-    def on_grid_cell_clicked(self, row: int, col: int):
+    def select_first_visible_guide_program(self) -> bool:
+        """
+        Selects the first visible program on the guide grid or list view.
+        Returns True if a program was successfully selected.
+        """
+        if self._is_grid_view_active():
+            if not hasattr(self, "guide_grid_table") or not self.guide_grid_table:
+                return False
+            table = self.guide_grid_table
+            if table.rowCount() == 0 or table.columnCount() == 0:
+                return False
+
+            # Find the leftmost visible column based on horizontal scroll
+            h_bar = table.horizontalScrollBar()
+            cur_scroll_x = h_bar.value() if h_bar else 0
+            hdr = table.horizontalHeader()
+            target_col = 0
+            if hdr:
+                target_col = max(0, hdr.visualIndexAt(0))
+
+            # Look through rows starting from 0 to find a cell with program data
+            for r in range(table.rowCount()):
+                for c in range(target_col, table.columnCount()):
+                    it = table.item(r, c)
+                    if not it:
+                        for span_c in range(c - 1, -1, -1):
+                            prev_it = table.item(r, span_c)
+                            if prev_it and prev_it.data(Qt.ItemDataRole.UserRole):
+                                p_data = prev_it.data(Qt.ItemDataRole.UserRole)
+                                p_span = p_data.get("_span", 1) if isinstance(p_data, dict) else 1
+                                if span_c + p_span > c:
+                                    it = prev_it
+                                break
+                    if it and it.data(Qt.ItemDataRole.UserRole):
+                        prog = it.data(Qt.ItemDataRole.UserRole)
+                        root_col = prog.get("_start_col", c)
+                        table.clearSelection()
+                        table.setCurrentCell(r, root_col)
+                        root_it = table.item(r, root_col) or it
+                        root_it.setSelected(True)
+                        self.selected_grid_program = prog
+                        self._display_program_details(prog)
+                        table.setFocus()
+                        table.viewport().update()
+                        return True
+            return False
+        else:
+            if not hasattr(self, "guide_table") or not self.guide_table:
+                return False
+            items = getattr(self, "current_guide_items", [])
+            if items and self.guide_table.rowCount() > 0:
+                # Find first live show in the list, falling back to upcoming or first item
+                target_row = -1
+                for r, p in enumerate(items):
+                    timing = self._get_program_timing_state(p, check_files=False)
+                    if timing.get("state") == "live":
+                        target_row = r
+                        break
+
+                if target_row < 0:
+                    for r, p in enumerate(items):
+                        timing = self._get_program_timing_state(p, check_files=False)
+                        if timing.get("state") in ("live", "upcoming"):
+                            target_row = r
+                            break
+
+                if target_row < 0 or target_row >= self.guide_table.rowCount():
+                    target_row = 0
+
+                prog = items[target_row] if target_row < len(items) else items[0]
+                self.guide_table.clearSelection()
+                self.guide_table.setCurrentCell(target_row, 0)
+                self.guide_table.selectRow(target_row)
+                target_item = self.guide_table.item(target_row, 1) or self.guide_table.item(target_row, 0)
+                if target_item:
+                    self.guide_table.scrollToItem(target_item, QTableWidget.ScrollHint.PositionAtTop)
+                self.selected_list_program = prog
+                self._last_clicked_guide_list_row = target_row
+                self._display_program_details(prog)
+                self.guide_table.setFocus()
+                return True
+            return False
+
+    def on_grid_cell_clicked(self, row: int, col: int, activate: Optional[bool] = None):
         item = self.guide_grid_table.item(row, col)
         if not item:
             # Check previous columns in case of span
@@ -12667,9 +13391,14 @@ class MainWindow(QMainWindow):
             return
 
         prog = item.data(Qt.ItemDataRole.UserRole)
-        # Option 1: Clicking the currently selected program tile again toggles / unhighlights it
         cur_sel = getattr(self, "selected_grid_program", None)
-        if cur_sel is not None:
+
+        if activate is None:
+            activate = getattr(self.config_mgr, "guide_single_click_play", True)
+
+        # Clicking the currently selected program tile again toggles / unhighlights it
+        # (Only applies when activated/clicked with mouse, never during keyboard navigation)
+        if activate and cur_sel is not None:
             is_same = False
             if cur_sel is prog or cur_sel == prog:
                 is_same = True
@@ -12698,7 +13427,7 @@ class MainWindow(QMainWindow):
         self._display_program_details(prog)
         self.guide_grid_table.viewport().update()
 
-        if getattr(self.config_mgr, "guide_single_click_play", True):
+        if activate:
             self.handle_program_activation(prog)
 
     def _display_program_details(self, prog: Dict[str, Any]):
@@ -14388,7 +15117,136 @@ class MainWindow(QMainWindow):
                     details = "\n".join([f"- {s['title']} ({s['channel']} at {s['start_time']})" for s in scheduled])
                     QMessageBox.information(self, "New Recordings Scheduled", f"Scheduled {len(scheduled)} shows:\n\n{details}")
 
+    def _setup_keyboard_shortcuts(self):
+        """Register global and context-aware keyboard shortcuts dynamically from configuration."""
+        if hasattr(self, "_shortcuts"):
+            for sc in self._shortcuts:
+                try:
+                    sc.setEnabled(False)
+                    sc.deleteLater()
+                except Exception:
+                    pass
+        self._shortcuts = []
+
+        cfg = getattr(self, "config_mgr", None)
+
+        def add_sc(key_seq, callback):
+            if not key_seq:
+                return None
+            try:
+                ks = QKeySequence(key_seq)
+                if not ks.isEmpty():
+                    sc = QShortcut(ks, self)
+                    sc.activated.connect(callback)
+                    self._shortcuts.append(sc)
+                    return sc
+            except Exception:
+                pass
+            return None
+
+        # Tab Switching
+        tab1_sc = cfg.get_shortcut("tab_guide") if cfg else "Ctrl+1"
+        tab2_sc = cfg.get_shortcut("tab_recordings") if cfg else "Ctrl+2"
+        tab3_sc = cfg.get_shortcut("tab_settings") if cfg else "Ctrl+3"
+        tab4_sc = cfg.get_shortcut("tab_help") if cfg else "Ctrl+4"
+
+        add_sc(tab1_sc, lambda: self.tabs.setCurrentIndex(0))
+        add_sc(tab2_sc, lambda: self.tabs.setCurrentIndex(1))
+        add_sc(tab3_sc, lambda: self.tabs.setCurrentIndex(2))
+        add_sc(tab4_sc, lambda: self.tabs.setCurrentIndex(3))
+
+        # View Mode Switching
+        vg_sc = cfg.get_shortcut("view_grid") if cfg else "Ctrl+G"
+        vl_sc = cfg.get_shortcut("view_list") if cfg else "Ctrl+L"
+        add_sc(vg_sc, lambda: self._switch_guide_view(0))
+        add_sc(vl_sc, lambda: self._switch_guide_view(1))
+
+        # Search Focus
+        sf_sc = cfg.get_shortcut("focus_search") if cfg else "Ctrl+F"
+        add_sc(sf_sc, self._focus_search)
+
+        # Refresh / Sync
+        sr_sc = cfg.get_shortcut("sync_refresh") if cfg else "F5"
+        add_sc(sr_sc, self._on_f5_refresh)
+
+        # Time Jumps
+        jn_sc = cfg.get_shortcut("jump_now") if cfg else "Home"
+        jp_sc = cfg.get_shortcut("jump_primetime") if cfg else "Alt+P"
+        # Note: If jump_now is a single key like 'Home', QShortcut works or keyPressEvent catches it
+        add_sc(jn_sc, self.jump_guide_to_now)
+        add_sc(jp_sc, self.jump_guide_to_primetime)
+
+        # Zoom Controls
+        zi_sc = cfg.get_shortcut("zoom_in") if cfg else "Ctrl++"
+        zo_sc = cfg.get_shortcut("zoom_out") if cfg else "Ctrl+-"
+        zr_sc = cfg.get_shortcut("zoom_reset") if cfg else "Ctrl+0"
+        add_sc(zi_sc, self.zoom_in_guide)
+        if zi_sc in ("Ctrl++", "Ctrl+Plus"):
+            add_sc("Ctrl+=", self.zoom_in_guide)
+        add_sc(zo_sc, self.zoom_out_guide)
+        add_sc(zr_sc, self.reset_guide_zoom)
+
+        # Maximize Guide Grid
+        mg_sc = cfg.get_shortcut("maximize_grid") if cfg else "F11"
+        add_sc(mg_sc, self.toggle_guide_maximized)
+
+        # Shortcuts Cheatsheet / Help
+        sh_sc = cfg.get_shortcut("show_shortcuts") if cfg else "F1"
+        add_sc(sh_sc, self.show_shortcuts_dialog)
+        if sh_sc == "F1":
+            add_sc("Ctrl+/", self.show_shortcuts_dialog)
+
+        # Quit
+        qa_sc = cfg.get_shortcut("quit_app") if cfg else "Ctrl+Q"
+        add_sc(qa_sc, self.close)
+
+    def _focus_search(self):
+        """Switch to TV Guide tab and focus the search input."""
+        self.tabs.setCurrentIndex(0)
+        if hasattr(self, "guide_search_input"):
+            self.guide_search_input.setFocus()
+            self.guide_search_input.selectAll()
+
+    def _on_f5_refresh(self):
+        """Context-sensitive refresh handler for F5 / Ctrl+R."""
+        curr_tab = self.tabs.currentIndex()
+        if curr_tab == 0:
+            self.sync_guide_now()
+        elif curr_tab == 1:
+            self.refresh_recordings()
+
+    def _switch_guide_view(self, mode_idx: int):
+        """Switch TV Guide between Grid View (0) and List View (1)."""
+        self.tabs.setCurrentIndex(0)
+        if mode_idx == 0:
+            if hasattr(self, "grid_view_btn"):
+                self.grid_view_btn.setChecked(True)
+                self._on_guide_view_toggled()
+        else:
+            if hasattr(self, "list_view_btn"):
+                self.list_view_btn.setChecked(True)
+                self._on_guide_view_toggled()
+
+    def reset_guide_zoom(self):
+        """Reset font and tile size to default (0) for the active guide view."""
+        if self._is_grid_view_active():
+            self.guide_grid_zoom_level = 0
+            self.settings.setValue("guide_grid_zoom_level", 0)
+        else:
+            self.guide_list_zoom_level = 0
+            self.settings.setValue("guide_list_zoom_level", 0)
+        self._apply_guide_zoom()
+        self._update_zoom_buttons_state()
+
+    def show_shortcuts_dialog(self):
+        """Display the modal Keyboard Shortcuts cheatsheet dialog."""
+        dlg = ShortcutsHelpDialog(self)
+        dlg.exec()
+
     def keyPressEvent(self, event):
+        focused = QApplication.focusWidget()
+        is_text_entry = isinstance(focused, (QLineEdit, QTextEdit, QPlainTextEdit, QAbstractSpinBox))
+
         if event.key() == Qt.Key.Key_Escape:
             has_sel = (
                 getattr(self, "selected_grid_program", None) is not None
@@ -14403,6 +15261,87 @@ class MainWindow(QMainWindow):
                 self.toggle_guide_maximized()
                 event.accept()
                 return
+
+        if not is_text_entry:
+            key = event.key()
+            modifiers = event.modifiers()
+            cfg = getattr(self, "config_mgr", None)
+
+            sc_search = cfg.get_shortcut("focus_search") if cfg else "Ctrl+F"
+            sc_help = cfg.get_shortcut("show_shortcuts") if cfg else "F1"
+            sc_now = cfg.get_shortcut("jump_now") if cfg else "Home"
+
+            if (key == Qt.Key.Key_Slash and modifiers == Qt.KeyboardModifier.NoModifier) or _shortcut_matches(sc_search, key, modifiers):
+                self._focus_search()
+                event.accept()
+                return
+
+            if key == Qt.Key.Key_Question or (key == Qt.Key.Key_Slash and bool(modifiers & Qt.KeyboardModifier.ShiftModifier)) or _shortcut_matches(sc_help, key, modifiers):
+                self.show_shortcuts_dialog()
+                event.accept()
+                return
+
+            if _shortcut_matches(sc_now, key, modifiers):
+                if self.tabs.currentIndex() == 0:
+                    self.jump_guide_to_now()
+                    event.accept()
+                    return
+
+            prog = self._get_active_selected_program()
+            if prog and self.tabs.currentIndex() == 0:
+                sc_details = cfg.get_shortcut("prog_details") if cfg else "Return"
+                sc_watch = cfg.get_shortcut("prog_watch") if cfg else "W"
+                sc_record = cfg.get_shortcut("prog_record") if cfg else "R"
+                sc_auto = cfg.get_shortcut("prog_auto_record") if cfg else "A"
+
+                if _shortcut_matches(sc_details, key, modifiers) or key in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Space):
+                    self.handle_program_activation(prog)
+                    event.accept()
+                    return
+                if _shortcut_matches(sc_watch, key, modifiers):
+                    self.watch_or_tune_selected_guide_item(prog)
+                    event.accept()
+                    return
+                if _shortcut_matches(sc_record, key, modifiers):
+                    self.record_selected_guide_item(prog)
+                    event.accept()
+                    return
+                if _shortcut_matches(sc_auto, key, modifiers):
+                    self.add_rule_from_selected_guide_item(prog)
+                    event.accept()
+                    return
+
+                sc_up = cfg.get_shortcut("nav_up") if cfg else "Up"
+                sc_down = cfg.get_shortcut("nav_down") if cfg else "Down"
+                sc_left = cfg.get_shortcut("nav_left") if cfg else "Left"
+                sc_right = cfg.get_shortcut("nav_right") if cfg else "Right"
+
+                matched_dir = None
+                if _shortcut_matches(sc_up, key, modifiers):
+                    matched_dir = Qt.Key.Key_Up
+                elif _shortcut_matches(sc_down, key, modifiers):
+                    matched_dir = Qt.Key.Key_Down
+                elif _shortcut_matches(sc_left, key, modifiers):
+                    matched_dir = Qt.Key.Key_Left
+                elif _shortcut_matches(sc_right, key, modifiers):
+                    matched_dir = Qt.Key.Key_Right
+
+                if matched_dir:
+                    active_table = getattr(self, "guide_grid_table", None) if self._is_grid_view_active() else getattr(self, "guide_table", None)
+                    if active_table:
+                        active_table.setFocus()
+                        synth = QKeyEvent(event.type(), matched_dir, Qt.KeyboardModifier.NoModifier)
+                        QApplication.sendEvent(active_table, synth)
+                        event.accept()
+                        return
+
+            if not prog and self.tabs.currentIndex() == 0:
+                sc_down = cfg.get_shortcut("nav_down") if cfg else "Down"
+                if _shortcut_matches(sc_down, key, modifiers):
+                    if self.select_first_visible_guide_program():
+                        event.accept()
+                        return
+
         super().keyPressEvent(event)
 
     def closeEvent(self, event):
