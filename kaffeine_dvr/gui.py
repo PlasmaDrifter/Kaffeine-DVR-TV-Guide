@@ -7769,8 +7769,36 @@ class MainWindow(QMainWindow):
         web_layout.addLayout(web_form)
 
         self.web_status_lbl = QLabel()
-        self._update_web_status_label()
         web_layout.addWidget(self.web_status_lbl)
+
+        # Quick Access Guide Card
+        self.web_guide_box = QFrame()
+        self.web_guide_box.setObjectName("web_guide_box")
+        self.web_guide_box.setStyleSheet("""
+            #web_guide_box {
+                background-color: rgba(15, 23, 42, 0.65);
+                border: 1px solid rgba(56, 189, 248, 0.25);
+                border-radius: 8px;
+                padding: 10px;
+                margin-top: 4px;
+            }
+        """)
+        web_guide_layout = QVBoxLayout(self.web_guide_box)
+        web_guide_layout.setContentsMargins(12, 10, 12, 10)
+        web_guide_layout.setSpacing(6)
+
+        guide_header = QLabel("<b>Quick Access Guide:</b>")
+        guide_header.setStyleSheet("color: #38bdf8; font-size: 12px; font-weight: bold;")
+        web_guide_layout.addWidget(guide_header)
+
+        self.web_urls_lbl = QLabel()
+        self.web_urls_lbl.setWordWrap(True)
+        self.web_urls_lbl.setOpenExternalLinks(True)
+        self.web_urls_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
+        web_guide_layout.addWidget(self.web_urls_lbl)
+
+        web_layout.addWidget(self.web_guide_box)
+        self._update_web_status_label()
         web_layout.addStretch()
 
         self.web_enable_check.toggled.connect(self._on_web_enable_toggled)
@@ -9421,29 +9449,83 @@ class MainWindow(QMainWindow):
         if not hasattr(self, "web_status_lbl"):
             return
         if not getattr(self.config_mgr, "web_server_enabled", False):
-            self.web_status_lbl.setText("Status: Web companion is disabled.")
+            self.web_status_lbl.setText("<b>Status:</b> Web companion is disabled.")
             self.web_status_lbl.setStyleSheet("color: #94a3b8; font-size: 12px;")
+            if hasattr(self, "web_guide_box"):
+                self.web_guide_box.setVisible(False)
             return
+
+        if hasattr(self, "web_guide_box"):
+            self.web_guide_box.setVisible(True)
 
         port = self.config_mgr.web_server_port
         has_pw = self.config_mgr.has_web_password
         auth_str = "Password Protected" if has_pw else "Warning: No password set"
         auth_color = "#38bdf8" if has_pw else "#f59e0b"
 
-        # Determine best display IP (Tailscale or local hostname)
+        # Determine best display IP addresses (localhost, local LAN IP, Tailscale IP)
         import socket
         try:
             hostname = socket.gethostname()
         except Exception:
             hostname = "localhost"
 
-        text = (
-            f"<b>Active:</b> Listening on port {port} • <span style='color: {auth_color};'>{auth_str}</span><br>"
-            f"Local LAN: <a href='http://localhost:{port}' style='color: #38bdf8;'>http://{hostname}:{port}/</a>"
+        lan_ip = None
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            lan_ip = s.getsockname()[0]
+            s.close()
+        except Exception:
+            pass
+
+        tailscale_ip = None
+        tailscale_bin = shutil.which("tailscale")
+        if tailscale_bin:
+            try:
+                res = subprocess.run([tailscale_bin, "ip", "-4"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=1.0)
+                ts_candidate = res.stdout.strip().splitlines()
+                if ts_candidate and ts_candidate[0].strip():
+                    tailscale_ip = ts_candidate[0].strip()
+            except Exception:
+                pass
+
+        self.web_status_lbl.setText(
+            f"<b>Status:</b> Running on port <b>{port}</b> • <span style='color: {auth_color}; font-weight: bold;'>{auth_str}</span>"
         )
-        self.web_status_lbl.setText(text)
         self.web_status_lbl.setStyleSheet("color: #e2e8f0; font-size: 12px; margin-top: 4px;")
-        self.web_status_lbl.setOpenExternalLinks(True)
+
+        if hasattr(self, "web_urls_lbl"):
+            guide_lines = []
+            guide_lines.append(
+                f"<span style='color: #94a3b8;'>• <b>This Computer:</b></span> "
+                f"<a href='http://localhost:{port}' style='color: #38bdf8; text-decoration: underline;'>http://localhost:{port}/</a>"
+            )
+            if lan_ip:
+                guide_lines.append(
+                    f"<span style='color: #94a3b8;'>• <b>Home Network (LAN):</b></span> "
+                    f"<a href='http://{lan_ip}:{port}' style='color: #38bdf8; text-decoration: underline;'>http://{lan_ip}:{port}/</a> "
+                    f"<span style='color: #64748b;'>(or http://{hostname}:{port}/)</span>"
+                )
+            else:
+                guide_lines.append(
+                    f"<span style='color: #94a3b8;'>• <b>Home Network (LAN):</b></span> "
+                    f"<a href='http://{hostname}:{port}' style='color: #38bdf8; text-decoration: underline;'>http://{hostname}:{port}/</a>"
+                )
+
+            if tailscale_ip:
+                guide_lines.append(
+                    f"<span style='color: #94a3b8;'>• <b>Tailscale (Anywhere):</b></span> "
+                    f"<a href='http://{tailscale_ip}:{port}' style='color: #38bdf8; text-decoration: underline;'>http://{tailscale_ip}:{port}/</a>"
+                )
+            else:
+                guide_lines.append(
+                    f"<span style='color: #94a3b8;'>• <b>Tailscale:</b></span> "
+                    f"<span style='color: #64748b;'>Install & connect Tailscale on both devices to access away from home.</span>"
+                )
+
+            self.web_urls_lbl.setText("<br>".join(guide_lines))
+            self.web_urls_lbl.setStyleSheet("color: #cbd5e1; font-size: 12px; line-height: 140%;")
 
     def _update_guide_detail_box_height(self):
         """Size description box to fit 2 or 3 lines of text based on user setting."""
