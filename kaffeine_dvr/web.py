@@ -137,8 +137,8 @@ class KaffeineWebRequestHandler(http.server.BaseHTTPRequestHandler):
                     self._send_json({"token": token, "status": "ok"})
                     return
 
-                # Incorrect password: record attempt and apply anti-brute delay
-                remaining_attempts, lockout_sec = self.server_obj.record_failed_login(client_ip, max_attempts=5, lockout_duration=300)
+                # Incorrect password: record attempt and apply anti-brute delay (5 attempts max, 15 min lockout)
+                remaining_attempts, lockout_sec = self.server_obj.record_failed_login(client_ip, max_attempts=5, lockout_duration=900)
                 time.sleep(0.5)
 
                 if lockout_sec > 0:
@@ -581,10 +581,10 @@ class KaffeineWebServer:
             self.failed_attempts[client_ip] = attempts
             return False, 0
 
-    def record_failed_login(self, client_ip: str, max_attempts: int = 5, lockout_duration: int = 300) -> tuple[int, int]:
+    def record_failed_login(self, client_ip: str, max_attempts: int = 5, lockout_duration: int = 900) -> tuple[int, int]:
         """
         Record a failed login attempt for client_ip.
-        If failed attempts exceed max_attempts, locks out the IP for lockout_duration (default 5 mins).
+        If failed attempts exceed max_attempts, locks out the IP for lockout_duration (default 15 mins).
         Returns (remaining_attempts_allowed, lockout_seconds_if_locked).
         """
         now = time.time()

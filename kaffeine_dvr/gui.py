@@ -7769,7 +7769,7 @@ class MainWindow(QMainWindow):
 
         web_pass_row.addStretch()
         web_form.addRow(
-            make_setting_label("Access Password:", "Password required to access the web companion. Strongly recommended for Tailscale and network access."),
+            make_setting_label("Access Password:", "Password required to access the web companion. To protect your home DVR from brute-force attacks, entering 5 incorrect passwords locks access for 15 minutes."),
             web_pass_row
         )
 
