@@ -7757,11 +7757,11 @@ class MainWindow(QMainWindow):
         self.web_pass_edit.setFixedWidth(180)
         web_pass_row.addWidget(self.web_pass_edit)
 
-        self.set_web_pass_btn = QPushButton("Save Password")
+        self.set_web_pass_btn = QPushButton("Save")
         self.set_web_pass_btn.clicked.connect(self._save_web_companion_password)
         web_pass_row.addWidget(self.set_web_pass_btn)
 
-        self.reset_web_pass_btn = QPushButton("Reset Password")
+        self.reset_web_pass_btn = QPushButton("Reset")
         self.reset_web_pass_btn.setStyleSheet("color: #f87171; border-color: rgba(239, 68, 68, 0.4);")
         self.reset_web_pass_btn.clicked.connect(self._reset_web_companion_password)
         self.reset_web_pass_btn.setVisible(self.config_mgr.has_web_password)
