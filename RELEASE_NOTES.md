@@ -1,5 +1,13 @@
 # Release Notes
 
+## v0.8.15
+
+- **Antenna Aiming Window Stability & Restoration**: Resolved issue where clicking "Done Aiming" halted playback by unmapping the Kaffeine window. Playback now terminates via D-Bus while keeping Kaffeine open and visible. Swapping channels to aim unminimizes, maps, positions, and raises Kaffeine without audio-only hidden states.
+- **X11 Geometry & Repaint Settling**: Added geometry change caching before issuing resize/move operations, bypassing redundant configure requests when Kaffeine is already correctly sized and positioned. Added settling delays and C++ window/menubar repaints to eliminate layout jitter and black unpainted artifacts.
+- **Remote Web Access Quick Access URLs**: Added convenient, clickable Quick Access URLs under Settings > Remote Web Access displaying localhost, local LAN IPv4 address, and Tailscale mesh IP for remote devices.
+- **Web Companion Security & Password Enforcement**: Made passwords mandatory before enabling the Web Companion server. Added an inline Reset button to clear password protection and disable the server in one click.
+- **Rate Limiting & 15-Minute Lockout**: Implemented anti-brute-force protection tracking failed login attempts per client IP. Limits incorrect passwords to 5 attempts before enforcing a 15-minute temporary lockout.
+
 ## v0.8.14
 
 - **Active Recording Conflict Protection**: Added protection to prevent active scheduled recordings from being stopped or deleted when attempting to watch another channel from the Guide. Prompts with a confirmation dialog before switching channels, and directly plays active recordings on the same channel without prompt or interruption.

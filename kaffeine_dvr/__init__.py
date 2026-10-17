@@ -5,7 +5,7 @@ Provides modern TV Guide scheduling, automated rules-based recording,
 and just-in-time recording management for Kaffeine DVB.
 """
 
-__version__ = "0.9.0"
+__version__ = "0.8.15"
 
 
 def setup_ssl_certificates():
