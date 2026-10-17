@@ -268,9 +268,9 @@ class KaffeineDbusClient:
             env = self._get_display_env()
             k_bin = self.get_kaffeine_bin()
             if mode in ("taskbar", "tray"):
-                cmd = [k_bin, "--lastchannel", "--qwindowgeometry", "1x1+-3000+-3000"]
+                cmd = [k_bin, "--qwindowgeometry", "1x1+-3000+-3000"]
             else:
-                cmd = [k_bin, "--lastchannel"]
+                cmd = [k_bin]
             subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             if mode in ("taskbar", "tray"):
                 import threading
@@ -784,6 +784,26 @@ class KaffeineDbusClient:
                 pass
 
         return target_dir
+
+    def stop_playback(self) -> bool:
+        """
+        Stop any active media/TV playback in Kaffeine via D-Bus MPRIS interface.
+        """
+        stopped = False
+        try:
+            import dbus
+            bus = dbus.SessionBus()
+            for service in ("org.kde.kaffeine", "org.mpris.kaffeine"):
+                try:
+                    proxy = bus.get_object(service, "/Player", introspect=False)
+                    iface = dbus.Interface(proxy, "org.freedesktop.MediaPlayer")
+                    iface.Stop(timeout=1.0)
+                    stopped = True
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        return stopped
 
     def play_file(self, file_path: str, player: Optional[str] = None, custom_cmd: Optional[str] = None, standalone: bool = False) -> Any:
         """

@@ -96,3 +96,21 @@ def test_archive_to_history(isolated_queue_mgr: QueueManager):
     assert len(hist) == 1
     assert hist[0]["title"] == "Recorded Show"
     assert hist[0]["channel"] == "FOX 10.1"
+
+
+def test_stop_playback_dbus_call(monkeypatch):
+    from unittest.mock import MagicMock
+    from kaffeine_dvr.dbus_client import KaffeineDbusClient
+
+    client = KaffeineDbusClient()
+    mock_bus = MagicMock()
+    mock_proxy = MagicMock()
+    mock_iface = MagicMock()
+    mock_bus.get_object.return_value = mock_proxy
+
+    monkeypatch.setattr("dbus.SessionBus", lambda: mock_bus)
+    monkeypatch.setattr("dbus.Interface", lambda proxy, iface_name: mock_iface)
+
+    res = client.stop_playback()
+    assert res is True
+    assert mock_iface.Stop.called

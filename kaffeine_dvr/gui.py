@@ -13797,7 +13797,11 @@ class MainWindow(QMainWindow):
                 pass
 
         if not is_scheduled:
-            # Cancel background recording in Kaffeine to immediately free tuner
+            # Stop any live playback in Kaffeine and cancel background recording to immediately free tuner
+            try:
+                self.dbus_client.stop_playback()
+            except Exception:
+                pass
             try:
                 self.dbus_client.cancel_recording(key=key, channel=ch, title=title)
             except Exception as e:
@@ -14471,6 +14475,12 @@ class MainWindow(QMainWindow):
 
             if getattr(self, "_active_timeshift", None):
                 self.stop_timeshift_session(user_initiated=False)
+
+            if hasattr(self, "dbus_client") and self.dbus_client:
+                try:
+                    self.dbus_client.stop_playback()
+                except Exception:
+                    pass
 
             if hasattr(self, "status_bar"):
                 try:
