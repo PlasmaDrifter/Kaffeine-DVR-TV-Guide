@@ -36,7 +36,7 @@ Kaffeine is a powerful digital TV viewer for KDE and Linux desktop environments,
   - **One-Click Remote Recording from Phone or Tablet**
   - **In-Browser Video Playback & Streaming (RFC 7233 Seekable)**
   - **Remote DVR Queue & History Management**
-  - **Optional Salted SHA-256 Authentication for Tailscale / LAN**
+  - **Mandatory Password Protection & Anti-Brute-Force Rate Limiting**
   - **Zero Extra Dependencies (Built with Standard Library HTTP Server)**
 - **Configurable Recording End Buffers (Post-Roll Padding):**
   - **Global Post-Roll Buffer**
@@ -211,14 +211,15 @@ Kaffeine DVR includes a built-in, dependency-free HTTP server and responsive web
 - **One-Click Remote Recording**: Tap **Record** on any upcoming broadcast from your phone to schedule it on your home DVR system immediately.
 - **Queue & History Management**: Monitor currently recording broadcasts, view scheduled programs, and cancel queued timers remotely.
 - **In-Browser Video Playback & Streaming**: Stream completed recordings directly inside your web browser with RFC 7233 HTTP Range chunking for instant video scrubbing, or download recorded video files.
-- **Secure Access Control**: Optional password protection with salted SHA-256 session token authentication for secure LAN or Tailscale remote access.
+- **Secure Access Control**: Mandatory password protection with salted SHA-256 session token authentication and automated anti-brute-force rate limiting (limits incorrect attempts to 5 before enforcing a 15-minute temporary lockout) for secure LAN or Tailscale remote access.
+- **Quick Access URLs**: Clickable access URLs right within Settings displaying localhost, local LAN IPv4, and Tailscale mesh IP for remote devices.
 - **Zero Extra Dependencies**: Powered entirely by Python's standard library HTTP server with no external web frameworks or heavy runtimes required.
 
 #### Setup:
-1. In the TV Guide desktop application, navigate to **Settings > Web Companion**.
-2. Check **Enable Local / Tailscale Web Companion**.
-3. (Optional) Set a custom port (default: `8088`) and configure an access password.
-4. Click **Start Web Companion** or click the URL button to open it directly in your browser.
+1. In the TV Guide desktop application, navigate to **Settings > Remote Web Access**.
+2. Configure and save an access password (password protection is mandatory before enabling the server).
+3. Check **Enable Local / Tailscale Web Companion** (runs on default port `8088` or custom port).
+4. Connect using any of the generated **Quick Access URLs** (localhost, local LAN IP, or Tailscale mesh IP). Use the inline **Reset** button anytime to clear the password and disable remote access in one click.
 
 #### Headless CLI Launch:
 You can also launch the web companion standalone in headless mode without opening the desktop GUI:
