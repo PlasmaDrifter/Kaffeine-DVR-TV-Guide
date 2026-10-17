@@ -7760,10 +7760,27 @@ class MainWindow(QMainWindow):
         self.set_web_pass_btn = QPushButton("Save Password")
         self.set_web_pass_btn.clicked.connect(self._save_web_companion_password)
         web_pass_row.addWidget(self.set_web_pass_btn)
-        web_pass_row.addStretch()
+
+        self.reset_web_pass_btn = QPushButton("Reset Password")
+        self.reset_web_pass_btn.setStyleSheet("color: #f87171; border-color: rgba(239, 68, 68, 0.4);")
+        self.reset_web_pass_btn.clicked.connect(self._reset_web_companion_password)
+        self.reset_web_pass_btn.setVisible(self.config_mgr.has_web_password)
+        web_pass_row.addWidget(self.reset_web_pass_btn)
+
+        web_pass_col = QVBoxLayout()
+        web_pass_col.setContentsMargins(0, 0, 0, 0)
+        web_pass_col.setSpacing(3)
+        web_pass_col.addLayout(web_pass_row)
+
+        self.web_pass_note_lbl = QLabel(
+            "<span style='color: #94a3b8; font-size: 11px;'>Password is strongly required for Tailscale & remote access. Leave blank and click Reset to allow open access.</span>"
+        )
+        self.web_pass_note_lbl.setWordWrap(True)
+        web_pass_col.addWidget(self.web_pass_note_lbl)
+
         web_form.addRow(
             make_setting_label("Access Password:", "Password required to access the web companion. Strongly recommended for Tailscale and network access."),
-            web_pass_row
+            web_pass_col
         )
 
         web_layout.addLayout(web_form)
@@ -9442,8 +9459,30 @@ class MainWindow(QMainWindow):
         self.config_mgr.set_web_password(new_pass)
         self.web_pass_edit.clear()
         self.web_pass_edit.setPlaceholderText("•••••••• (Password protected)" if self.config_mgr.has_web_password else "Set access password")
+        if hasattr(self, "reset_web_pass_btn"):
+            self.reset_web_pass_btn.setVisible(self.config_mgr.has_web_password)
         self._update_web_status_label()
         self.flash_save_indicator("Password Saved")
+
+    def _reset_web_companion_password(self):
+        """Remove the web companion password, allowing unrestricted LAN/Tailscale access."""
+        from PyQt6.QtWidgets import QMessageBox
+        reply = QMessageBox.question(
+            self,
+            "Reset Web Access Password",
+            "Are you sure you want to remove the web companion password?\n\nAnyone with access to your network or Tailscale will be able to access the web guide without logging in.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self.config_mgr.set_web_password("")
+            if hasattr(self, "web_pass_edit"):
+                self.web_pass_edit.clear()
+                self.web_pass_edit.setPlaceholderText("Set access password")
+            if hasattr(self, "reset_web_pass_btn"):
+                self.reset_web_pass_btn.setVisible(False)
+            self._update_web_status_label()
+            self.flash_save_indicator("Password Removed")
 
     def _update_web_status_label(self):
         if not hasattr(self, "web_status_lbl"):
