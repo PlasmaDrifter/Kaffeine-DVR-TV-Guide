@@ -9484,6 +9484,8 @@ class MainWindow(QMainWindow):
             pass
 
         tailscale_ip = None
+        import shutil
+        import subprocess
         tailscale_bin = shutil.which("tailscale")
         if tailscale_bin:
             try:
