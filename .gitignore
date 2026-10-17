@@ -8,6 +8,13 @@ build/
 *.egg-info/
 AppDir/
 *.AppImage
+*.deb
+*.rpm
+build-deb/*
+!build-deb/make_deb.sh
+build-rpm/*
+!build-rpm/make_rpm.sh
 *.spec
 .coverage
 .pytest_cache/
+desktop/old_shortcuts/

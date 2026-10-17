@@ -244,6 +244,8 @@ class KaffeineDbusClient:
         # which produces wmclass='kaffeine' (matching user KWin rules to place on the second monitor).
         # Native Wayland uses wmclass='org.kde.kaffeine' and bypasses those X11 window placement rules.
         env["QT_QPA_PLATFORM"] = "xcb"
+        # Ensure Qt5 applications load the KDE platform theme so Kaffeine inherits Breeze Dark mode
+        env["QT_QPA_PLATFORMTHEME"] = "kde"
         return env
 
     def launch_kaffeine(self, mode: str = "tray", minimized: Optional[bool] = None) -> bool:
@@ -266,9 +268,9 @@ class KaffeineDbusClient:
             env = self._get_display_env()
             k_bin = self.get_kaffeine_bin()
             if mode in ("taskbar", "tray"):
-                cmd = [k_bin, "--qwindowgeometry", "1x1+-3000+-3000"]
+                cmd = [k_bin, "--lastchannel", "--qwindowgeometry", "1x1+-3000+-3000"]
             else:
-                cmd = [k_bin]
+                cmd = [k_bin, "--lastchannel"]
             subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             if mode in ("taskbar", "tray"):
                 import threading
@@ -286,8 +288,68 @@ class KaffeineDbusClient:
             print(f"Error launching kaffeine: {e}")
             return False
 
-    def restore_kaffeine(self) -> bool:
-        """Restore Kaffeine window from minimized or hidden state and bring it to the front."""
+    def _get_toplevel_kaffeine_wids(self, env: Dict[str, str]) -> List[str]:
+        """
+        Return only the top-level main application window IDs for Kaffeine.
+        Uses _NET_CLIENT_LIST from the X11 root window to avoid matching internal Qt child sub-widgets.
+        """
+        kaffeine_wids = []
+        try:
+            out = subprocess.run(
+                ["xprop", "-root", "_NET_CLIENT_LIST"],
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                timeout=1.5
+            ).stdout
+            if ":" in out:
+                raw_wids = [x.strip().rstrip(".") for x in out.split(":", 1)[1].split(",")]
+                for raw in raw_wids:
+                    if not raw or not raw.startswith("0x"):
+                        continue
+                    try:
+                        cls = subprocess.run(
+                            ["xprop", "-id", raw, "WM_CLASS"],
+                            env=env,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.DEVNULL,
+                            text=True,
+                            timeout=1.0
+                        ).stdout.lower()
+                        if '"kaffeine"' in cls and '"kaffeine-dvr"' not in cls:
+                            kaffeine_wids.append(raw)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+        if not kaffeine_wids:
+            xdotool_bin = shutil.which("xdotool")
+            if xdotool_bin:
+                try:
+                    res = subprocess.run(
+                        [xdotool_bin, "search", "--class", "^kaffeine$"],
+                        env=env,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.DEVNULL,
+                        text=True,
+                        timeout=1.5
+                    )
+                    wids = [w.strip() for w in res.stdout.strip().splitlines() if w.strip()]
+                    for wid in wids:
+                        w_title = subprocess.run([xdotool_bin, "getwindowname", wid], env=env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=1.0).stdout.strip().lower()
+                        cls = subprocess.run([xdotool_bin, "getwindowclassname", wid], env=env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=1.0).stdout.strip().lower()
+                        if "dvr" in w_title or "tv guide" in w_title or "dvr" in cls:
+                            continue
+                        kaffeine_wids.append(wid)
+                        break  # Take only the first (top-level) window to avoid corrupting child subwidgets
+                except Exception:
+                    pass
+        return kaffeine_wids
+
+    def restore_kaffeine(self, width: Optional[int] = None, height: Optional[int] = None, x: Optional[int] = None, y: Optional[int] = None) -> bool:
+        """Restore Kaffeine window from minimized or hidden state, optionally resize and reposition it, and bring it to the front."""
         kdotool_bin = shutil.which("kdotool")
         xdotool_bin = shutil.which("xdotool")
         if not kdotool_bin and not xdotool_bin:
@@ -320,26 +382,66 @@ class KaffeineDbusClient:
                         stderr=subprocess.DEVNULL,
                         timeout=1.0
                     )
+                    if width is not None and height is not None:
+                        subprocess.run([kdotool_bin, "windowsize", wid, str(width), str(height)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
+                    if x is not None and y is not None:
+                        subprocess.run([kdotool_bin, "windowmove", wid, str(x), str(y)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
                     subprocess.run([kdotool_bin, "windowraise", wid], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
                     subprocess.run([kdotool_bin, "windowactivate", wid], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
                 return bool(kaffeine_wids)
             elif xdotool_bin:
-                res = subprocess.run(
-                    [xdotool_bin, "search", "--class", "^kaffeine$"],
-                    env=env,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    timeout=1.5
-                )
-                wids = [w.strip() for w in res.stdout.strip().splitlines() if w.strip()]
-                kaffeine_wids = []
-                for wid in wids:
-                    w_title = subprocess.run([xdotool_bin, "getwindowname", wid], env=env, stdout=subprocess.PIPE, text=True, timeout=1.0).stdout.strip().lower()
-                    if "dvr" in w_title:
-                        continue
-                    kaffeine_wids.append(wid)
+                kaffeine_wids = self._get_toplevel_kaffeine_wids(env)
+                for wid in kaffeine_wids:
                     subprocess.run([xdotool_bin, "windowmap", wid], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
+                    
+                    if width is not None and height is not None:
+                        # Unmaximize Kaffeine window via X11 _NET_WM_STATE_REMOVE so windowsize takes effect
+                        try:
+                            import ctypes
+                            from ctypes import c_int, c_long, c_ulong, c_void_p, Structure
+                            X11 = ctypes.cdll.LoadLibrary("libX11.so.6")
+                            X11.XOpenDisplay.restype = c_void_p
+                            X11.XDefaultRootWindow.restype = c_ulong
+                            X11.XInternAtom.restype = c_ulong
+                            X11.XSendEvent.restype = c_int
+
+                            disp = X11.XOpenDisplay(env.get("DISPLAY", ":0").encode("utf-8"))
+                            if disp:
+                                wid_int = int(wid, 16) if isinstance(wid, str) and wid.startswith("0x") else int(wid)
+                                root_w = X11.XDefaultRootWindow(disp)
+                                net_state = X11.XInternAtom(disp, b"_NET_WM_STATE", False)
+                                net_v = X11.XInternAtom(disp, b"_NET_WM_STATE_MAXIMIZED_VERT", False)
+                                net_h = X11.XInternAtom(disp, b"_NET_WM_STATE_MAXIMIZED_HORZ", False)
+
+                                class _XClientMsg(Structure):
+                                    _fields_ = [
+                                        ("type", c_int), ("serial", c_ulong), ("send_event", c_int),
+                                        ("display", c_void_p), ("window", c_ulong), ("message_type", c_ulong),
+                                        ("format", c_int), ("data", c_long * 5)
+                                    ]
+                                ev = _XClientMsg()
+                                ev.type = 33
+                                ev.serial = 0
+                                ev.send_event = 1
+                                ev.display = disp
+                                ev.window = wid_int
+                                ev.message_type = net_state
+                                ev.format = 32
+                                ev.data[0] = 0  # _NET_WM_STATE_REMOVE
+                                ev.data[1] = net_v
+                                ev.data[2] = net_h
+                                ev.data[3] = 1
+                                ev.data[4] = 0
+                                mask = (1 << 20) | (1 << 19)
+                                X11.XSendEvent(disp, root_w, False, mask, ctypes.byref(ev))
+                                X11.XFlush(disp)
+                                X11.XCloseDisplay(disp)
+                        except Exception:
+                            pass
+                        subprocess.run([xdotool_bin, "windowsize", wid, str(width), str(height)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
+                    if x is not None and y is not None:
+                        subprocess.run([xdotool_bin, "windowmove", wid, str(x), str(y)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
+                    subprocess.run([xdotool_bin, "windowraise", wid], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
                     subprocess.run([xdotool_bin, "windowactivate", wid], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
                 return bool(kaffeine_wids)
         except Exception:
@@ -384,26 +486,9 @@ class KaffeineDbusClient:
                     subprocess.run([kdotool_bin, "windowminimize", wid], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
                 return bool(kaffeine_wids)
             elif xdotool_bin:
-                # Use exact class regex '^kaffeine$' so kaffeine-dvr GUI window is strictly excluded
-                res = subprocess.run(
-                    [xdotool_bin, "search", "--class", "^kaffeine$"],
-                    env=env,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    timeout=1.5
-                )
-                wids = [w.strip() for w in res.stdout.strip().splitlines() if w.strip()]
-                kaffeine_wids = []
-                for wid in wids:
-                    w_title = subprocess.run([xdotool_bin, "getwindowname", wid], env=env, stdout=subprocess.PIPE, text=True, timeout=1.0).stdout.strip().lower()
-                    if "dvr" in w_title or "tv guide" in w_title:
-                        continue
-                    kaffeine_wids.append(wid)
-                    if mode == "tray":
-                        subprocess.run([xdotool_bin, "windowunmap", wid], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
-                    else:
-                        subprocess.run([xdotool_bin, "windowminimize", wid], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
+                kaffeine_wids = self._get_toplevel_kaffeine_wids(env)
+                for wid in kaffeine_wids:
+                    subprocess.run([xdotool_bin, "windowminimize", wid], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
                 return bool(kaffeine_wids)
         except Exception:
             pass
@@ -492,22 +577,13 @@ class KaffeineDbusClient:
                         if first_match_time is None:
                             first_match_time = time.time()
                         for wid in kaffeine_wids:
-                            if mode == "tray":
-                                subprocess.run(
-                                    [xdotool_bin, "windowunmap", wid],
-                                    env=env,
-                                    stdout=subprocess.DEVNULL,
-                                    stderr=subprocess.DEVNULL,
-                                    timeout=1.0
-                                )
-                            else:
-                                subprocess.run(
-                                    [xdotool_bin, "windowminimize", wid],
-                                    env=env,
-                                    stdout=subprocess.DEVNULL,
-                                    stderr=subprocess.DEVNULL,
-                                    timeout=1.0
-                                )
+                            subprocess.run(
+                                [xdotool_bin, "windowminimize", wid],
+                                env=env,
+                                stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL,
+                                timeout=1.0
+                            )
                         if time.time() - first_match_time >= post_match_duration:
                             break
             except Exception:
@@ -526,12 +602,12 @@ class KaffeineDbusClient:
         if self.is_running():
             tuned = False
             # Method 1: Use org.kde.KDBusService CommandLine interface.
-            # This activates the TV tab in Kaffeine, tunes the exact channel requested,
-            # applies view mode flags (--minimal, --fullscreen), and activates/raises the window.
+            # This triggers Kaffeine's MainWindow::activateTab(DvbTabId) to switch tabs
+            # away from the Start welcome screen directly into the Digital TV video view.
             try:
                 import dbus
                 bus = dbus.SessionBus()
-                app_proxy = bus.get_object("org.kde.kaffeine", "/org/kde/kaffeine")
+                app_proxy = bus.get_object("org.kde.kaffeine", "/org/kde/kaffeine", introspect=False)
                 app_iface = dbus.Interface(app_proxy, "org.kde.KDBusService")
 
                 cmd_args = ["kaffeine"]
@@ -541,35 +617,26 @@ class KaffeineDbusClient:
                     cmd_args.append("--fullscreen")
                 cmd_args.extend(["--channel", str(channel)])
 
-                ret = app_iface.CommandLine(cmd_args, "", {})
+                ret = app_iface.CommandLine(cmd_args, "", dbus.Dictionary({}, signature="sv"), timeout=2.0)
                 if ret == 0:
                     tuned = True
             except Exception:
                 pass
 
             if not tuned:
-                # Method 2: D-Bus PlayChannel fallback
+                # Method 2: D-Bus PlayChannel (Standard MPRIS /Television interface)
                 try:
                     import dbus
                     bus = dbus.SessionBus()
-                    proxy = bus.get_object(self.service_name, self.object_path)
+                    proxy = bus.get_object(self.service_name, self.object_path, introspect=False)
                     iface = dbus.Interface(proxy, dbus_interface=self.interface_name)
-                    iface.PlayChannel(channel)
+                    iface.PlayChannel(channel, timeout=2.0)
                     tuned = True
                 except Exception:
-                    # Method 3: Fallback to calling kaffeine CLI with --channel
-                    env = self._get_display_env()
-                    cmd = [self.get_kaffeine_bin()]
-                    if view_mode == "minimal":
-                        cmd.append("--minimal")
-                    elif view_mode == "fullscreen":
-                        cmd.append("--fullscreen")
-                    cmd.extend(["--channel", str(channel)])
-                    subprocess.Popen(cmd, env=env)
-                    tuned = True
+                    pass
 
             if raise_window:
-                self.raise_window()
+                self.restore_kaffeine()
             return tuned
         else:
             env = self._get_display_env()
@@ -587,7 +654,24 @@ class KaffeineDbusClient:
                 return False
 
     def switch_to_tv_view(self, view_mode: Optional[str] = None):
-        """Switch view mode if needed without pressing numeric channel keys."""
+        """Switch Kaffeine to the Digital Television tab."""
+        if not self.is_running():
+            self.launch_kaffeine(mode="normal")
+            return
+        try:
+            import dbus
+            bus = dbus.SessionBus()
+            app_proxy = bus.get_object("org.kde.kaffeine", "/org/kde/kaffeine", introspect=False)
+            app_iface = dbus.Interface(app_proxy, "org.kde.KDBusService")
+            cmd_args = ["kaffeine"]
+            if view_mode == "minimal":
+                cmd_args.append("--minimal")
+            elif view_mode == "fullscreen":
+                cmd_args.append("--fullscreen")
+            cmd_args.append("--lastchannel")
+            app_iface.CommandLine(cmd_args, "", dbus.Dictionary({}, signature="sv"), timeout=2.0)
+        except Exception:
+            pass
 
     def raise_window(self):
         """Unminimize and raise Kaffeine window to the foreground."""

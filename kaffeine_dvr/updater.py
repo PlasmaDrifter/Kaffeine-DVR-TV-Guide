@@ -15,7 +15,7 @@ from typing import Any, Callable, Dict, Optional, Tuple
 
 from kaffeine_dvr import __version__
 
-GITHUB_REPO = "PlasmaDrifter/Kaffeine-DVR-TV-Guide"
+GITHUB_REPO = "PlasmaDrifter/TV.Guide.DVR.Kaffeine"
 RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
 

@@ -77,14 +77,14 @@ Kaffeine is a powerful digital TV viewer for KDE and Linux desktop environments,
 
 The AppImage is completely self-contained. **No Python, PyQt6, or package installation is needed** (all libraries and dependencies are bundled inside).
 
-- **Latest Available AppImage**: [Download Kaffeine-DVR-TV-Guide v0.8.14 AppImage](https://github.com/PlasmaDrifter/Kaffeine-DVR-TV-Guide/releases/tag/v0.8.14)
-- **All Releases & Source Code**: [View All GitHub Releases](https://github.com/PlasmaDrifter/Kaffeine-DVR-TV-Guide/releases)
+- **Latest Available AppImage**: [Download TV.Guide.DVR.Kaffeine v0.8.14 AppImage](https://github.com/PlasmaDrifter/TV.Guide.DVR.Kaffeine/releases/tag/v0.8.14)
+- **All Releases & Source Code**: [View All GitHub Releases](https://github.com/PlasmaDrifter/TV.Guide.DVR.Kaffeine/releases)
 
 1. Download the AppImage file from the link above.
 2. Make it executable and run:
 ```bash
-chmod +x Kaffeine-DVR-TV-Guide-*.AppImage
-./Kaffeine-DVR-TV-Guide-*.AppImage
+chmod +x TV.Guide.DVR.Kaffeine-*.AppImage
+./TV.Guide.DVR.Kaffeine-*.AppImage
 ```
 
 > **Tip:** You can also drop it into your favorite AppImage manager such as **AppManager** or **Gear Lever** for automatic desktop menu integration.
@@ -105,8 +105,8 @@ Use this method if you prefer installing directly into your user Python environm
 #### Install Script
 Clone the repository and run the automated installer:
 ```bash
-git clone https://github.com/PlasmaDrifter/Kaffeine-DVR-TV-Guide.git
-cd Kaffeine-DVR-TV-Guide
+git clone https://github.com/PlasmaDrifter/TV.Guide.DVR.Kaffeine.git
+cd TV.Guide.DVR.Kaffeine
 ./install.sh
 ```
 The script automatically:

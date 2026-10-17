@@ -751,7 +751,7 @@ class ReleaseNotesDialog(BaseFramelessDialog):
     def _open_github(self):
         from PyQt6.QtCore import QUrl
         from PyQt6.QtGui import QDesktopServices
-        QDesktopServices.openUrl(QUrl("https://github.com/PlasmaDrifter/Kaffeine-DVR-TV-Guide/releases/latest"))
+        QDesktopServices.openUrl(QUrl("https://github.com/PlasmaDrifter/TV.Guide.DVR.Kaffeine/releases/latest"))
 
     def _install_and_close(self):
         self.accept()
@@ -1151,8 +1151,8 @@ class ChannelSignalHealthDialog(BaseFramelessDialog):
             item_quality = QTableWidgetItem("--")
         else:
             locked = metrics.get("locked", False)
-            has_sig = metrics.get("has_signal", False) or metrics.get("has_carrier", False)
             pct = metrics.get("strength_pct", 0.0)
+            has_sig = (metrics.get("has_signal", False) or metrics.get("has_carrier", False)) and pct > 0.0
             snr = metrics.get("snr_db", 0.0)
             status_hex = metrics.get("status_hex", "")
             quality = metrics.get("quality_label", "No Signal")
@@ -1191,8 +1191,8 @@ class ChannelSignalHealthDialog(BaseFramelessDialog):
     def _update_summary_badge(self):
         total = len(self.channels)
         locked_cnt = sum(1 for m in self._results.values() if m.get("locked"))
-        carrier_cnt = sum(1 for m in self._results.values() if not m.get("locked") and (m.get("has_signal") or m.get("has_carrier")))
-        dead_cnt = sum(1 for m in self._results.values() if not m.get("locked") and not m.get("has_signal") and not m.get("has_carrier"))
+        carrier_cnt = sum(1 for m in self._results.values() if not m.get("locked") and (m.get("has_signal") or m.get("has_carrier")) and m.get("strength_pct", 0.0) > 0.0)
+        dead_cnt = sum(1 for m in self._results.values() if not m.get("locked") and not ((m.get("has_signal") or m.get("has_carrier")) and m.get("strength_pct", 0.0) > 0.0))
         if self._results:
             self.summary_badge.setText(
                 f"<span style='color: #4ade80;'>● {locked_cnt} Locked</span>  |  "
@@ -1240,17 +1240,39 @@ class ChannelSignalHealthDialog(BaseFramelessDialog):
         self.stop_btn.setEnabled(False)
         self.status_lbl.setText(f"Aiming antenna for {ch_name}. Watch live video in Kaffeine and adjust antenna for peak signal.")
 
-        # 2. Instruct Kaffeine to tune to channel and unminimize/raise window for live zero-latency feedback
+        # 2. Instruct Kaffeine to tune to channel, un-maximize, resize, and place side-by-side with Reception Monitor
         client = KaffeineDbusClient()
         if not client.is_running():
             client.launch_kaffeine(mode="normal")
+
+        # Reposition Reception Monitor dialog to the left side so it does not overlap Kaffeine
+        try:
+            screen = self.screen() or (self.parent().screen() if self.parent() else None)
+            geom = screen.availableGeometry() if screen else self.geometry()
+            target_dialog_w = min(880, max(600, geom.width() // 2 - 20))
+            target_dialog_x = geom.x() + 20
+            target_dialog_y = geom.y() + 60
+            self.resize(target_dialog_w, min(self.height(), geom.height() - 100))
+            self.move(target_dialog_x, target_dialog_y)
+
+            kaffeine_x = target_dialog_x + target_dialog_w + 20
+            kaffeine_y = target_dialog_y
+            kaffeine_w = max(700, min(850, geom.width() - kaffeine_x - 20))
+            kaffeine_h = min(480, geom.height() - 100)
+        except Exception:
+            kaffeine_x = 1050
+            kaffeine_y = 100
+            kaffeine_w = 800
+            kaffeine_h = 400
+
+        client.restore_kaffeine(width=kaffeine_w, height=kaffeine_h, x=kaffeine_x, y=kaffeine_y)
         client.tune_channel(ch_name, raise_window=True, view_mode="normal")
 
-        # 3. Start high-frequency signal meter polling (every 120ms)
+        # 3. Start high-frequency signal meter polling (every 150ms)
         if self._aim_timer is None:
             self._aim_timer = QTimer(self)
             self._aim_timer.timeout.connect(self._on_aim_timer_tick)
-        self._aim_timer.start(120)
+        self._aim_timer.start(150)
 
     def _on_aim_timer_tick(self):
         """Read instantaneous hardware metrics and update live aiming meter."""
@@ -1302,7 +1324,7 @@ class ChannelSignalHealthDialog(BaseFramelessDialog):
             self._on_channel_result(ch_name, metrics)
 
     def stop_aiming(self):
-        """Stop live aiming mode, silence Kaffeine, and minimize according to configured mode."""
+        """Stop live aiming mode, silence Kaffeine, and leave Kaffeine visible on screen."""
         if self._aim_timer and self._aim_timer.isActive():
             self._aim_timer.stop()
 
@@ -1318,14 +1340,6 @@ class ChannelSignalHealthDialog(BaseFramelessDialog):
 
         # Stop live playback
         self._stop_kaffeine_playback()
-
-        # Minimize Kaffeine if configured launch mode is taskbar or tray
-        try:
-            cfg = ConfigManager()
-            if cfg.launch_mode in ("taskbar", "tray"):
-                KaffeineDbusClient().minimize_kaffeine(mode=cfg.launch_mode)
-        except Exception:
-            pass
 
     def scan_all_channels(self):
         if self._worker and self._worker.isRunning():

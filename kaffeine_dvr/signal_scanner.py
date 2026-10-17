@@ -37,17 +37,67 @@ class DvbSignalReader:
     recording or playback processes that hold the device in O_RDWR mode.
     """
     @staticmethod
+    def find_active_frontend() -> Optional[str]:
+        """
+        Locate the active DVB frontend device node.
+        1. Checks /proc/<pid>/fd of running Kaffeine or DVR process to identify the exact
+           frontend hardware device currently in use.
+        2. Probes available frontends to find one with an active carrier or digital lock.
+        3. Falls back to the first available frontend in /dev/dvb.
+        """
+        # 1. Check open file descriptors of Kaffeine or DVR process
+        try:
+            import glob
+            for proc_dir in glob.glob("/proc/[0-9]*/fd"):
+                try:
+                    pid_str = proc_dir.split("/")[2]
+                    comm_path = Path(f"/proc/{pid_str}/comm")
+                    if comm_path.is_file():
+                        comm = comm_path.read_text(encoding="utf-8", errors="ignore").strip().lower()
+                        if "kaffeine" in comm or "dvr" in comm:
+                            for fd_entry in Path(proc_dir).iterdir():
+                                try:
+                                    target = os.readlink(str(fd_entry))
+                                    if "/dev/dvb/adapter" in target and "frontend" in target:
+                                        if os.path.exists(target):
+                                            return target
+                                except (OSError, IOError):
+                                    pass
+                except (OSError, IOError, FileNotFoundError):
+                    pass
+        except Exception:
+            pass
+
+        # 2. Check frontends for active lock or carrier
+        dvb_root = Path("/dev/dvb")
+        if dvb_root.is_dir():
+            frontends = []
+            for adapter in sorted(dvb_root.glob("adapter*")):
+                for fe in sorted(adapter.glob("frontend*")):
+                    if fe.is_char_device():
+                        frontends.append(str(fe))
+
+            buf4 = bytearray(4)
+            for fe in frontends:
+                try:
+                    fd = os.open(fe, os.O_RDONLY | os.O_NONBLOCK)
+                    fcntl.ioctl(fd, FE_READ_STATUS, buf4)
+                    os.close(fd)
+                    status = struct.unpack("I", buf4)[0]
+                    if status & (FE_HAS_LOCK | FE_HAS_SIGNAL | FE_HAS_CARRIER):
+                        return fe
+                except Exception:
+                    pass
+
+            if frontends:
+                return frontends[0]
+
+        return None
+
+    @staticmethod
     def find_frontend_device() -> Optional[str]:
         """Locate the first available DVB frontend device node."""
-        dvb_root = Path("/dev/dvb")
-        if not dvb_root.is_dir():
-            return None
-        # Check adapter0..adapter7
-        for adapter in sorted(dvb_root.glob("adapter*")):
-            for fe in sorted(adapter.glob("frontend*")):
-                if fe.is_char_device():
-                    return str(fe)
-        return None
+        return DvbSignalReader.find_active_frontend()
 
     @classmethod
     def read_metrics(cls, frontend_path: Optional[str] = None) -> Dict[str, Any]:
@@ -71,7 +121,7 @@ class DvbSignalReader:
             }
 
         try:
-            fd = os.open(path, os.O_RDONLY)
+            fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
         except PermissionError:
             return {
                 "available": False,
@@ -127,13 +177,33 @@ class DvbSignalReader:
             try:
                 fcntl.ioctl(fd, FE_READ_SNR, buf2)
                 raw_snr = int.from_bytes(buf2, "little")
-                # Demodulators typically scale SNR in 0.1 dB increments or raw 16-bit
                 if raw_snr > 1000:
                     snr_db = round((raw_snr / 65535.0) * 35.0, 1)
                 else:
                     snr_db = round(raw_snr / 10.0, 1)
             except Exception:
                 pass
+
+            # If carrier locked but AGC/SNR haven't populated yet (hardware settle lag), retry once
+            if has_lock and (strength_pct == 0.0 or snr_db == 0.0):
+                time.sleep(0.15)
+                try:
+                    fcntl.ioctl(fd, FE_READ_SIGNAL_STRENGTH, buf2)
+                    raw_sig = int.from_bytes(buf2, "little")
+                    if raw_sig > 0:
+                        strength_pct = round((raw_sig / 65535.0) * 100.0, 1)
+                except Exception:
+                    pass
+                try:
+                    fcntl.ioctl(fd, FE_READ_SNR, buf2)
+                    raw_snr = int.from_bytes(buf2, "little")
+                    if raw_snr > 0:
+                        if raw_snr > 1000:
+                            snr_db = round((raw_snr / 65535.0) * 35.0, 1)
+                        else:
+                            snr_db = round(raw_snr / 10.0, 1)
+                except Exception:
+                    pass
 
             # 4. Read BER (Bit Error Rate)
             ber = 0
@@ -151,7 +221,7 @@ class DvbSignalReader:
                     quality = "Good"
                 else:
                     quality = "Fair"
-            elif has_signal or has_carrier:
+            elif (has_signal or has_carrier) and strength_pct > 0.0:
                 quality = "Weak (No Lock)"
             else:
                 quality = "No Signal"
@@ -203,7 +273,7 @@ class ChannelSignalScanWorker(QThread):
         self,
         channels: List[Dict[str, Any]],
         frontend_path: Optional[str] = None,
-        lock_timeout_sec: float = 1.3,
+        lock_timeout_sec: float = 1.8,
         parent: Optional[QObject] = None,
     ):
         super().__init__(parent)
@@ -250,12 +320,6 @@ class ChannelSignalScanWorker(QThread):
         except Exception as e:
             self.scan_error.emit(f"Could not connect to Kaffeine D-Bus service: {e}")
 
-        if not television_iface:
-            # Cannot tune without Kaffeine D-Bus interface
-            self.scan_error.emit("Kaffeine must be running to tune channels. Please start Kaffeine and try again.")
-            self.scan_finished.emit({})
-            return
-
         try:
             for idx, ch_info in enumerate(self.channels, 1):
                 if self._stop_requested:
@@ -268,12 +332,17 @@ class ChannelSignalScanWorker(QThread):
                 self.channel_started.emit(ch_name, idx, total)
                 self.scan_progress.emit(idx, total)
 
-                # 1. Instruct Kaffeine to tune to this channel (with short 3.0s timeout to prevent hanging)
-                if television_iface:
+                # 1. Instruct Kaffeine to tune to this channel
+                tuned = False
+                try:
+                    tuned = client.tune_channel(ch_name, raise_window=False)
+                except Exception:
+                    pass
+
+                if not tuned and television_iface:
                     try:
                         television_iface.PlayChannel(ch_name, timeout=3.0)
                     except Exception:
-                        # Log but continue to allow checking status
                         pass
 
                 # 2. Poll demodulator lock status up to lock_timeout_sec
@@ -296,14 +365,17 @@ class ChannelSignalScanWorker(QThread):
                     elapsed += poll_interval
                     metrics = DvbSignalReader.read_metrics(self.frontend_path)
                     if metrics.get("locked"):
-                        best_metrics = metrics
-                        # Acquired lock; give a small delay for stable SNR calculation then break
-                        time.sleep(0.1)
+                        # Acquired carrier lock; allow 350ms for AGC filter and SNR registers to settle
+                        time.sleep(0.35)
                         refreshed = DvbSignalReader.read_metrics(self.frontend_path)
-                        if refreshed.get("locked"):
+                        if refreshed.get("locked") or refreshed.get("strength_pct", 0) > 0:
                             best_metrics = refreshed
+                        else:
+                            best_metrics = metrics
                         break
-                    elif metrics.get("has_signal") or metrics.get("has_carrier"):
+                    elif metrics.get("strength_pct", 0) > best_metrics.get("strength_pct", 0):
+                        best_metrics = metrics
+                    elif (metrics.get("has_signal") or metrics.get("has_carrier")) and not best_metrics.get("locked"):
                         best_metrics = metrics
 
                 best_metrics["channel_name"] = ch_name
